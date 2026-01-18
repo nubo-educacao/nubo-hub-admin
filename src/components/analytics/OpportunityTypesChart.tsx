@@ -61,7 +61,10 @@ export function OpportunityTypesChart() {
     return COLORS.default;
   };
 
-  const { savedOpportunities, programPreferences, vagasOciosas, conversionInsight } = data;
+  const savedOpportunities = data.savedOpportunities ?? { byType: [], total: 0, withVagasOciosas: 0 };
+  const programPreferences = data.programPreferences ?? [];
+  const vagasOciosas = data.vagasOciosas ?? { total: 0, byModality: [] };
+  const conversionInsight = data.conversionInsight ?? { interestedInSisu: 0, savedSisu: 0 };
 
   // Calculate conversion rate
   const sisuConversionRate = conversionInsight.interestedInSisu > 0 
