@@ -35,24 +35,37 @@ export function ChatExamplesPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchConversations = async () => {
-      try {
-        setLoading(true);
-        const { data, error } = await supabase.functions.invoke('analytics-chats', {
-          body: { limit: 10 }
-        });
+  const fetchConversations = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      console.log('Fetching conversations...');
+      
+      const { data, error: fetchError } = await supabase.functions.invoke('analytics-chats', {
+        body: { limit: 10 }
+      });
 
-        if (error) throw error;
-        setConversations(data || []);
-      } catch (e) {
-        console.error('Error fetching conversations:', e);
-        setError('Erro ao carregar conversas');
-      } finally {
-        setLoading(false);
+      if (fetchError) {
+        console.error('Error from analytics-chats:', fetchError);
+        throw fetchError;
       }
-    };
+      
+      if (data && Array.isArray(data)) {
+        console.log('Loaded', data.length, 'conversations');
+        setConversations(data);
+      } else {
+        console.warn('Unexpected data format from analytics-chats:', data);
+        setConversations([]);
+      }
+    } catch (e) {
+      console.error('Error fetching conversations:', e);
+      setError('Erro ao carregar conversas. Clique para tentar novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchConversations();
   }, []);
 
@@ -80,7 +93,7 @@ export function ChatExamplesPanel() {
     );
   }
 
-  if (error || conversations.length === 0) {
+  if (error) {
     return (
       <div className="chart-container col-span-2">
         <div className="mb-4 flex items-center gap-2">
@@ -89,7 +102,25 @@ export function ChatExamplesPanel() {
         </div>
         <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <MessageSquare className="h-12 w-12 mb-4 opacity-50" />
-          <p>{error || 'Nenhuma conversa encontrada'}</p>
+          <p className="mb-4">{error}</p>
+          <Button variant="outline" size="sm" onClick={fetchConversations}>
+            Tentar novamente
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (conversations.length === 0) {
+    return (
+      <div className="chart-container col-span-2">
+        <div className="mb-4 flex items-center gap-2">
+          <MessageSquare className="h-5 w-5 text-primary" />
+          <h3 className="text-lg font-semibold font-display">Conversas Recentes</h3>
+        </div>
+        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+          <MessageSquare className="h-12 w-12 mb-4 opacity-50" />
+          <p>Nenhuma conversa encontrada</p>
         </div>
       </div>
     );

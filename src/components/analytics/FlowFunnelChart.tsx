@@ -88,15 +88,27 @@ export function FlowFunnelChart() {
     const fetchFunnelWithDetails = async () => {
       setLoadingDetails(true);
       try {
+        console.log('Fetching funnel with details...');
         const { data, error } = await supabase.functions.invoke('analytics-funnel', {
           body: { details: true }
         });
-        if (!error && data) {
-          console.log('Funnel with details:', data);
+        
+        if (error) {
+          console.error('Error from analytics-funnel:', error);
+          toast.error('Erro ao carregar detalhes do funil');
+          return;
+        }
+        
+        if (data && Array.isArray(data)) {
+          console.log('Funnel with details loaded:', data.length, 'steps');
+          console.log('First step has', data[0]?.users?.length || 0, 'users');
           setFunnelWithDetails(data);
+        } else {
+          console.warn('Unexpected data format from analytics-funnel:', data);
         }
       } catch (e) {
-        console.error('Error fetching funnel details:', e);
+        console.error('Exception fetching funnel details:', e);
+        toast.error('Erro ao carregar detalhes do funil');
       } finally {
         setLoadingDetails(false);
       }
@@ -107,8 +119,18 @@ export function FlowFunnelChart() {
   // Get users for selected step from cached data
   const getSelectedStepUsers = (): UserData[] => {
     if (!selectedStep) return [];
+    
+    // Find the step in funnelWithDetails
     const stepWithDetails = funnelWithDetails.find(s => s.etapa === selectedStep.etapa);
-    return stepWithDetails?.users || [];
+    
+    if (stepWithDetails) {
+      console.log(`Found step "${selectedStep.etapa}" with ${stepWithDetails.users?.length || 0} users`);
+      return stepWithDetails.users || [];
+    }
+    
+    console.log(`Step "${selectedStep.etapa}" not found in funnelWithDetails. Available steps:`, 
+      funnelWithDetails.map(s => s.etapa));
+    return [];
   };
 
   const selectedUsers = getSelectedStepUsers();
