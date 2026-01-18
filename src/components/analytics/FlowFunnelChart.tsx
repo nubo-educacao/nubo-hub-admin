@@ -262,14 +262,18 @@ export function FlowFunnelChart() {
           </Button>
         </div>
 
-        {/* Visual Funnel */}
-        <div className="flex flex-col items-center space-y-2 py-4">
+        {/* Visual Funnel - Fixed proportional widths for readability */}
+        <div className="flex flex-col items-center space-y-1.5 py-4">
           {funnelData.map((step, index) => {
             const stepValue = step.valor ?? 0;
             const prevValue = funnelData[index - 1]?.valor ?? 0;
             const percentage = maxValue > 0 ? (stepValue / maxValue) * 100 : 0;
-            // Width goes from 100% at top to minimum based on percentage
-            const widthPercent = Math.max(20, percentage);
+            
+            // Use fixed proportional widths that decrease gradually for funnel visual
+            // This ensures all steps are readable regardless of actual conversion rates
+            const totalSteps = funnelData.length;
+            const widthPercent = 100 - (index * (60 / totalSteps)); // From 100% to ~40%
+            
             const dropOff = index > 0 && prevValue > 0
               ? Math.round(((prevValue - stepValue) / prevValue) * 100)
               : 0;
@@ -286,32 +290,34 @@ export function FlowFunnelChart() {
                       "opacity-0 animate-fade-in"
                     )}
                     style={{ 
-                      animationDelay: `${index * 100}ms`,
+                      animationDelay: `${index * 80}ms`,
                       width: `${widthPercent}%`,
                     }}
                     onClick={() => handleStepClick(step)}
                   >
-                    {/* Funnel segment */}
+                    {/* Funnel segment with trapezoid shape */}
                     <div 
                       className={cn(
-                        "relative py-4 px-4 rounded-lg bg-gradient-to-r text-white shadow-md",
+                        "relative py-3 px-5 bg-gradient-to-r text-white shadow-md",
                         colors[index % colors.length],
                         isBottleneck && "ring-2 ring-destructive ring-offset-2 ring-offset-background"
                       )}
                       style={{
                         clipPath: index === funnelData.length - 1 
-                          ? 'polygon(5% 0%, 95% 0%, 100% 100%, 0% 100%)' 
-                          : 'polygon(0% 0%, 100% 0%, 95% 100%, 5% 100%)'
+                          ? 'polygon(8% 0%, 92% 0%, 95% 100%, 5% 100%)' 
+                          : 'polygon(0% 0%, 100% 0%, 96% 100%, 4% 100%)',
+                        borderRadius: index === 0 ? '8px 8px 0 0' : index === funnelData.length - 1 ? '0 0 8px 8px' : '0'
                       }}
                     >
-                      <div className="flex items-center justify-between relative z-10">
-                        <span className="font-medium text-sm truncate flex-1">{step.etapa || 'Etapa'}</span>
+                      <div className="flex items-center justify-between relative z-10 gap-3">
+                        <span className="font-medium text-sm whitespace-nowrap">{step.etapa || 'Etapa'}</span>
                         <div className="flex items-center gap-2 flex-shrink-0">
-                          <span className="font-bold">{stepValue.toLocaleString()}</span>
+                          <span className="font-bold text-sm">{stepValue.toLocaleString()}</span>
+                          <span className="text-xs opacity-80">({Math.round(percentage)}%)</span>
                           {dropOff > 0 && (
                             <span className={cn(
-                              "text-xs px-1.5 py-0.5 rounded",
-                              isBottleneck ? "bg-destructive text-destructive-foreground" : "bg-white/20"
+                              "text-xs px-1.5 py-0.5 rounded font-medium",
+                              isBottleneck ? "bg-destructive text-destructive-foreground" : "bg-white/25"
                             )}>
                               -{dropOff}%
                             </span>
