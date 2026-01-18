@@ -3,6 +3,14 @@ import { useUserPreferences } from "@/hooks/useAnalyticsData";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PieChartIcon } from "lucide-react";
 
+const defaultColors = [
+  "hsl(199, 89%, 48%)",
+  "hsl(217, 91%, 60%)",
+  "hsl(142, 71%, 45%)",
+  "hsl(38, 92%, 50%)",
+  "hsl(280, 87%, 65%)",
+];
+
 export function UserPreferencesChart() {
   const { data, isLoading, error } = useUserPreferences();
 
@@ -59,7 +67,7 @@ export function UserPreferencesChart() {
               dataKey="value"
             >
               {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color} />
+                <Cell key={`cell-${index}`} fill={entry.color || defaultColors[index % defaultColors.length]} />
               ))}
             </Pie>
             <Tooltip
@@ -76,11 +84,11 @@ export function UserPreferencesChart() {
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-2">
-        {data.map((item) => (
+        {data.map((item, index) => (
           <div key={item.name} className="flex items-center gap-2">
             <div
               className="h-3 w-3 rounded-full"
-              style={{ backgroundColor: item.color }}
+              style={{ backgroundColor: item.color || defaultColors[index % defaultColors.length] }}
             />
             <span className="text-sm text-muted-foreground">{item.name}</span>
             <span className="text-sm font-semibold ml-auto">{item.value}%</span>

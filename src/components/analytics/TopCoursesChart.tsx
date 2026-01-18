@@ -38,7 +38,15 @@ export function TopCoursesChart() {
     );
   }
 
-  if (error || !data || data.length === 0 || (data.length === 1 && data[0].buscas === 0)) {
+  // Normalize data - use searches or buscas field
+  const normalizedData = data?.map(item => ({
+    ...item,
+    buscas: item.buscas ?? item.searches ?? 0
+  })) || [];
+
+  const hasData = normalizedData.length > 0 && normalizedData.some(d => d.buscas > 0);
+
+  if (error || !hasData) {
     return (
       <div className="chart-container">
         <div className="mb-6 flex flex-col gap-1">
@@ -60,14 +68,14 @@ export function TopCoursesChart() {
       <div className="mb-6 flex flex-col gap-1">
         <h3 className="text-lg font-semibold font-display">Cursos Mais Buscados</h3>
         <p className="text-sm text-muted-foreground">
-          Top {data.length} cursos com maior interesse
+          Top {normalizedData.length} cursos com maior interesse
         </p>
       </div>
       
       <div className="h-[300px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
-            data={data}
+            data={normalizedData}
             layout="vertical"
             margin={{ top: 0, right: 20, left: 0, bottom: 0 }}
           >
@@ -99,7 +107,7 @@ export function TopCoursesChart() {
               formatter={(value: number) => [value, "Interessados"]}
             />
             <Bar dataKey="buscas" radius={[0, 6, 6, 0]} name="Buscas">
-              {data.map((_, index) => (
+              {normalizedData.map((_, index) => (
                 <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
               ))}
             </Bar>
