@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { useFunnelData } from "@/hooks/useAnalyticsData";
 import { Skeleton } from "@/components/ui/skeleton";
-import { GitBranch, Info, Users, X } from "lucide-react";
+import { GitBranch, Info, Users, Download, Phone } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -16,8 +16,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const colors = [
   "bg-primary",
@@ -38,9 +40,10 @@ const funnelDescriptions: Record<string, string> = {
   'Fluxo Específico': 'Usuários que entraram em SISU, ProUni ou FIES workflow',
 };
 
-interface UserDetails {
+interface UserData {
   id: string;
   full_name: string | null;
+  phone: string | null;
   city: string | null;
   created_at: string | null;
 }
@@ -50,65 +53,120 @@ interface FunnelStepLocal {
   valor: number;
   description?: string;
   user_ids?: string[];
+  users?: UserData[];
+}
+
+function formatPhone(phone: string | null): string {
+  if (!phone) return 'Não informado';
+  // Remove non-digits
+  const digits = phone.replace(/\D/g, '');
+  // Format Brazilian phone: +55 11 99999-9999
+  if (digits.length === 13) {
+    return `+${digits.slice(0, 2)} ${digits.slice(2, 4)} ${digits.slice(4, 9)}-${digits.slice(9)}`;
+  }
+  if (digits.length === 12) {
+    return `+${digits.slice(0, 2)} ${digits.slice(2, 4)} ${digits.slice(4, 8)}-${digits.slice(8)}`;
+  }
+  if (digits.length === 11) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  return phone;
 }
 
 export function FlowFunnelChart() {
   const { data: funnelData, isLoading, error } = useFunnelData();
   const [selectedStep, setSelectedStep] = useState<FunnelStepLocal | null>(null);
-  const [userDetails, setUserDetails] = useState<UserDetails[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
   const [funnelWithDetails, setFunnelWithDetails] = useState<FunnelStepLocal[]>([]);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
-  // Fetch funnel data with user_ids for drill-down
+  // Fetch funnel data with full user details for drill-down
   useEffect(() => {
     const fetchFunnelWithDetails = async () => {
+      setLoadingDetails(true);
       try {
         const { data, error } = await supabase.functions.invoke('analytics-funnel', {
           body: { details: true }
         });
         if (!error && data) {
+          console.log('Funnel with details:', data);
           setFunnelWithDetails(data);
         }
       } catch (e) {
         console.error('Error fetching funnel details:', e);
+      } finally {
+        setLoadingDetails(false);
       }
     };
     fetchFunnelWithDetails();
   }, []);
 
-  // Fetch user details when a step is selected
-  useEffect(() => {
-    const fetchUserDetails = async () => {
-      if (!selectedStep) return;
-      
-      // Find the step with user_ids
-      const stepWithDetails = funnelWithDetails.find(s => s.etapa === selectedStep.etapa);
-      const userIds = stepWithDetails?.user_ids || [];
-      
-      if (userIds.length === 0) {
-        setUserDetails([]);
-        return;
-      }
+  // Get users for selected step from cached data
+  const getSelectedStepUsers = (): UserData[] => {
+    if (!selectedStep) return [];
+    const stepWithDetails = funnelWithDetails.find(s => s.etapa === selectedStep.etapa);
+    return stepWithDetails?.users || [];
+  };
 
-      setLoadingUsers(true);
-      try {
-        const { data, error } = await supabase
-          .from('user_profiles')
-          .select('id, full_name, city, created_at')
-          .in('id', userIds);
-        
-        if (!error && data) {
-          setUserDetails(data);
-        }
-      } catch (e) {
-        console.error('Error fetching user details:', e);
-      } finally {
-        setLoadingUsers(false);
-      }
-    };
+  const selectedUsers = getSelectedStepUsers();
 
-    fetchUserDetails();
-  }, [selectedStep, funnelWithDetails]);
+  // Export all funnel data to CSV
+  const exportToCSV = async () => {
+    if (funnelWithDetails.length === 0) {
+      toast.error('Aguarde os dados carregarem');
+      return;
+    }
+
+    setExporting(true);
+    try {
+      // Build CSV rows - each user appears with their most advanced stage
+      const userStages = new Map<string, { user: UserData; stage: string; stageIndex: number }>();
+      
+      funnelWithDetails.forEach((step, index) => {
+        const users = step.users || [];
+        users.forEach(user => {
+          const existing = userStages.get(user.id);
+          // Keep the most advanced stage (higher index = more advanced)
+          if (!existing || index > existing.stageIndex) {
+            userStages.set(user.id, { user, stage: step.etapa, stageIndex: index });
+          }
+        });
+      });
+
+      // Create CSV content
+      const headers = ['nome', 'telefone', 'cidade', 'etapa', 'data_cadastro'];
+      const rows = Array.from(userStages.values()).map(({ user, stage }) => [
+        user.full_name || 'Anônimo',
+        user.phone || '',
+        user.city || '',
+        stage,
+        user.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR') : ''
+      ]);
+
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      ].join('\n');
+
+      // Download file
+      const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `funil-conversao-${new Date().toISOString().split('T')[0]}.csv`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+
+      toast.success(`Exportados ${userStages.size} usuários para CSV`);
+    } catch (e) {
+      console.error('Error exporting CSV:', e);
+      toast.error('Erro ao exportar CSV');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -164,9 +222,20 @@ export function FlowFunnelChart() {
   return (
     <TooltipProvider>
       <div className="chart-container">
-        <div className="mb-6 flex flex-col gap-1">
-          <h3 className="text-lg font-semibold font-display">Funil de Conversão</h3>
-          <p className="text-sm text-muted-foreground">Clique em uma etapa para ver os usuários</p>
+        <div className="mb-6 flex items-center justify-between">
+          <div className="flex flex-col gap-1">
+            <h3 className="text-lg font-semibold font-display">Funil de Conversão</h3>
+            <p className="text-sm text-muted-foreground">Clique em uma etapa para ver os usuários</p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportToCSV}
+            disabled={exporting || loadingDetails}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            {exporting ? 'Exportando...' : 'Exportar CSV'}
+          </Button>
         </div>
 
         <div className="space-y-4">
@@ -245,29 +314,35 @@ export function FlowFunnelChart() {
                 <strong>{selectedStep?.valor}</strong> usuários nesta etapa
               </p>
               
-              {loadingUsers ? (
+              {loadingDetails ? (
                 <div className="space-y-2">
                   {[...Array(5)].map((_, i) => (
-                    <Skeleton key={i} className="h-10 w-full" />
+                    <Skeleton key={i} className="h-16 w-full" />
                   ))}
                 </div>
-              ) : userDetails.length > 0 ? (
-                <ScrollArea className="h-[300px]">
-                  <div className="space-y-2">
-                    {userDetails.map((user) => (
+              ) : selectedUsers.length > 0 ? (
+                <ScrollArea className="h-[350px]">
+                  <div className="space-y-2 pr-4">
+                    {selectedUsers.map((user) => (
                       <div
                         key={user.id}
                         className="flex items-center justify-between p-3 rounded-lg border bg-card"
                       >
-                        <div>
-                          <p className="font-medium text-sm">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">
                             {user.full_name || 'Usuário Anônimo'}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {user.city || 'Cidade não informada'}
                           </p>
+                          <div className="flex items-center gap-1 mt-1">
+                            <Phone className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground font-mono">
+                              {formatPhone(user.phone)}
+                            </span>
+                          </div>
                         </div>
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-xs text-muted-foreground text-right">
                           {user.created_at
                             ? new Date(user.created_at).toLocaleDateString('pt-BR')
                             : '-'}

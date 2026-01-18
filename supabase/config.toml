@@ -34,3 +34,6 @@ verify_jwt = false
 
 [functions.analytics-errors]
 verify_jwt = false
+
+[functions.analytics-chats]
+verify_jwt = false

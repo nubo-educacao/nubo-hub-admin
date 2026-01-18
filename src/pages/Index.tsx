@@ -8,6 +8,7 @@ import { FlowFunnelChart } from "@/components/analytics/FlowFunnelChart";
 import { UserPreferencesChart } from "@/components/analytics/UserPreferencesChart";
 import { TopUsersChart } from "@/components/analytics/TopUsersChart";
 import { LocationChart } from "@/components/analytics/LocationChart";
+import { ChatExamplesPanel } from "@/components/analytics/ChatExamplesPanel";
 import { useDashboardStats } from "@/hooks/useAnalyticsData";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -79,6 +80,11 @@ const Index = () => {
           <FlowFunnelChart />
           <UserPreferencesChart />
           <ErrorLogPanel />
+        </section>
+
+        {/* Chat Examples */}
+        <section className="grid grid-cols-1 gap-6">
+          <ChatExamplesPanel />
         </section>
 
         {/* Quick Insights */}

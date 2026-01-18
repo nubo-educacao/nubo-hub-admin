@@ -648,6 +648,7 @@ export type Database = {
           peso_redacao: string | null
           qt_inscricao_2025: string | null
           qt_semestre: string | null
+          qt_vagas_ofertadas: string | null
           qt_vagas_ofertadas_2025: string | null
           tp_cota: string | null
           tp_mod_concorrencia: string | null
@@ -685,6 +686,7 @@ export type Database = {
           peso_redacao?: string | null
           qt_inscricao_2025?: string | null
           qt_semestre?: string | null
+          qt_vagas_ofertadas?: string | null
           qt_vagas_ofertadas_2025?: string | null
           tp_cota?: string | null
           tp_mod_concorrencia?: string | null
@@ -722,6 +724,7 @@ export type Database = {
           peso_redacao?: string | null
           qt_inscricao_2025?: string | null
           qt_semestre?: string | null
+          qt_vagas_ofertadas?: string | null
           qt_vagas_ofertadas_2025?: string | null
           tp_cota?: string | null
           tp_mod_concorrencia?: string | null
@@ -1386,6 +1389,21 @@ export type Database = {
         }
         Relationships: []
       }
+      states: {
+        Row: {
+          name: string
+          uf: string
+        }
+        Insert: {
+          name: string
+          uf: string
+        }
+        Update: {
+          name?: string
+          uf?: string
+        }
+        Relationships: []
+      }
       user_favorites: {
         Row: {
           course_id: string | null
@@ -1553,7 +1571,9 @@ export type Database = {
       }
     }
     Functions: {
+      clean_numeric_string: { Args: { val: string }; Returns: number }
       earth: { Args: never; Returns: number }
+      f_unaccent: { Args: { "": string }; Returns: string }
       get_courses_with_opportunities: {
         Args: {
           category?: string
@@ -1621,30 +1641,57 @@ export type Database = {
           similarity: number
         }[]
       }
-      match_opportunities: {
-        Args: {
-          city_names?: string[]
-          course_interests?: string[]
-          enem_score?: number
-          income_per_capita?: number
-          page_number?: number
-          page_size?: number
-          preferred_shifts?: string[]
-          program_preference?: string
-          quota_types?: string[]
-          user_lat?: number
-          user_long?: number
-        }
-        Returns: {
-          campus_city: string
-          campus_state: string
-          course_id: string
-          course_name: string
-          distance_km: number
-          institution_name: string
-          opportunities_json: Json
-        }[]
-      }
+      match_opportunities:
+        | {
+            Args: {
+              city_names?: string[]
+              course_interests?: string[]
+              enem_score?: number
+              income_per_capita?: number
+              page_number?: number
+              page_size?: number
+              preferred_shifts?: string[]
+              program_preference?: string
+              quota_types?: string[]
+              user_lat?: number
+              user_long?: number
+            }
+            Returns: {
+              campus_city: string
+              campus_state: string
+              course_id: string
+              course_name: string
+              distance_km: number
+              institution_name: string
+              opportunities_json: Json
+            }[]
+          }
+        | {
+            Args: {
+              city_names?: string[]
+              course_interests?: string[]
+              enem_score?: number
+              income_per_capita?: number
+              page_number?: number
+              page_size?: number
+              preferred_shifts?: string[]
+              program_preference?: string
+              quota_types?: string[]
+              state_names?: string[]
+              university_preference?: string
+              user_lat?: number
+              user_long?: number
+            }
+            Returns: {
+              campus_city: string
+              campus_state: string
+              course_id: string
+              course_name: string
+              distance_km: number
+              institution_name: string
+              opportunities_json: Json
+            }[]
+          }
       refresh_course_catalog: { Args: never; Returns: undefined }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
