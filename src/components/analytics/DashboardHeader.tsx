@@ -1,10 +1,22 @@
-import { Cloud, RefreshCw, Settings, Sparkles, MessageSquare } from "lucide-react";
+import { Cloud, RefreshCw, Settings, Sparkles, MessageSquare, Clock } from "lucide-react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { DateRangeFilter } from "./DateRangeFilter";
+import { useState, useEffect } from "react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 export function DashboardHeader() {
   const location = useLocation();
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+
+  useEffect(() => {
+    setLastUpdate(new Date());
+  }, []);
+
+  const formatLastUpdate = () => {
+    return format(lastUpdate, "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR });
+  };
 
   return (
     <header className="sticky top-0 z-40 backdrop-blur-md bg-background/80 border-b border-border">
@@ -20,6 +32,10 @@ export function DashboardHeader() {
               </h1>
               <p className="text-sm text-muted-foreground">
                 Monitoramento e insights
+              </p>
+              <p className="text-xs text-muted-foreground/70 flex items-center gap-1 mt-0.5">
+                <Clock className="h-3 w-3" />
+                Última atualização: {formatLastUpdate()}
               </p>
             </div>
           </div>
