@@ -34,56 +34,63 @@ serve(async (req) => {
   }
 
   try {
-    const { messages } = await req.json();
+    const { messages, cachedContext } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    let contextData: string;
 
-    console.log("Fetching context for AI chat...");
+    // Use cached context if provided (saves ~4 DB queries per message)
+    if (cachedContext) {
+      console.log("Using cached context from frontend");
+      contextData = cachedContext;
+    } else {
+      console.log("Fetching fresh context for AI chat...");
+      
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get latest funnel data
-    const funnelResponse = await fetch(`${supabaseUrl}/functions/v1/analytics-funnel`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${supabaseKey}`,
-      },
-      body: JSON.stringify({ includeDetails: false }),
-    });
-    const funnelData = await funnelResponse.json();
+      // Get latest funnel data
+      const funnelResponse = await fetch(`${supabaseUrl}/functions/v1/analytics-funnel`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${supabaseKey}`,
+        },
+        body: JSON.stringify({ includeDetails: false }),
+      });
+      const funnelData = await funnelResponse.json();
 
-    // Get basic stats
-    const { count: totalUsers } = await supabase
-      .from("user_profiles")
-      .select("*", { count: "exact", head: true });
+      // Get basic stats
+      const { count: totalUsers } = await supabase
+        .from("user_profiles")
+        .select("*", { count: "exact", head: true });
 
-    const { count: totalMessages } = await supabase
-      .from("chat_messages")
-      .select("*", { count: "exact", head: true });
+      const { count: totalMessages } = await supabase
+        .from("chat_messages")
+        .select("*", { count: "exact", head: true });
 
-    const { count: totalFavorites } = await supabase
-      .from("user_favorites")
-      .select("*", { count: "exact", head: true });
+      const { count: totalFavorites } = await supabase
+        .from("user_favorites")
+        .select("*", { count: "exact", head: true });
 
-    // Get recent user messages for context
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      // Get recent user messages for context
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const { data: recentUserMessages } = await supabase
-      .from("chat_messages")
-      .select("content, workflow")
-      .eq("sender", "user")
-      .gte("created_at", sevenDaysAgo.toISOString())
-      .limit(30);
+      const { data: recentUserMessages } = await supabase
+        .from("chat_messages")
+        .select("content, workflow")
+        .eq("sender", "user")
+        .gte("created_at", sevenDaysAgo.toISOString())
+        .limit(30);
 
-    // Build context
-    const contextData = `
+      // Build context
+      contextData = `
 ## Contexto Atual do Produto
 
 ### Métricas Gerais
@@ -95,8 +102,9 @@ serve(async (req) => {
 ${funnelData.funnel?.map((stage: any) => `- ${stage.name}: ${stage.count} usuários (${stage.description})`).join("\n") || "Dados não disponíveis"}
 
 ### Amostra de Mensagens Recentes de Usuários (últimos 7 dias)
-${recentUserMessages?.slice(0, 15).map(m => `- [${m.workflow || "geral"}]: "${m.content?.substring(0, 80)}..."`).join("\n") || "Nenhuma mensagem recente"}
+${recentUserMessages?.slice(0, 15).map((m: any) => `- [${m.workflow || "geral"}]: "${m.content?.substring(0, 80)}..."`).join("\n") || "Nenhuma mensagem recente"}
 `;
+    }
 
     console.log("Sending to AI with context...");
 
