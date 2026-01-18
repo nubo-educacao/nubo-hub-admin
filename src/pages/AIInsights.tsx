@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Cloud, ArrowLeft, Sparkles, MessageSquare, Users } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AIInsightsPanel } from "@/components/analytics/AIInsightsPanel";
@@ -8,7 +8,17 @@ import { AIChatPanel } from "@/components/analytics/AIChatPanel";
 import { ChatExamplesPanel } from "@/components/analytics/ChatExamplesPanel";
 
 export default function AIInsights() {
-  const [activeTab, setActiveTab] = useState("insights");
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get("tab") || "insights";
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  // Update tab when URL changes
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam && ["insights", "chat", "conversations"].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
 
   return (
     <div className="min-h-screen bg-background">

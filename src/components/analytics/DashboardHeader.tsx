@@ -1,5 +1,5 @@
-import { Cloud, RefreshCw, Settings, Sparkles } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { Cloud, RefreshCw, Settings, Sparkles, MessageSquare } from "lucide-react";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { DateRangeFilter } from "./DateRangeFilter";
 
@@ -25,6 +25,17 @@ export function DashboardHeader() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Main Action Buttons - Highlighted */}
+            <Link to="/ai-insights?tab=conversations">
+              <Button
+                variant="default"
+                size="sm"
+                className="gap-2 bg-gradient-to-r from-chart-1 to-chart-2 hover:opacity-90"
+              >
+                <MessageSquare className="h-4 w-4" />
+                Conversas
+              </Button>
+            </Link>
             <Link to="/ai-insights">
               <Button
                 variant={location.pathname === "/ai-insights" ? "default" : "outline"}
