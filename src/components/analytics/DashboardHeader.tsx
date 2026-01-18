@@ -1,8 +1,11 @@
-import { Cloud, RefreshCw, Settings } from "lucide-react";
+import { Cloud, RefreshCw, Settings, Sparkles } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { DateRangeFilter } from "./DateRangeFilter";
 
 export function DashboardHeader() {
+  const location = useLocation();
+
   return (
     <header className="sticky top-0 z-40 backdrop-blur-md bg-background/80 border-b border-border">
       <div className="container py-4">
@@ -22,6 +25,16 @@ export function DashboardHeader() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Link to="/ai-insights">
+              <Button
+                variant={location.pathname === "/ai-insights" ? "default" : "outline"}
+                size="sm"
+                className="gap-2"
+              >
+                <Sparkles className="h-4 w-4" />
+                Insights AI
+              </Button>
+            </Link>
             <DateRangeFilter />
             <Button variant="outline" size="icon" className="shrink-0">
               <RefreshCw className="h-4 w-4" />

@@ -561,6 +561,7 @@ export type Database = {
           is_nubo_pick: boolean | null
           opportunity_type: string | null
           raw_data: Json | null
+          scholarship_tags: Json | null
           scholarship_type: string | null
           semester: string | null
           shift: string | null
@@ -577,6 +578,7 @@ export type Database = {
           is_nubo_pick?: boolean | null
           opportunity_type?: string | null
           raw_data?: Json | null
+          scholarship_tags?: Json | null
           scholarship_type?: string | null
           semester?: string | null
           shift?: string | null
@@ -593,6 +595,7 @@ export type Database = {
           is_nubo_pick?: boolean | null
           opportunity_type?: string | null
           raw_data?: Json | null
+          scholarship_tags?: Json | null
           scholarship_type?: string | null
           semester?: string | null
           shift?: string | null
