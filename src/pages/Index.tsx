@@ -3,6 +3,7 @@ import { DashboardHeader } from "@/components/analytics/DashboardHeader";
 import { StatCard } from "@/components/analytics/StatCard";
 import { ActivityChart } from "@/components/analytics/ActivityChart";
 import { TopCoursesChart } from "@/components/analytics/TopCoursesChart";
+import { OpportunityTypesChart } from "@/components/analytics/OpportunityTypesChart";
 import { FlowFunnelChart } from "@/components/analytics/FlowFunnelChart";
 import { UserPreferencesChart } from "@/components/analytics/UserPreferencesChart";
 import { TopUsersChart } from "@/components/analytics/TopUsersChart";
@@ -59,10 +60,11 @@ const Index = () => {
           <FlowFunnelChart />
         </section>
 
-        {/* Charts Row 2 - Rankings */}
-        <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Charts Row 2 - Rankings & Opportunities */}
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <TopUsersChart />
           <TopCoursesChart />
+          <OpportunityTypesChart />
         </section>
 
         {/* Charts Row 3 */}
