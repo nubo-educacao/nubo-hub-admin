@@ -46,15 +46,15 @@ export function FlowFunnelChart() {
     );
   }
 
-  const maxValue = funnelData[0]?.valor || 1;
+  const maxValue = funnelData[0]?.valor ?? 1;
 
   let biggestDropIndex = -1;
   let biggestDrop = 0;
   funnelData.forEach((step, index) => {
-    if (index > 0 && funnelData[index - 1].valor > 0) {
-      const drop = Math.round(
-        ((funnelData[index - 1].valor - step.valor) / funnelData[index - 1].valor) * 100
-      );
+    const currentVal = step?.valor ?? 0;
+    const prevVal = funnelData[index - 1]?.valor ?? 0;
+    if (index > 0 && prevVal > 0) {
+      const drop = Math.round(((prevVal - currentVal) / prevVal) * 100);
       if (drop > biggestDrop) {
         biggestDrop = drop;
         biggestDropIndex = index;
@@ -71,21 +71,23 @@ export function FlowFunnelChart() {
 
       <div className="space-y-4">
         {funnelData.map((step, index) => {
-          const percentage = maxValue > 0 ? (step.valor / maxValue) * 100 : 0;
-          const dropOff = index > 0 && funnelData[index - 1].valor > 0
-            ? Math.round(((funnelData[index - 1].valor - step.valor) / funnelData[index - 1].valor) * 100)
+          const stepValue = step.valor ?? 0;
+          const prevValue = funnelData[index - 1]?.valor ?? 0;
+          const percentage = maxValue > 0 ? (stepValue / maxValue) * 100 : 0;
+          const dropOff = index > 0 && prevValue > 0
+            ? Math.round(((prevValue - stepValue) / prevValue) * 100)
             : 0;
 
           return (
             <div
-              key={step.etapa}
+              key={step.etapa || index}
               className="opacity-0 animate-fade-in"
               style={{ animationDelay: `${index * 100}ms` }}
             >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">{step.etapa}</span>
+                <span className="text-sm font-medium">{step.etapa || 'Etapa'}</span>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm font-semibold">{step.valor.toLocaleString()}</span>
+                  <span className="text-sm font-semibold">{stepValue.toLocaleString()}</span>
                   {dropOff > 0 && (
                     <span className="text-xs text-destructive font-medium">-{dropOff}%</span>
                   )}
