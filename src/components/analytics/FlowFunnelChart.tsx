@@ -22,12 +22,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 const colors = [
-  "bg-primary",
-  "bg-chart-2",
-  "bg-chart-3",
-  "bg-chart-4",
-  "bg-chart-5",
-  "bg-success",
+  "from-primary to-primary/80",
+  "from-chart-2 to-chart-2/80",
+  "from-chart-3 to-chart-3/80",
+  "from-chart-4 to-chart-4/80",
+  "from-chart-5 to-chart-5/80",
+  "from-success to-success/80",
 ];
 
 // Fallback descriptions if not provided by API
@@ -262,59 +262,85 @@ export function FlowFunnelChart() {
           </Button>
         </div>
 
-        <div className="space-y-4">
+        {/* Visual Funnel */}
+        <div className="flex flex-col items-center space-y-2 py-4">
           {funnelData.map((step, index) => {
             const stepValue = step.valor ?? 0;
             const prevValue = funnelData[index - 1]?.valor ?? 0;
             const percentage = maxValue > 0 ? (stepValue / maxValue) * 100 : 0;
+            // Width goes from 100% at top to minimum based on percentage
+            const widthPercent = Math.max(20, percentage);
             const dropOff = index > 0 && prevValue > 0
               ? Math.round(((prevValue - stepValue) / prevValue) * 100)
               : 0;
 
             const description = step.description || funnelDescriptions[step.etapa] || 'Etapa do funil';
+            const isBottleneck = index === biggestDropIndex;
 
             return (
-              <div
-                key={step.etapa || index}
-                className="opacity-0 animate-fade-in cursor-pointer hover:bg-muted/30 rounded-lg p-2 -mx-2 transition-colors"
-                style={{ animationDelay: `${index * 100}ms` }}
-                onClick={() => handleStepClick(step)}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="text-sm font-medium flex items-center gap-1.5 cursor-help">
-                        {step.etapa || 'Etapa'}
-                        <Info className="h-3.5 w-3.5 text-muted-foreground" />
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="right" className="max-w-xs">
-                      <p className="text-sm">{description}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-semibold">{stepValue.toLocaleString()}</span>
+              <Tooltip key={step.etapa || index}>
+                <TooltipTrigger asChild>
+                  <div
+                    className={cn(
+                      "relative cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:shadow-lg",
+                      "opacity-0 animate-fade-in"
+                    )}
+                    style={{ 
+                      animationDelay: `${index * 100}ms`,
+                      width: `${widthPercent}%`,
+                    }}
+                    onClick={() => handleStepClick(step)}
+                  >
+                    {/* Funnel segment */}
+                    <div 
+                      className={cn(
+                        "relative py-4 px-4 rounded-lg bg-gradient-to-r text-white shadow-md",
+                        colors[index % colors.length],
+                        isBottleneck && "ring-2 ring-destructive ring-offset-2 ring-offset-background"
+                      )}
+                      style={{
+                        clipPath: index === funnelData.length - 1 
+                          ? 'polygon(5% 0%, 95% 0%, 100% 100%, 0% 100%)' 
+                          : 'polygon(0% 0%, 100% 0%, 95% 100%, 5% 100%)'
+                      }}
+                    >
+                      <div className="flex items-center justify-between relative z-10">
+                        <span className="font-medium text-sm truncate flex-1">{step.etapa || 'Etapa'}</span>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="font-bold">{stepValue.toLocaleString()}</span>
+                          {dropOff > 0 && (
+                            <span className={cn(
+                              "text-xs px-1.5 py-0.5 rounded",
+                              isBottleneck ? "bg-destructive text-destructive-foreground" : "bg-white/20"
+                            )}>
+                              -{dropOff}%
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-xs">
+                  <div className="space-y-1">
+                    <p className="font-medium">{step.etapa}</p>
+                    <p className="text-sm text-muted-foreground">{description}</p>
+                    <p className="text-sm"><strong>{stepValue.toLocaleString()}</strong> usuários ({Math.round(percentage)}% do total)</p>
                     {dropOff > 0 && (
-                      <span className="text-xs text-destructive font-medium">-{dropOff}%</span>
+                      <p className="text-sm text-destructive">Queda de {dropOff}% da etapa anterior</p>
                     )}
                   </div>
-                </div>
-                <div className="h-3 w-full rounded-full bg-muted overflow-hidden">
-                  <div
-                    className={cn("h-full rounded-full transition-all duration-500", colors[index % colors.length])}
-                    style={{ width: `${percentage}%` }}
-                  />
-                </div>
-              </div>
+                </TooltipContent>
+              </Tooltip>
             );
           })}
         </div>
 
         {biggestDropIndex > 0 && (
-          <div className="mt-6 p-4 rounded-lg bg-muted/50 border border-border">
-            <p className="text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground">Insight:</span> A maior queda 
-              ({biggestDrop}%) está entre "{funnelData[biggestDropIndex - 1]?.etapa}" e "
+          <div className="mt-4 p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+            <p className="text-sm">
+              <span className="font-semibold text-destructive">⚠️ Maior gargalo:</span>{' '}
+              Queda de <strong>{biggestDrop}%</strong> entre "{funnelData[biggestDropIndex - 1]?.etapa}" e "
               {funnelData[biggestDropIndex]?.etapa}".
             </p>
           </div>

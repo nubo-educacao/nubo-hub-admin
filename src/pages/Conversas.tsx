@@ -5,9 +5,9 @@ import { ChatExamplesPanel } from "@/components/analytics/ChatExamplesPanel";
 
 export default function Conversas() {
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-40 backdrop-blur-md bg-background/80 border-b border-border">
+    <div className="h-screen flex flex-col bg-background overflow-hidden">
+      {/* Header - Fixed */}
+      <header className="sticky top-0 z-40 backdrop-blur-md bg-background/80 border-b border-border flex-shrink-0">
         <div className="container py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -32,19 +32,10 @@ export default function Conversas() {
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="container py-6">
+      {/* Main Content - Takes remaining height */}
+      <main className="flex-1 container py-6 overflow-hidden">
         <ChatExamplesPanel fullPage />
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-border py-6 mt-12">
-        <div className="container text-center text-sm text-muted-foreground">
-          <p>
-            Cloudinha Analytics © {new Date().getFullYear()} • Powered by Lovable AI
-          </p>
-        </div>
-      </footer>
     </div>
   );
 }
