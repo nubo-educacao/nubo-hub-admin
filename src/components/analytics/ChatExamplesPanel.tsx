@@ -1,12 +1,18 @@
 import { useState, useEffect } from "react";
-import { MessageSquare, ChevronLeft, ChevronRight, User, Cloud, Loader2, MapPin, GraduationCap, Calendar, Hash } from "lucide-react";
+import { MessageSquare, ChevronLeft, ChevronRight, User, Cloud, Loader2, MapPin, GraduationCap, Calendar, Hash, Filter, GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface ChatMessage {
   id: string;
@@ -26,6 +32,7 @@ interface UserConversation {
   first_contact: string | null;
   total_messages: number;
   workflow: string | null;
+  funnel_stage: string | null;
   messages: ChatMessage[];
 }
 
@@ -44,6 +51,25 @@ const educationLabels: Record<string, string> = {
   'superior_completo': 'Superior Completo',
 };
 
+const funnelStages = [
+  { value: 'all', label: 'Todas as etapas' },
+  { value: 'Cadastrados', label: 'Cadastrados' },
+  { value: 'Onboarding Completo', label: 'Onboarding Completo' },
+  { value: 'Preferências Definidas', label: 'Preferências Definidas' },
+  { value: 'Match Iniciado', label: 'Match Iniciado' },
+  { value: 'Salvaram Favoritos', label: 'Salvaram Favoritos' },
+  { value: 'Fluxo Específico', label: 'Fluxo Específico' },
+];
+
+const funnelStageColors: Record<string, string> = {
+  'Cadastrados': 'bg-chart-1/10 text-chart-1 border-chart-1/30',
+  'Onboarding Completo': 'bg-chart-2/10 text-chart-2 border-chart-2/30',
+  'Preferências Definidas': 'bg-chart-3/10 text-chart-3 border-chart-3/30',
+  'Match Iniciado': 'bg-chart-4/10 text-chart-4 border-chart-4/30',
+  'Salvaram Favoritos': 'bg-chart-5/10 text-chart-5 border-chart-5/30',
+  'Fluxo Específico': 'bg-success/10 text-success border-success/30',
+};
+
 interface ChatExamplesPanelProps {
   fullPage?: boolean;
 }
@@ -53,6 +79,7 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [funnelFilter, setFunnelFilter] = useState('all');
 
   const fetchConversations = async () => {
     try {
@@ -61,7 +88,7 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
       console.log('Fetching conversations...');
       
       const { data, error: fetchError } = await supabase.functions.invoke('analytics-chats', {
-        body: { limit: fullPage ? 20 : 10 }
+        body: { limit: fullPage ? 30 : 10 }
       });
 
       if (fetchError) {
@@ -88,22 +115,29 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
     fetchConversations();
   }, []);
 
-  const currentConversation = conversations[currentIndex];
+  // Filter conversations by funnel stage
+  const filteredConversations = funnelFilter === 'all' 
+    ? conversations 
+    : conversations.filter(c => c.funnel_stage === funnelFilter);
+
+  // Reset index when filter changes
+  useEffect(() => {
+    setCurrentIndex(0);
+  }, [funnelFilter]);
+
+  const currentConversation = filteredConversations[currentIndex];
 
   const goToPrevious = () => {
-    setCurrentIndex((prev) => (prev > 0 ? prev - 1 : conversations.length - 1));
+    setCurrentIndex((prev) => (prev > 0 ? prev - 1 : filteredConversations.length - 1));
   };
 
   const goToNext = () => {
-    setCurrentIndex((prev) => (prev < conversations.length - 1 ? prev + 1 : 0));
+    setCurrentIndex((prev) => (prev < filteredConversations.length - 1 ? prev + 1 : 0));
   };
-
-  const containerClass = fullPage ? "" : "chart-container col-span-2";
-  const scrollHeight = fullPage ? "h-[500px]" : "h-[350px]";
 
   if (loading) {
     return (
-      <div className={containerClass}>
+      <div className="flex flex-col h-full">
         <div className="mb-4 flex items-center gap-2">
           <MessageSquare className="h-5 w-5 text-primary" />
           <h3 className="text-lg font-semibold font-display">Conversas Recentes</h3>
@@ -117,7 +151,7 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
 
   if (error) {
     return (
-      <div className={containerClass}>
+      <div className="flex flex-col h-full">
         <div className="mb-4 flex items-center gap-2">
           <MessageSquare className="h-5 w-5 text-primary" />
           <h3 className="text-lg font-semibold font-display">Conversas Recentes</h3>
@@ -135,7 +169,7 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
 
   if (conversations.length === 0) {
     return (
-      <div className={containerClass}>
+      <div className="flex flex-col h-full">
         <div className="mb-4 flex items-center gap-2">
           <MessageSquare className="h-5 w-5 text-primary" />
           <h3 className="text-lg font-semibold font-display">Conversas Recentes</h3>
@@ -149,164 +183,215 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
   }
 
   return (
-    <div className={containerClass}>
-      <div className="mb-4 flex items-center justify-between">
+    <div className="flex flex-col h-full">
+      {/* Header with Filter */}
+      <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-2">
           <MessageSquare className="h-5 w-5 text-primary" />
           <h3 className="text-lg font-semibold font-display">Conversas Recentes</h3>
+          <span className="text-sm text-muted-foreground">
+            ({currentIndex + 1} de {filteredConversations.length})
+          </span>
         </div>
-        <span className="text-sm text-muted-foreground">
-          {currentIndex + 1} de {conversations.length}
-        </span>
-      </div>
-
-      {/* User Profile Card */}
-      <div className="mb-4 p-4 rounded-lg bg-muted/50 border border-border">
-        <div className="flex items-center justify-between mb-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={goToPrevious}
-            disabled={conversations.length <= 1}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-
-          <div className="flex-1 text-center">
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <User className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h4 className="font-semibold">{currentConversation?.user_name}</h4>
-                {currentConversation?.age && (
-                  <span className="text-xs text-muted-foreground">{currentConversation.age} anos</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={goToNext}
-            disabled={conversations.length <= 1}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {/* User Details Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-          {currentConversation?.city && (
-            <div className="flex items-center gap-1.5 text-muted-foreground">
-              <MapPin className="h-3.5 w-3.5" />
-              <span className="truncate">{currentConversation.city}</span>
-            </div>
-          )}
-          {currentConversation?.education && (
-            <div className="flex items-center gap-1.5 text-muted-foreground">
-              <GraduationCap className="h-3.5 w-3.5" />
-              <span className="truncate">
-                {educationLabels[currentConversation.education] || currentConversation.education}
-              </span>
-            </div>
-          )}
-          {currentConversation?.first_contact && (
-            <div className="flex items-center gap-1.5 text-muted-foreground">
-              <Calendar className="h-3.5 w-3.5" />
-              <span className="truncate">
-                {formatDistanceToNow(new Date(currentConversation.first_contact), { 
-                  addSuffix: true, 
-                  locale: ptBR 
-                })}
-              </span>
-            </div>
-          )}
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            <Hash className="h-3.5 w-3.5" />
-            <span>{currentConversation?.total_messages || 0} msgs</span>
-          </div>
-        </div>
-
-        {/* Badges */}
-        <div className="flex flex-wrap gap-2 mt-3">
-          {currentConversation?.workflow && (
-            <Badge variant="secondary">
-              {workflowLabels[currentConversation.workflow] || currentConversation.workflow}
-            </Badge>
-          )}
-          {currentConversation?.active_workflow && currentConversation.active_workflow !== currentConversation.workflow && (
-            <Badge variant="outline">
-              Atual: {workflowLabels[currentConversation.active_workflow] || currentConversation.active_workflow}
-            </Badge>
-          )}
+        
+        {/* Funnel Filter */}
+        <div className="flex items-center gap-2">
+          <Filter className="h-4 w-4 text-muted-foreground" />
+          <Select value={funnelFilter} onValueChange={setFunnelFilter}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Filtrar por etapa" />
+            </SelectTrigger>
+            <SelectContent>
+              {funnelStages.map((stage) => (
+                <SelectItem key={stage.value} value={stage.value}>
+                  {stage.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
-      {/* Chat Messages */}
-      <ScrollArea className={cn(scrollHeight, "pr-4")}>
-        <div className="space-y-3">
-          {currentConversation?.messages.map((message) => (
-            <div
-              key={message.id}
-              className={cn(
-                "flex gap-2",
-                message.sender === 'user' ? "justify-start" : "justify-end"
-              )}
-            >
-              {message.sender === 'user' && (
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                  <User className="h-4 w-4 text-muted-foreground" />
-                </div>
-              )}
-              
-              <div
-                className={cn(
-                  "max-w-[80%] rounded-lg px-3 py-2 text-sm",
-                  message.sender === 'user'
-                    ? "bg-muted text-foreground"
-                    : "bg-primary text-primary-foreground"
-                )}
+      {filteredConversations.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+          <Filter className="h-12 w-12 mb-4 opacity-50" />
+          <p>Nenhuma conversa nesta etapa do funil</p>
+          <Button variant="outline" size="sm" className="mt-4" onClick={() => setFunnelFilter('all')}>
+            Limpar filtro
+          </Button>
+        </div>
+      ) : (
+        <>
+          {/* User Profile Card - Fixed at top */}
+          <div className="mb-4 p-4 rounded-lg bg-muted/50 border border-border flex-shrink-0">
+            <div className="flex items-center justify-between mb-3">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={goToPrevious}
+                disabled={filteredConversations.length <= 1}
               >
-                <p className="whitespace-pre-wrap break-words">
-                  {message.content?.slice(0, 500)}
-                  {message.content && message.content.length > 500 && '...'}
-                </p>
-                <p className={cn(
-                  "text-xs mt-1 opacity-70",
-                  message.sender === 'user' ? "text-muted-foreground" : "text-primary-foreground/70"
-                )}>
-                  {message.created_at && new Date(message.created_at).toLocaleTimeString('pt-BR', {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                </p>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+
+              <div className="flex-1 text-center">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <User className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold">{currentConversation?.user_name}</h4>
+                    {currentConversation?.age && (
+                      <span className="text-xs text-muted-foreground">{currentConversation.age} anos</span>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              {message.sender !== 'user' && (
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Cloud className="h-4 w-4 text-primary" />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={goToNext}
+                disabled={filteredConversations.length <= 1}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Funnel Stage Badge - Highlighted */}
+            {currentConversation?.funnel_stage && (
+              <div className="flex items-center justify-center mb-3">
+                <Badge 
+                  variant="outline" 
+                  className={cn(
+                    "px-3 py-1 text-sm font-medium",
+                    funnelStageColors[currentConversation.funnel_stage] || "bg-muted"
+                  )}
+                >
+                  <GitBranch className="h-3.5 w-3.5 mr-1.5" />
+                  {currentConversation.funnel_stage}
+                </Badge>
+              </div>
+            )}
+
+            {/* User Details Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+              {currentConversation?.city && (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <MapPin className="h-3.5 w-3.5" />
+                  <span className="truncate">{currentConversation.city}</span>
                 </div>
               )}
+              {currentConversation?.education && (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <GraduationCap className="h-3.5 w-3.5" />
+                  <span className="truncate">
+                    {educationLabels[currentConversation.education] || currentConversation.education}
+                  </span>
+                </div>
+              )}
+              {currentConversation?.first_contact && (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Calendar className="h-3.5 w-3.5" />
+                  <span className="truncate">
+                    {formatDistanceToNow(new Date(currentConversation.first_contact), { 
+                      addSuffix: true, 
+                      locale: ptBR 
+                    })}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <Hash className="h-3.5 w-3.5" />
+                <span>{currentConversation?.total_messages || 0} msgs</span>
+              </div>
             </div>
-          ))}
-        </div>
-      </ScrollArea>
 
-      {/* Insight */}
-      <div className="mt-4 p-3 rounded-lg bg-muted/50 border border-border">
-        <p className="text-sm text-muted-foreground">
-          <span className="font-semibold text-foreground">💡 Insight:</span> {' '}
-          {currentConversation?.total_messages || 0} mensagens totais com este usuário.
-          {currentConversation?.workflow && (
-            <> Fluxo dominante: <strong>{workflowLabels[currentConversation.workflow] || currentConversation.workflow}</strong>.</>
-          )}
-          {currentConversation?.city && (
-            <> Localização: <strong>{currentConversation.city}</strong>.</>
-          )}
-        </p>
-      </div>
+            {/* Workflow Badges */}
+            <div className="flex flex-wrap gap-2 mt-3">
+              {currentConversation?.workflow && (
+                <Badge variant="secondary">
+                  {workflowLabels[currentConversation.workflow] || currentConversation.workflow}
+                </Badge>
+              )}
+              {currentConversation?.active_workflow && currentConversation.active_workflow !== currentConversation.workflow && (
+                <Badge variant="outline">
+                  Atual: {workflowLabels[currentConversation.active_workflow] || currentConversation.active_workflow}
+                </Badge>
+              )}
+            </div>
+          </div>
+
+          {/* Chat Messages - Scrollable area with fixed height */}
+          <div className="flex-1 min-h-0 overflow-hidden rounded-lg border border-border bg-card">
+            <div className="h-[calc(100vh-420px)] min-h-[400px] overflow-y-auto p-4">
+              <div className="space-y-3">
+                {currentConversation?.messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={cn(
+                      "flex gap-2",
+                      message.sender === 'user' ? "justify-start" : "justify-end"
+                    )}
+                  >
+                    {message.sender === 'user' && (
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                        <User className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    )}
+                    
+                    <div
+                      className={cn(
+                        "max-w-[80%] rounded-lg px-3 py-2 text-sm",
+                        message.sender === 'user'
+                          ? "bg-muted text-foreground"
+                          : "bg-primary text-primary-foreground"
+                      )}
+                    >
+                      <p className="whitespace-pre-wrap break-words">
+                        {message.content?.slice(0, 500)}
+                        {message.content && message.content.length > 500 && '...'}
+                      </p>
+                      <p className={cn(
+                        "text-xs mt-1 opacity-70",
+                        message.sender === 'user' ? "text-muted-foreground" : "text-primary-foreground/70"
+                      )}>
+                        {message.created_at && new Date(message.created_at).toLocaleTimeString('pt-BR', {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                    </div>
+
+                    {message.sender !== 'user' && (
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Cloud className="h-4 w-4 text-primary" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Insight - Fixed at bottom */}
+          <div className="mt-4 p-3 rounded-lg bg-muted/50 border border-border flex-shrink-0">
+            <p className="text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground">💡 Insight:</span> {' '}
+              {currentConversation?.total_messages || 0} mensagens totais.
+              {currentConversation?.funnel_stage && (
+                <> Etapa: <strong>{currentConversation.funnel_stage}</strong>.</>
+              )}
+              {currentConversation?.workflow && (
+                <> Fluxo: <strong>{workflowLabels[currentConversation.workflow] || currentConversation.workflow}</strong>.</>
+              )}
+              {currentConversation?.city && (
+                <> Local: <strong>{currentConversation.city}</strong>.</>
+              )}
+            </p>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -23,7 +23,25 @@ interface UserConversation {
   first_contact: string | null;
   total_messages: number;
   workflow: string | null;
+  funnel_stage: string | null;
   messages: ChatMessage[];
+}
+
+// Determine funnel stage based on user data
+function determineFunnelStage(
+  userId: string,
+  profile: { onboarding_completed?: boolean } | null,
+  hasPreferences: boolean,
+  hasMatchMessages: boolean,
+  hasFavorites: boolean,
+  hasSpecificFlow: boolean
+): string {
+  if (hasSpecificFlow) return 'Fluxo Específico';
+  if (hasFavorites) return 'Salvaram Favoritos';
+  if (hasMatchMessages) return 'Match Iniciado';
+  if (hasPreferences) return 'Preferências Definidas';
+  if (profile?.onboarding_completed) return 'Onboarding Completo';
+  return 'Cadastrados';
 }
 
 Deno.serve(async (req) => {
@@ -38,10 +56,10 @@ Deno.serve(async (req) => {
     )
 
     // Parse request body for optional filters
-    let limit = 10 // Number of conversations to fetch
+    let limit = 10
     try {
       const body = await req.json()
-      if (body.limit) limit = Math.min(body.limit, 50) // Max 50 conversations
+      if (body.limit) limit = Math.min(body.limit, 50)
     } catch {
       // Use defaults
     }
@@ -81,10 +99,10 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Fetch user profiles for these users with extended data
+    // Fetch user profiles with onboarding status
     const { data: profiles } = await supabase
       .from('user_profiles')
-      .select('id, full_name, city, age, education, active_workflow, created_at')
+      .select('id, full_name, city, age, education, active_workflow, created_at, onboarding_completed')
       .in('id', uniqueUserIds)
 
     const profileMap = new Map<string, {
@@ -94,6 +112,7 @@ Deno.serve(async (req) => {
       education: string | null;
       active_workflow: string | null;
       created_at: string | null;
+      onboarding_completed: boolean;
     }>()
     
     for (const profile of profiles || []) {
@@ -104,19 +123,51 @@ Deno.serve(async (req) => {
         education: profile.education,
         active_workflow: profile.active_workflow,
         created_at: profile.created_at,
+        onboarding_completed: profile.onboarding_completed || false,
       })
     }
 
-    // Get total message counts per user
-    const { data: messageCounts } = await supabase
-      .from('chat_messages')
+    // Get user preferences (for funnel stage)
+    const { data: preferences } = await supabase
+      .from('user_preferences')
+      .select('user_id, enem_score')
+      .in('user_id', uniqueUserIds)
+
+    const preferencesMap = new Map<string, boolean>()
+    for (const pref of preferences || []) {
+      if (pref.user_id && pref.enem_score) {
+        preferencesMap.set(pref.user_id, true)
+      }
+    }
+
+    // Get user favorites
+    const { data: favorites } = await supabase
+      .from('user_favorites')
       .select('user_id')
       .in('user_id', uniqueUserIds)
 
+    const favoritesSet = new Set<string>()
+    for (const fav of favorites || []) {
+      if (fav.user_id) favoritesSet.add(fav.user_id)
+    }
+
+    // Get total message counts and workflow info per user
+    const { data: allMessages } = await supabase
+      .from('chat_messages')
+      .select('user_id, workflow')
+      .in('user_id', uniqueUserIds)
+
     const messageCountMap = new Map<string, number>()
-    for (const row of messageCounts || []) {
+    const matchUsersSet = new Set<string>()
+    const specificFlowSet = new Set<string>()
+    
+    for (const row of allMessages || []) {
       if (row.user_id) {
         messageCountMap.set(row.user_id, (messageCountMap.get(row.user_id) || 0) + 1)
+        if (row.workflow === 'match_workflow') matchUsersSet.add(row.user_id)
+        if (['sisu_workflow', 'prouni_workflow', 'fies_workflow'].includes(row.workflow || '')) {
+          specificFlowSet.add(row.user_id)
+        }
       }
     }
 
@@ -156,6 +207,16 @@ Deno.serve(async (req) => {
         const profile = profileMap.get(userId)
         const firstMessage = messages[0]
 
+        // Determine funnel stage
+        const funnelStage = determineFunnelStage(
+          userId,
+          profile ? { onboarding_completed: profile.onboarding_completed } : null,
+          preferencesMap.has(userId),
+          matchUsersSet.has(userId),
+          favoritesSet.has(userId),
+          specificFlowSet.has(userId)
+        )
+
         conversations.push({
           user_id: userId,
           user_name: profile?.full_name || 'Usuário Anônimo',
@@ -166,6 +227,7 @@ Deno.serve(async (req) => {
           first_contact: firstMessage?.created_at || profile?.created_at || null,
           total_messages: messageCountMap.get(userId) || messages.length,
           workflow: dominantWorkflow,
+          funnel_stage: funnelStage,
           messages: messages.map(m => ({
             id: m.id,
             content: m.content || '',
