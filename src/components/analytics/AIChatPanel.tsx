@@ -1,10 +1,12 @@
-import { useState, useRef, useEffect } from "react";
-import { Send, Loader2, Bot, User, Sparkles } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Send, Loader2, Bot, User, Sparkles, Coins, AlertCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface Message {
   role: "user" | "assistant";
@@ -20,13 +22,22 @@ const suggestedQuestions = [
 ];
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
+const MAX_MESSAGES_PER_SESSION = 20;
+const CONTEXT_CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_HISTORY_MESSAGES = 10; // Only send last 10 messages to AI
 
 export function AIChatPanel() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [sessionMessageCount, setSessionMessageCount] = useState(0);
+  const [cachedContext, setCachedContext] = useState<string | null>(null);
+  const [contextCachedAt, setContextCachedAt] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  const messagesRemaining = MAX_MESSAGES_PER_SESSION - sessionMessageCount;
+  const isSessionLimitReached = sessionMessageCount >= MAX_MESSAGES_PER_SESSION;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -34,17 +45,88 @@ export function AIChatPanel() {
     }
   }, [messages]);
 
+  // Fetch context and cache it
+  const fetchAndCacheContext = useCallback(async () => {
+    // Check if cache is still valid
+    if (cachedContext && contextCachedAt && Date.now() - contextCachedAt < CONTEXT_CACHE_DURATION_MS) {
+      console.log("Using cached context");
+      return cachedContext;
+    }
+
+    console.log("Fetching fresh context...");
+    try {
+      // Fetch funnel data
+      const { data: funnelData } = await supabase.functions.invoke('analytics-funnel', {
+        body: { includeDetails: false }
+      });
+
+      // Fetch basic stats
+      const { count: totalUsers } = await supabase
+        .from("user_profiles")
+        .select("*", { count: "exact", head: true });
+
+      const { count: totalMessages } = await supabase
+        .from("chat_messages")
+        .select("*", { count: "exact", head: true });
+
+      const { count: totalFavorites } = await supabase
+        .from("user_favorites")
+        .select("*", { count: "exact", head: true });
+
+      // Get recent user messages
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const { data: recentUserMessages } = await supabase
+        .from("chat_messages")
+        .select("content, workflow")
+        .eq("sender", "user")
+        .gte("created_at", sevenDaysAgo.toISOString())
+        .limit(30);
+
+      const contextData = `
+## Contexto Atual do Produto
+
+### Métricas Gerais
+- Total de usuários cadastrados: ${totalUsers || 0}
+- Total de mensagens: ${totalMessages || 0}
+- Total de favoritos salvos: ${totalFavorites || 0}
+
+### Funil de Conversão
+${funnelData?.funnel?.map((stage: any) => `- ${stage.name}: ${stage.count} usuários (${stage.description})`).join("\n") || "Dados não disponíveis"}
+
+### Amostra de Mensagens Recentes de Usuários (últimos 7 dias)
+${recentUserMessages?.slice(0, 15).map((m: any) => `- [${m.workflow || "geral"}]: "${m.content?.substring(0, 80)}..."`).join("\n") || "Nenhuma mensagem recente"}
+`;
+
+      setCachedContext(contextData);
+      setContextCachedAt(Date.now());
+      return contextData;
+    } catch (error) {
+      console.error("Error fetching context:", error);
+      return null;
+    }
+  }, [cachedContext, contextCachedAt]);
+
   const sendMessage = async (messageText: string) => {
-    if (!messageText.trim() || isLoading) return;
+    if (!messageText.trim() || isLoading || isSessionLimitReached) return;
 
     const userMsg: Message = { role: "user", content: messageText };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsLoading(true);
+    setSessionMessageCount((prev) => prev + 1);
 
     let assistantContent = "";
 
     try {
+      // Get cached context or fetch new one
+      const context = await fetchAndCacheContext();
+
+      // Only send last N messages to AI (saves tokens)
+      const allMessages = [...messages, userMsg];
+      const messagesToSend = allMessages.slice(-MAX_HISTORY_MESSAGES);
+
       const response = await fetch(CHAT_URL, {
         method: "POST",
         headers: {
@@ -52,10 +134,11 @@ export function AIChatPanel() {
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify({
-          messages: [...messages, userMsg].map((m) => ({
+          messages: messagesToSend.map((m) => ({
             role: m.role,
             content: m.content,
           })),
+          cachedContext: context, // Send cached context to skip backend queries
         }),
       });
 
@@ -193,6 +276,16 @@ export function AIChatPanel() {
 
   return (
     <div className="flex flex-col h-[600px]">
+      {/* Session limit warning */}
+      {isSessionLimitReached && (
+        <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 text-destructive" />
+          <p className="text-sm text-destructive">
+            Limite de {MAX_MESSAGES_PER_SESSION} mensagens por sessão atingido. Recarregue a página para iniciar uma nova conversa.
+          </p>
+        </div>
+      )}
+
       <ScrollArea className="flex-1 pr-4" ref={scrollRef}>
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full py-12">
@@ -214,6 +307,7 @@ export function AIChatPanel() {
                   size="sm"
                   className="text-xs"
                   onClick={() => sendMessage(question)}
+                  disabled={isSessionLimitReached}
                 >
                   {question}
                 </Button>
@@ -264,28 +358,51 @@ export function AIChatPanel() {
         )}
       </ScrollArea>
 
-      <form onSubmit={handleSubmit} className="mt-4 flex gap-2">
-        <Textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Faça uma pergunta sobre seu produto..."
-          className="min-h-[60px] resize-none"
-          disabled={isLoading}
-        />
-        <Button
-          type="submit"
-          size="icon"
-          className="h-[60px] w-[60px] shrink-0"
-          disabled={!input.trim() || isLoading}
-        >
-          {isLoading ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            <Send className="h-5 w-5" />
-          )}
-        </Button>
-      </form>
+      <div className="mt-4 space-y-2">
+        {/* Message counter and cost indicator */}
+        <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+          <div className="flex items-center gap-1">
+            <span>{messagesRemaining} mensagens restantes nesta sessão</span>
+          </div>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1 cursor-help">
+                  <Coins className="h-3 w-3" />
+                  <span>Consome créditos AI</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Cada mensagem enviada consome créditos de AI.</p>
+                <p>O contexto é cacheado por 5 minutos para economia.</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex gap-2">
+          <Textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={isSessionLimitReached ? "Limite de mensagens atingido" : "Faça uma pergunta sobre seu produto..."}
+            className="min-h-[60px] resize-none"
+            disabled={isLoading || isSessionLimitReached}
+          />
+          <Button
+            type="submit"
+            size="icon"
+            className="h-[60px] w-[60px] shrink-0"
+            disabled={!input.trim() || isLoading || isSessionLimitReached}
+          >
+            {isLoading ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Send className="h-5 w-5" />
+            )}
+          </Button>
+        </form>
+      </div>
     </div>
   );
 }

@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
-import { MessageSquare, ChevronLeft, ChevronRight, User, Cloud, Loader2 } from "lucide-react";
+import { MessageSquare, ChevronLeft, ChevronRight, User, Cloud, Loader2, MapPin, GraduationCap, Calendar, Hash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 interface ChatMessage {
   id: string;
@@ -17,6 +19,12 @@ interface ChatMessage {
 interface UserConversation {
   user_id: string;
   user_name: string;
+  city: string | null;
+  age: number | null;
+  education: string | null;
+  active_workflow: string | null;
+  first_contact: string | null;
+  total_messages: number;
   workflow: string | null;
   messages: ChatMessage[];
 }
@@ -29,7 +37,18 @@ const workflowLabels: Record<string, string> = {
   'onboarding_workflow': 'Onboarding',
 };
 
-export function ChatExamplesPanel() {
+const educationLabels: Record<string, string> = {
+  'ensino_medio': 'Ensino Médio',
+  'ensino_medio_completo': 'Ensino Médio Completo',
+  'cursando_superior': 'Cursando Superior',
+  'superior_completo': 'Superior Completo',
+};
+
+interface ChatExamplesPanelProps {
+  fullPage?: boolean;
+}
+
+export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) {
   const [conversations, setConversations] = useState<UserConversation[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -42,7 +61,7 @@ export function ChatExamplesPanel() {
       console.log('Fetching conversations...');
       
       const { data, error: fetchError } = await supabase.functions.invoke('analytics-chats', {
-        body: { limit: 10 }
+        body: { limit: fullPage ? 20 : 10 }
       });
 
       if (fetchError) {
@@ -79,9 +98,12 @@ export function ChatExamplesPanel() {
     setCurrentIndex((prev) => (prev < conversations.length - 1 ? prev + 1 : 0));
   };
 
+  const containerClass = fullPage ? "" : "chart-container col-span-2";
+  const scrollHeight = fullPage ? "h-[500px]" : "h-[350px]";
+
   if (loading) {
     return (
-      <div className="chart-container col-span-2">
+      <div className={containerClass}>
         <div className="mb-4 flex items-center gap-2">
           <MessageSquare className="h-5 w-5 text-primary" />
           <h3 className="text-lg font-semibold font-display">Conversas Recentes</h3>
@@ -95,7 +117,7 @@ export function ChatExamplesPanel() {
 
   if (error) {
     return (
-      <div className="chart-container col-span-2">
+      <div className={containerClass}>
         <div className="mb-4 flex items-center gap-2">
           <MessageSquare className="h-5 w-5 text-primary" />
           <h3 className="text-lg font-semibold font-display">Conversas Recentes</h3>
@@ -113,7 +135,7 @@ export function ChatExamplesPanel() {
 
   if (conversations.length === 0) {
     return (
-      <div className="chart-container col-span-2">
+      <div className={containerClass}>
         <div className="mb-4 flex items-center gap-2">
           <MessageSquare className="h-5 w-5 text-primary" />
           <h3 className="text-lg font-semibold font-display">Conversas Recentes</h3>
@@ -127,7 +149,7 @@ export function ChatExamplesPanel() {
   }
 
   return (
-    <div className="chart-container col-span-2">
+    <div className={containerClass}>
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <MessageSquare className="h-5 w-5 text-primary" />
@@ -138,41 +160,92 @@ export function ChatExamplesPanel() {
         </span>
       </div>
 
-      {/* Navigation and User Info */}
-      <div className="flex items-center justify-between mb-4 p-3 rounded-lg bg-muted/50">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={goToPrevious}
-          disabled={conversations.length <= 1}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
+      {/* User Profile Card */}
+      <div className="mb-4 p-4 rounded-lg bg-muted/50 border border-border">
+        <div className="flex items-center justify-between mb-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={goToPrevious}
+            disabled={conversations.length <= 1}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <User className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">{currentConversation?.user_name}</span>
+          <div className="flex-1 text-center">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <User className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h4 className="font-semibold">{currentConversation?.user_name}</h4>
+                {currentConversation?.age && (
+                  <span className="text-xs text-muted-foreground">{currentConversation.age} anos</span>
+                )}
+              </div>
+            </div>
           </div>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={goToNext}
+            disabled={conversations.length <= 1}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* User Details Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          {currentConversation?.city && (
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <MapPin className="h-3.5 w-3.5" />
+              <span className="truncate">{currentConversation.city}</span>
+            </div>
+          )}
+          {currentConversation?.education && (
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <GraduationCap className="h-3.5 w-3.5" />
+              <span className="truncate">
+                {educationLabels[currentConversation.education] || currentConversation.education}
+              </span>
+            </div>
+          )}
+          {currentConversation?.first_contact && (
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <Calendar className="h-3.5 w-3.5" />
+              <span className="truncate">
+                {formatDistanceToNow(new Date(currentConversation.first_contact), { 
+                  addSuffix: true, 
+                  locale: ptBR 
+                })}
+              </span>
+            </div>
+          )}
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <Hash className="h-3.5 w-3.5" />
+            <span>{currentConversation?.total_messages || 0} msgs</span>
+          </div>
+        </div>
+
+        {/* Badges */}
+        <div className="flex flex-wrap gap-2 mt-3">
           {currentConversation?.workflow && (
             <Badge variant="secondary">
               {workflowLabels[currentConversation.workflow] || currentConversation.workflow}
             </Badge>
           )}
+          {currentConversation?.active_workflow && currentConversation.active_workflow !== currentConversation.workflow && (
+            <Badge variant="outline">
+              Atual: {workflowLabels[currentConversation.active_workflow] || currentConversation.active_workflow}
+            </Badge>
+          )}
         </div>
-
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={goToNext}
-          disabled={conversations.length <= 1}
-        >
-          <ChevronRight className="h-4 w-4" />
-        </Button>
       </div>
 
       {/* Chat Messages */}
-      <ScrollArea className="h-[350px] pr-4">
+      <ScrollArea className={cn(scrollHeight, "pr-4")}>
         <div className="space-y-3">
           {currentConversation?.messages.map((message) => (
             <div
@@ -225,9 +298,12 @@ export function ChatExamplesPanel() {
       <div className="mt-4 p-3 rounded-lg bg-muted/50 border border-border">
         <p className="text-sm text-muted-foreground">
           <span className="font-semibold text-foreground">💡 Insight:</span> {' '}
-          {currentConversation?.messages.length || 0} mensagens trocadas nesta conversa.
+          {currentConversation?.total_messages || 0} mensagens totais com este usuário.
           {currentConversation?.workflow && (
-            <> Fluxo principal: <strong>{workflowLabels[currentConversation.workflow] || currentConversation.workflow}</strong>.</>
+            <> Fluxo dominante: <strong>{workflowLabels[currentConversation.workflow] || currentConversation.workflow}</strong>.</>
+          )}
+          {currentConversation?.city && (
+            <> Localização: <strong>{currentConversation.city}</strong>.</>
           )}
         </p>
       </div>

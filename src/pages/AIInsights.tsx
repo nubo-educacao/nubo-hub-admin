@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Cloud, ArrowLeft, Sparkles, MessageSquare } from "lucide-react";
+import { Cloud, ArrowLeft, Sparkles, MessageSquare, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AIInsightsPanel } from "@/components/analytics/AIInsightsPanel";
 import { AIChatPanel } from "@/components/analytics/AIChatPanel";
+import { ChatExamplesPanel } from "@/components/analytics/ChatExamplesPanel";
 
 export default function AIInsights() {
   const [activeTab, setActiveTab] = useState("insights");
@@ -40,7 +41,7 @@ export default function AIInsights() {
       {/* Main Content */}
       <main className="container py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsList className="grid w-full max-w-lg grid-cols-3">
             <TabsTrigger value="insights" className="flex items-center gap-2">
               <Sparkles className="h-4 w-4" />
               Insights
@@ -48,6 +49,10 @@ export default function AIInsights() {
             <TabsTrigger value="chat" className="flex items-center gap-2">
               <MessageSquare className="h-4 w-4" />
               Chat
+            </TabsTrigger>
+            <TabsTrigger value="conversations" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Conversas
             </TabsTrigger>
           </TabsList>
 
@@ -57,6 +62,10 @@ export default function AIInsights() {
 
           <TabsContent value="chat">
             <AIChatPanel />
+          </TabsContent>
+
+          <TabsContent value="conversations">
+            <ChatExamplesPanel fullPage />
           </TabsContent>
         </Tabs>
       </main>

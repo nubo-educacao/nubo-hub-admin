@@ -16,6 +16,12 @@ interface ChatMessage {
 interface UserConversation {
   user_id: string;
   user_name: string;
+  city: string | null;
+  age: number | null;
+  education: string | null;
+  active_workflow: string | null;
+  first_contact: string | null;
+  total_messages: number;
   workflow: string | null;
   messages: ChatMessage[];
 }
@@ -75,15 +81,43 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Fetch user profiles for these users
+    // Fetch user profiles for these users with extended data
     const { data: profiles } = await supabase
       .from('user_profiles')
-      .select('id, full_name')
+      .select('id, full_name, city, age, education, active_workflow, created_at')
       .in('id', uniqueUserIds)
 
-    const profileMap = new Map<string, string>()
+    const profileMap = new Map<string, {
+      full_name: string;
+      city: string | null;
+      age: number | null;
+      education: string | null;
+      active_workflow: string | null;
+      created_at: string | null;
+    }>()
+    
     for (const profile of profiles || []) {
-      profileMap.set(profile.id, profile.full_name || 'Usuário Anônimo')
+      profileMap.set(profile.id, {
+        full_name: profile.full_name || 'Usuário Anônimo',
+        city: profile.city,
+        age: profile.age,
+        education: profile.education,
+        active_workflow: profile.active_workflow,
+        created_at: profile.created_at,
+      })
+    }
+
+    // Get total message counts per user
+    const { data: messageCounts } = await supabase
+      .from('chat_messages')
+      .select('user_id')
+      .in('user_id', uniqueUserIds)
+
+    const messageCountMap = new Map<string, number>()
+    for (const row of messageCounts || []) {
+      if (row.user_id) {
+        messageCountMap.set(row.user_id, (messageCountMap.get(row.user_id) || 0) + 1)
+      }
     }
 
     // Fetch messages for each user (last 20 messages per user)
@@ -119,9 +153,18 @@ Deno.serve(async (req) => {
           }
         }
 
+        const profile = profileMap.get(userId)
+        const firstMessage = messages[0]
+
         conversations.push({
           user_id: userId,
-          user_name: profileMap.get(userId) || 'Usuário Anônimo',
+          user_name: profile?.full_name || 'Usuário Anônimo',
+          city: profile?.city || null,
+          age: profile?.age || null,
+          education: profile?.education || null,
+          active_workflow: profile?.active_workflow || null,
+          first_contact: firstMessage?.created_at || profile?.created_at || null,
+          total_messages: messageCountMap.get(userId) || messages.length,
           workflow: dominantWorkflow,
           messages: messages.map(m => ({
             id: m.id,
