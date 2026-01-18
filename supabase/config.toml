@@ -43,3 +43,6 @@ verify_jwt = false
 
 [functions.ai-chat]
 verify_jwt = false
+
+[functions.analytics-opportunities]
+verify_jwt = false

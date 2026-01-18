@@ -8,6 +8,7 @@ import {
   fetchErrorLogs,
   fetchTopUsers,
   fetchLocationData,
+  fetchOpportunityTypes,
   type DateRange,
   type ErrorLog,
 } from "@/lib/analytics-queries";
@@ -75,5 +76,13 @@ export function useLocationData() {
     queryKey: ["location-data"],
     queryFn: fetchLocationData,
     staleTime: 1000 * 60 * 30,
+  });
+}
+
+export function useOpportunityTypes() {
+  return useQuery({
+    queryKey: ["opportunity-types"],
+    queryFn: fetchOpportunityTypes,
+    staleTime: 1000 * 60 * 15,
   });
 }

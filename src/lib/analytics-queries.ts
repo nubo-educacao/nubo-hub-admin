@@ -193,3 +193,39 @@ export async function fetchLocationData(): Promise<LocationData[]> {
 
   return response.data as LocationData[];
 }
+
+// Opportunity Types interfaces
+export interface ProgramPreference {
+  name: string;
+  count: number;
+  percentage: number;
+}
+
+export interface ModalityBreakdown {
+  name: string;
+  count: number;
+}
+
+export interface OpportunityTypesData {
+  programPreferences: ProgramPreference[];
+  vagasOciosas: {
+    total: number;
+    byModality: ModalityBreakdown[];
+  };
+  totalOpportunities: {
+    sisu: number;
+    prouni: number;
+  };
+}
+
+// Fetch opportunity types data
+export async function fetchOpportunityTypes(): Promise<OpportunityTypesData> {
+  const { data, error } = await supabase.functions.invoke('analytics-opportunities');
+
+  if (error) {
+    console.error('Error fetching opportunity types:', error);
+    throw error;
+  }
+
+  return data as OpportunityTypesData;
+}
