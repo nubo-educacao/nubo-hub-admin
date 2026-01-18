@@ -26,7 +26,7 @@ export function DashboardHeader() {
 
           <div className="flex items-center gap-2">
             {/* Main Action Buttons - Highlighted */}
-            <Link to="/ai-insights?tab=conversations">
+            <Link to="/conversas">
               <Button
                 variant="default"
                 size="sm"
@@ -38,9 +38,9 @@ export function DashboardHeader() {
             </Link>
             <Link to="/ai-insights">
               <Button
-                variant={location.pathname === "/ai-insights" ? "default" : "outline"}
+                variant="default"
                 size="sm"
-                className="gap-2"
+                className="gap-2 bg-gradient-to-r from-chart-1 to-chart-2 hover:opacity-90"
               >
                 <Sparkles className="h-4 w-4" />
                 Insights AI
