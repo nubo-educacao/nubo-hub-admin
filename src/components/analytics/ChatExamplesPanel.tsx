@@ -35,6 +35,7 @@ interface UserConversation {
   education: string | null;
   active_workflow: string | null;
   first_contact: string | null;
+  last_activity: string | null;
   total_messages: number;
   workflow: string | null;
   funnel_stage: string | null;
@@ -87,6 +88,23 @@ const datePresets = [
   { value: 'last30days', label: 'Últimos 30 dias', getRange: () => ({ from: startOfDay(subDays(new Date(), 30)), to: endOfDay(new Date()) }) },
   { value: 'custom', label: 'Personalizado', getRange: () => null },
 ];
+
+// Format relative time for last activity
+const formatRelativeTime = (dateString: string | null) => {
+  if (!dateString) return 'N/A';
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  
+  if (diffMins < 1) return 'agora';
+  if (diffMins < 60) return `há ${diffMins} min`;
+  if (diffHours < 24) return `há ${diffHours}h`;
+  if (diffDays < 7) return `há ${diffDays} dias`;
+  return format(date, "dd/MM", { locale: ptBR });
+};
 
 export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) {
   const [conversations, setConversations] = useState<UserConversation[]>([]);
@@ -416,9 +434,16 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
                 </div>
                 <div className="min-w-0 flex-1">
                   <h4 className="font-semibold truncate">{currentConversation?.user_name}</h4>
-                  {currentConversation?.age && (
-                    <span className="text-xs text-muted-foreground">{currentConversation.age} anos</span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {currentConversation?.age && (
+                      <span className="text-xs text-muted-foreground">{currentConversation.age} anos</span>
+                    )}
+                    {currentConversation?.last_activity && (
+                      <span className="text-xs text-primary font-medium">
+                        • {formatRelativeTime(currentConversation.last_activity)}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
