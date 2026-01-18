@@ -14,8 +14,8 @@ export function LocationChart() {
     return (
       <div className="chart-container">
         <div className="mb-6 flex flex-col gap-1">
-          <h3 className="text-lg font-semibold font-display">Ranking por Localização</h3>
-          <p className="text-sm text-muted-foreground">Distribuição geográfica</p>
+          <h3 className="text-lg font-semibold font-display">Ranking de Localização</h3>
+          <p className="text-sm text-muted-foreground">Onde os usuários moram</p>
         </div>
         <div className="space-y-3">
           {[...Array(5)].map((_, i) => (
@@ -30,8 +30,8 @@ export function LocationChart() {
     return (
       <div className="chart-container">
         <div className="mb-6 flex flex-col gap-1">
-          <h3 className="text-lg font-semibold font-display">Ranking por Localização</h3>
-          <p className="text-sm text-muted-foreground">Distribuição geográfica</p>
+          <h3 className="text-lg font-semibold font-display">Ranking de Localização</h3>
+          <p className="text-sm text-muted-foreground">Onde os usuários moram</p>
         </div>
         <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <MapPin className="h-12 w-12 mb-4 opacity-50" />
@@ -48,8 +48,8 @@ export function LocationChart() {
     return (
       <div className="chart-container">
         <div className="mb-6 flex flex-col gap-1">
-          <h3 className="text-lg font-semibold font-display">Ranking por Localização</h3>
-          <p className="text-sm text-muted-foreground">Distribuição geográfica</p>
+          <h3 className="text-lg font-semibold font-display">Ranking de Localização</h3>
+          <p className="text-sm text-muted-foreground">Onde os usuários moram</p>
         </div>
         <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <MapPin className="h-12 w-12 mb-4 opacity-50" />
@@ -62,8 +62,8 @@ export function LocationChart() {
   return (
     <div className="chart-container">
       <div className="mb-6 flex flex-col gap-1">
-        <h3 className="text-lg font-semibold font-display">Ranking por Localização</h3>
-        <p className="text-sm text-muted-foreground">{total} usuários em {locations.length} regiões</p>
+        <h3 className="text-lg font-semibold font-display">Ranking de Localização</h3>
+        <p className="text-sm text-muted-foreground">Onde os usuários moram</p>
       </div>
 
       <div className="space-y-3">
