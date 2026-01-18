@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { MessageSquare, ChevronLeft, ChevronRight, User, Cloud, Loader2, MapPin, GraduationCap, Calendar, Hash, Filter, GitBranch, Target, Search, ChevronUp, CalendarDays } from "lucide-react";
+import { MessageSquare, ChevronLeft, ChevronRight, User, Cloud, Loader2, MapPin, GraduationCap, Calendar, Hash, Filter, GitBranch, Target, Search, ChevronUp, CalendarDays, Phone, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,7 @@ interface ChatMessage {
 interface UserConversation {
   user_id: string;
   user_name: string;
+  phone: string | null;
   city: string | null;
   location_preference: string | null;
   age: number | null;
@@ -95,6 +96,7 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
   const [funnelFilter, setFunnelFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingMore, setLoadingMore] = useState(false);
+  const [copiedPhone, setCopiedPhone] = useState<string | null>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   
   // Date filter states
@@ -432,6 +434,30 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
                   <GitBranch className="h-3 w-3 mr-1" />
                   {currentConversation.funnel_stage}
                 </Badge>
+              )}
+
+              {/* Phone Number with Copy Button */}
+              {currentConversation?.phone && (
+                <div className="flex items-center gap-2 p-2 rounded-md bg-success/10 border border-success/20 mb-3">
+                  <Phone className="h-4 w-4 text-success flex-shrink-0" />
+                  <span className="text-sm font-mono flex-1 truncate">{currentConversation.phone}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 flex-shrink-0"
+                    onClick={() => {
+                      navigator.clipboard.writeText(currentConversation.phone!);
+                      setCopiedPhone(currentConversation.phone);
+                      setTimeout(() => setCopiedPhone(null), 2000);
+                    }}
+                  >
+                    {copiedPhone === currentConversation.phone ? (
+                      <Check className="h-3.5 w-3.5 text-success" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                    )}
+                  </Button>
+                </div>
               )}
 
               {/* User Details */}

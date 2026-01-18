@@ -16,6 +16,7 @@ interface ChatMessage {
 interface UserConversation {
   user_id: string;
   user_name: string;
+  phone: string | null;
   city: string | null;
   location_preference: string | null;
   age: number | null;
@@ -255,6 +256,29 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Fetch phone numbers from auth.users using admin API
+    const phoneMap = new Map<string, string | null>()
+    try {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      
+      for (const userId of uniqueUserIds) {
+        const response = await fetch(`${supabaseUrl}/auth/v1/admin/users/${userId}`, {
+          headers: {
+            'Authorization': `Bearer ${serviceRoleKey}`,
+            'apikey': serviceRoleKey,
+          },
+        })
+        
+        if (response.ok) {
+          const userData = await response.json()
+          phoneMap.set(userId, userData.phone || null)
+        }
+      }
+    } catch (phoneError) {
+      console.error('Error fetching phone numbers:', phoneError)
+    }
+
     // Fetch messages for each user (last 20 messages per user, most recent first then reverse)
     const conversations: UserConversation[] = []
 
@@ -307,6 +331,7 @@ Deno.serve(async (req) => {
         conversations.push({
           user_id: userId,
           user_name: profile?.full_name || 'Usuário Anônimo',
+          phone: phoneMap.get(userId) || null,
           city: profile?.city || null,
           location_preference: locationPreferenceMap.get(userId) || null,
           age: profile?.age || null,
