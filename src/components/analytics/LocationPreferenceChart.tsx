@@ -22,8 +22,8 @@ async function fetchLocationPreferences(): Promise<LocationPreferenceData[]> {
   const { data, error } = await supabase
     .from('user_preferences')
     .select('location_preference')
-    .not('location_preference', 'is', null)
-    .neq('location_preference', '');
+    .not('location_preference', 'is', null);
+  // Filtro de strings vazias é feito no JavaScript abaixo
 
   if (error) throw error;
 
