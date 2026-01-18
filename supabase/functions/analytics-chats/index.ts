@@ -17,6 +17,7 @@ interface UserConversation {
   user_id: string;
   user_name: string;
   city: string | null;
+  location_preference: string | null;
   age: number | null;
   education: string | null;
   active_workflow: string | null;
@@ -127,16 +128,20 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Get user preferences (for funnel stage)
+    // Get user preferences (for funnel stage and location preference)
     const { data: preferences } = await supabase
       .from('user_preferences')
-      .select('user_id, enem_score')
+      .select('user_id, enem_score, location_preference')
       .in('user_id', uniqueUserIds)
 
     const preferencesMap = new Map<string, boolean>()
+    const locationPreferenceMap = new Map<string, string | null>()
     for (const pref of preferences || []) {
-      if (pref.user_id && pref.enem_score) {
-        preferencesMap.set(pref.user_id, true)
+      if (pref.user_id) {
+        if (pref.enem_score) {
+          preferencesMap.set(pref.user_id, true)
+        }
+        locationPreferenceMap.set(pref.user_id, pref.location_preference || null)
       }
     }
 
@@ -221,6 +226,7 @@ Deno.serve(async (req) => {
           user_id: userId,
           user_name: profile?.full_name || 'Usuário Anônimo',
           city: profile?.city || null,
+          location_preference: locationPreferenceMap.get(userId) || null,
           age: profile?.age || null,
           education: profile?.education || null,
           active_workflow: profile?.active_workflow || null,
