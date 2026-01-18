@@ -33,22 +33,100 @@ Responda SEMPRE em formato JSON válido com a seguinte estrutura:
   ]
 }`;
 
+// Simple hash function for data comparison
+function simpleHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return hash.toString(16);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    console.log("Collecting data for insights...");
+    // Parse request body
+    let forceRefresh = false;
+    try {
+      const body = await req.json();
+      forceRefresh = body.forceRefresh === true;
+    } catch {
+      // No body or invalid JSON, use defaults
+    }
+
+    console.log("AI Insights request - forceRefresh:", forceRefresh);
+
+    // Collect current data metrics for hash calculation
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    // Get message count
+    const { count: messageCount } = await supabase
+      .from("chat_messages")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", sevenDaysAgo.toISOString());
+
+    // Get user count
+    const { count: userCount } = await supabase
+      .from("user_profiles")
+      .select("*", { count: "exact", head: true });
+
+    // Get preferences count
+    const { count: preferencesCount } = await supabase
+      .from("user_preferences")
+      .select("*", { count: "exact", head: true });
+
+    // Calculate hash from current data state
+    const dataHashInput = `msgs:${messageCount || 0}-users:${userCount || 0}-prefs:${preferencesCount || 0}-date:${new Date().toISOString().split('T')[0]}`;
+    const currentDataHash = simpleHash(dataHashInput);
+
+    console.log("Current data hash:", currentDataHash, "from:", dataHashInput);
+
+    // Check for cached insights (within last 24 hours)
+    if (!forceRefresh) {
+      const twentyFourHoursAgo = new Date();
+      twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+
+      const { data: cachedInsights, error: cacheError } = await supabase
+        .from("ai_insights")
+        .select("*")
+        .gte("created_at", twentyFourHoursAgo.toISOString())
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (!cacheError && cachedInsights) {
+        const dataChanged = cachedInsights.data_hash !== currentDataHash;
+        console.log("Found cached insights, dataChanged:", dataChanged);
+
+        return new Response(JSON.stringify({
+          insights: cachedInsights.insights,
+          generatedAt: cachedInsights.created_at,
+          dataContext: cachedInsights.data_context,
+          fromCache: true,
+          dataChanged,
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      console.log("No valid cache found, generating new insights...");
+    }
+
+    // Generate new insights
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      throw new Error("LOVABLE_API_KEY is not configured");
+    }
 
     // Collect funnel data
     const funnelResponse = await fetch(`${supabaseUrl}/functions/v1/analytics-funnel`, {
@@ -61,10 +139,7 @@ serve(async (req) => {
     });
     const funnelData = await funnelResponse.json();
 
-    // Collect recent conversations (last 7 days)
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
+    // Collect recent conversations
     const { data: recentMessages, error: messagesError } = await supabase
       .from("chat_messages")
       .select("content, sender, workflow, created_at")
@@ -85,7 +160,7 @@ serve(async (req) => {
       console.error("Error fetching preferences:", prefsError);
     }
 
-    // Calculate some metrics
+    // Calculate metrics
     const userMessages = recentMessages?.filter(m => m.sender === "user") || [];
     const workflowCounts: Record<string, number> = {};
     recentMessages?.forEach(m => {
@@ -101,23 +176,57 @@ serve(async (req) => {
       }
     });
 
-    // Build context for AI
+    // Extract keyword frequencies from user messages
+    const keywordCounts: Record<string, number> = {};
+    const commonKeywords = ["sisu", "prouni", "fies", "nota", "corte", "inscricao", "inscrição", "curso", "medicina", "direito", "engenharia", "como", "quando", "onde", "quanto"];
+    
+    userMessages.forEach((m: { content?: string }) => {
+      if (m.content) {
+        const words: string[] = m.content.toLowerCase().split(/\s+/);
+        words.forEach((word: string) => {
+          const cleanWord = word.replace(/[^a-záéíóúãõâêô]/g, '');
+          if (cleanWord.length > 3 && commonKeywords.some(kw => cleanWord.includes(kw))) {
+            keywordCounts[cleanWord] = (keywordCounts[cleanWord] || 0) + 1;
+          }
+        });
+      }
+    });
+
+    // Sort keywords by frequency
+    const topKeywords = Object.entries(keywordCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([word, count]) => `${word}: ${count} menções`);
+
+    // Build context for AI with comparative metrics
     const dataContext = `
-## Dados do Funil de Conversão
+## Dados do Funil de Conversão (últimos 7 dias)
 ${JSON.stringify(funnelData.funnel, null, 2)}
 
-## Estatísticas de Conversas (últimos 7 dias)
-- Total de mensagens: ${recentMessages?.length || 0}
+## Estatísticas de Conversas
+- Total de mensagens (7 dias): ${recentMessages?.length || 0}
 - Mensagens de usuários: ${userMessages.length}
-- Distribuição por workflow: ${JSON.stringify(workflowCounts)}
+- Total de usuários cadastrados: ${userCount || 0}
+- Usuários com preferências: ${preferencesCount || 0}
+
+## Distribuição por Workflow
+${Object.entries(workflowCounts)
+  .sort((a, b) => b[1] - a[1])
+  .map(([wf, count]) => `- ${wf}: ${count} mensagens (${Math.round((count / (recentMessages?.length || 1)) * 100)}%)`)
+  .join("\n")}
+
+## Palavras-chave Mais Frequentes
+${topKeywords.length > 0 ? topKeywords.join("\n") : "Sem dados suficientes"}
 
 ## Exemplos de Mensagens de Usuários (amostra)
-${userMessages.slice(0, 20).map(m => `- "${m.content?.substring(0, 100)}..."`).join("\n")}
+${userMessages.slice(0, 15).map(m => `- "${m.content?.substring(0, 80)}${(m.content?.length || 0) > 80 ? '...' : ''}"`).join("\n")}
 
 ## Preferências de Programa
 ${JSON.stringify(programCounts)}
 
-## Total de usuários com preferências: ${preferencesData?.length || 0}
+## Métricas-Chave
+- Taxa de conversão cadastro→preferências: ${userCount ? Math.round(((preferencesCount || 0) / userCount) * 100) : 0}%
+- Média de mensagens por usuário: ${userCount ? ((recentMessages?.length || 0) / userCount).toFixed(1) : 0}
 `;
 
     console.log("Sending data to AI for analysis...");
@@ -163,7 +272,6 @@ ${JSON.stringify(programCounts)}
     // Parse the JSON response
     let insights;
     try {
-      // Try to extract JSON from the response
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         insights = JSON.parse(jsonMatch[0]);
@@ -185,14 +293,36 @@ ${JSON.stringify(programCounts)}
       };
     }
 
+    // Store data context for cache
+    const storedDataContext = {
+      totalMessages: recentMessages?.length || 0,
+      userMessages: userMessages.length,
+      funnelStages: funnelData.funnel?.length || 0,
+      totalUsers: userCount || 0,
+      usersWithPreferences: preferencesCount || 0,
+    };
+
+    // Save to database for caching
+    const { error: insertError } = await supabase
+      .from("ai_insights")
+      .insert({
+        insights: insights.insights,
+        data_context: storedDataContext,
+        data_hash: currentDataHash,
+      });
+
+    if (insertError) {
+      console.error("Failed to cache insights:", insertError);
+    } else {
+      console.log("Insights cached successfully");
+    }
+
     return new Response(JSON.stringify({
-      ...insights,
+      insights: insights.insights,
       generatedAt: new Date().toISOString(),
-      dataContext: {
-        totalMessages: recentMessages?.length || 0,
-        userMessages: userMessages.length,
-        funnelStages: funnelData.funnel?.length || 0,
-      },
+      dataContext: storedDataContext,
+      fromCache: false,
+      dataChanged: false,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

@@ -131,6 +131,30 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_insights: {
+        Row: {
+          created_at: string
+          data_context: Json
+          data_hash: string
+          id: string
+          insights: Json
+        }
+        Insert: {
+          created_at?: string
+          data_context: Json
+          data_hash: string
+          id?: string
+          insights: Json
+        }
+        Update: {
+          created_at?: string
+          data_context?: Json
+          data_hash?: string
+          id?: string
+          insights?: Json
+        }
+        Relationships: []
+      }
       campus: {
         Row: {
           city: string | null
