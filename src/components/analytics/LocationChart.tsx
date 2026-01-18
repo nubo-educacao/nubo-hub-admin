@@ -41,8 +41,23 @@ export function LocationChart() {
     );
   }
 
-  const maxCount = locations[0]?.count || 1;
-  const total = locations.reduce((sum, loc) => sum + loc.count, 0);
+  const maxCount = locations[0]?.count ?? 1;
+  const total = locations.reduce((sum, loc) => sum + (loc.count ?? 0), 0);
+  
+  if (total === 0) {
+    return (
+      <div className="chart-container">
+        <div className="mb-6 flex flex-col gap-1">
+          <h3 className="text-lg font-semibold font-display">Ranking por Localização</h3>
+          <p className="text-sm text-muted-foreground">Distribuição geográfica</p>
+        </div>
+        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+          <MapPin className="h-12 w-12 mb-4 opacity-50" />
+          <p>Nenhum dado de localização disponível</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="chart-container">

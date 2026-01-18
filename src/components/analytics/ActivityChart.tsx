@@ -72,7 +72,7 @@ export function ActivityChart() {
             </defs>
             <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
             <XAxis
-              dataKey="name"
+              dataKey="dia"
               tick={{ fontSize: 12 }}
               tickLine={false}
               axisLine={false}

@@ -16,8 +16,18 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
+    // Read type from body (POST) or query string (GET)
+    let type = 'users'
     const url = new URL(req.url)
-    const type = url.searchParams.get('type') || 'users'
+    
+    try {
+      const body = await req.json()
+      type = body.type || url.searchParams.get('type') || 'users'
+    } catch {
+      type = url.searchParams.get('type') || 'users'
+    }
+    
+    console.log('Analytics rankings - type:', type)
 
     if (type === 'users') {
       // Get message counts per user

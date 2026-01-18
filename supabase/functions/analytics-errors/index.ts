@@ -17,9 +17,24 @@ Deno.serve(async (req) => {
     )
 
     const url = new URL(req.url)
-    const limit = parseInt(url.searchParams.get('limit') || '10')
-    const typeFilter = url.searchParams.get('type') // error, warning, info
-    const statusFilter = url.searchParams.get('status') // resolved, unresolved
+    
+    // Read filters from body (POST) or query string (GET)
+    let limit = 10
+    let typeFilter: string | null = null
+    let statusFilter: string | null = null
+    
+    try {
+      const body = await req.json()
+      limit = body.limit || parseInt(url.searchParams.get('limit') || '10')
+      typeFilter = body.type || url.searchParams.get('type')
+      statusFilter = body.status || url.searchParams.get('status')
+    } catch {
+      limit = parseInt(url.searchParams.get('limit') || '10')
+      typeFilter = url.searchParams.get('type')
+      statusFilter = url.searchParams.get('status')
+    }
+    
+    console.log('Analytics errors - filters:', { limit, typeFilter, statusFilter })
 
     let query = supabase
       .from('agent_errors')
