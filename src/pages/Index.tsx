@@ -35,6 +35,7 @@ const Index = () => {
                 change={stats?.activeUsersChange}
                 icon={Users}
                 variant="default"
+                tooltip="Número de usuários únicos que enviaram pelo menos uma mensagem nos últimos 7 dias."
               />
               <StatCard
                 title="Total de Mensagens"
@@ -42,6 +43,7 @@ const Index = () => {
                 change={stats?.messagesChange}
                 icon={MessageSquare}
                 variant="default"
+                tooltip="Soma de todas as mensagens trocadas no chat (tanto do usuário quanto do assistente) nos últimos 7 dias."
               />
               <StatCard
                 title="Favoritos Salvos"
@@ -49,6 +51,7 @@ const Index = () => {
                 change={stats?.favoritesChange}
                 icon={Heart}
                 variant="success"
+                tooltip="Total de cursos ou parceiros que os usuários salvaram como favoritos."
               />
             </>
           )}

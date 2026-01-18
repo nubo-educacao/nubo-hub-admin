@@ -1,5 +1,11 @@
-import { LucideIcon } from "lucide-react";
+import { LucideIcon, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface StatCardProps {
   title: string;
@@ -8,6 +14,7 @@ interface StatCardProps {
   changeLabel?: string;
   icon: LucideIcon;
   variant?: "default" | "success" | "warning" | "error";
+  tooltip?: string;
 }
 
 const variantStyles = {
@@ -31,6 +38,7 @@ export function StatCard({
   changeLabel,
   icon: Icon,
   variant = "default",
+  tooltip,
 }: StatCardProps) {
   const isPositive = change && change > 0;
   const isNegative = change && change < 0;
@@ -39,7 +47,21 @@ export function StatCard({
     <div className={cn("stat-card", variantStyles[variant])}>
       <div className="flex items-start justify-between">
         <div className="space-y-1">
-          <p className="text-sm font-medium text-muted-foreground">{title}</p>
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-medium text-muted-foreground">{title}</p>
+            {tooltip && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs">
+                    <p className="text-xs">{tooltip}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </div>
           <p className="text-3xl font-bold font-display tracking-tight">
             {value}
           </p>
