@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { MessageSquare, ChevronLeft, ChevronRight, User, Cloud, Loader2, MapPin, GraduationCap, Calendar, Hash, Filter, GitBranch, Target, Search } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { MessageSquare, ChevronLeft, ChevronRight, User, Cloud, Loader2, MapPin, GraduationCap, Calendar, Hash, Filter, GitBranch, Target, Search, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,7 @@ interface UserConversation {
   total_messages: number;
   workflow: string | null;
   funnel_stage: string | null;
+  has_more_messages: boolean;
   messages: ChatMessage[];
 }
 
@@ -83,6 +84,8 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
   const [error, setError] = useState<string | null>(null);
   const [funnelFilter, setFunnelFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [loadingMore, setLoadingMore] = useState(false);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const fetchConversations = async () => {
     try {
@@ -139,6 +142,59 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
 
   const goToNext = () => {
     setCurrentIndex((prev) => (prev < filteredConversations.length - 1 ? prev + 1 : 0));
+  };
+
+  const loadMoreMessages = async () => {
+    if (!currentConversation || loadingMore) return;
+    
+    const currentMessagesCount = currentConversation.messages.length;
+    
+    try {
+      setLoadingMore(true);
+      
+      // Save scroll height before loading
+      const container = chatContainerRef.current;
+      const scrollHeightBefore = container?.scrollHeight || 0;
+      
+      const { data, error: fetchError } = await supabase.functions.invoke('analytics-chats', {
+        body: { 
+          user_id: currentConversation.user_id, 
+          offset: currentMessagesCount,
+          messages_limit: 20
+        }
+      });
+
+      if (fetchError) {
+        console.error('Error loading more messages:', fetchError);
+        return;
+      }
+
+      if (data && data.messages && Array.isArray(data.messages)) {
+        // Update the conversation with new messages prepended
+        setConversations(prev => prev.map(conv => {
+          if (conv.user_id === currentConversation.user_id) {
+            return {
+              ...conv,
+              messages: [...data.messages, ...conv.messages],
+              has_more_messages: data.has_more
+            };
+          }
+          return conv;
+        }));
+
+        // After state update, maintain scroll position
+        setTimeout(() => {
+          if (container) {
+            const scrollHeightAfter = container.scrollHeight;
+            container.scrollTop = scrollHeightAfter - scrollHeightBefore;
+          }
+        }, 0);
+      }
+    } catch (e) {
+      console.error('Error loading more messages:', e);
+    } finally {
+      setLoadingMore(false);
+    }
   };
 
   if (loading) {
@@ -359,8 +415,34 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
 
         {/* Chat Messages - Full remaining height */}
         {filteredConversations.length > 0 && (
-          <div className="flex-1 overflow-y-auto rounded-lg border border-border bg-card/50 p-4">
+          <div 
+            ref={chatContainerRef}
+            className="flex-1 overflow-y-auto rounded-lg border border-border bg-card/50 p-4"
+          >
             <div className="space-y-4">
+              {/* Load More Button */}
+              {currentConversation?.has_more_messages && (
+                <div className="flex flex-col items-center gap-2 pb-4 border-b border-border/50">
+                  <span className="text-xs text-muted-foreground">
+                    Mostrando {currentConversation.messages.length} de {currentConversation.total_messages} mensagens
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={loadMoreMessages}
+                    disabled={loadingMore}
+                    className="gap-2"
+                  >
+                    {loadingMore ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ChevronUp className="h-4 w-4" />
+                    )}
+                    {loadingMore ? 'Carregando...' : 'Carregar conversa anterior'}
+                  </Button>
+                </div>
+              )}
+
               {currentConversation?.messages.map((message) => (
                 <div
                   key={message.id}
