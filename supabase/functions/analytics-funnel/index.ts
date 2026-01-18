@@ -9,7 +9,7 @@ const corsHeaders = {
 const funnelDescriptions: Record<string, string> = {
   'Cadastrados': 'Total de usuários na tabela user_profiles',
   'Onboarding Completo': 'Usuários com onboarding_completed = true na tabela user_profiles',
-  'Preferências Definidas': 'Usuários que preencheram alguma preferência em user_preferences (nota ENEM, localização, curso ou programa)',
+  'Preferências Definidas': 'Usuários únicos com registro em user_preferences',
   'Match Iniciado': 'Usuários únicos que iniciaram o workflow de match (workflow = match_workflow em chat_messages)',
   'Salvaram Favoritos': 'Usuários únicos que salvaram ao menos 1 favorito na tabela user_favorites',
   'Fluxo Específico': 'Usuários que entraram em SISU, ProUni ou FIES workflow (workflow in sisu_workflow, prouni_workflow, fies_workflow)',
@@ -60,19 +60,13 @@ Deno.serve(async (req) => {
     
     const onboardingUserIds = onboardingProfiles?.map(p => p.id) || []
 
-    // Step 3: Users who filled any preference
+    // Step 3: Users who have any preferences record
     const { data: preferencesProfiles } = await supabase
       .from('user_preferences')
-      .select('user_id, enem_score, location_preference, course_interest, program_preference')
-    
-    // Filter users who have at least one preference filled
-    const preferencesUserIds = preferencesProfiles?.filter(p => 
-      p.enem_score !== null || 
-      p.location_preference !== null || 
-      (p.course_interest !== null && p.course_interest.length > 0) || 
-      p.program_preference !== null
-    ).map(p => p.user_id) || []
-    
+      .select('user_id')
+
+    // Count unique users that appear in user_preferences
+    const preferencesUserIds = [...new Set(preferencesProfiles?.map(p => p.user_id).filter(Boolean) || [])]
     const preferencesSet = preferencesUserIds.length
 
     // Step 4: Users who started match workflow
