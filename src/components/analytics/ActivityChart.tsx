@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   AreaChart,
   Area,
@@ -7,21 +8,48 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { useActivityData } from "@/hooks/useAnalyticsData";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BarChart3 } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+
+type ViewMode = "week" | "day";
+
+interface ActivityData {
+  label: string;
+  mensagens: number;
+  usuarios: number;
+}
+
+async function fetchActivityByMode(mode: ViewMode): Promise<ActivityData[]> {
+  const { data, error } = await supabase.functions.invoke('analytics-activity', {
+    body: { mode }
+  });
+  
+  if (error) throw error;
+  return data;
+}
 
 export function ActivityChart() {
-  const { data, isLoading, error } = useActivityData();
+  const [viewMode, setViewMode] = useState<ViewMode>("week");
+  
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["activity-data", viewMode],
+    queryFn: () => fetchActivityByMode(viewMode),
+    staleTime: 1000 * 60 * 5,
+  });
 
   if (isLoading) {
     return (
       <div className="chart-container">
-        <div className="mb-6 flex flex-col gap-1">
-          <h3 className="text-lg font-semibold font-display">Atividade Semanal</h3>
-          <p className="text-sm text-muted-foreground">
-            Mensagens e usuários ativos por dia
-          </p>
+        <div className="mb-6 flex items-center justify-between">
+          <div className="flex flex-col gap-1">
+            <h3 className="text-lg font-semibold font-display">Atividade</h3>
+            <p className="text-sm text-muted-foreground">
+              Mensagens e usuários ativos
+            </p>
+          </div>
         </div>
         <Skeleton className="h-[300px] w-full" />
       </div>
@@ -31,11 +59,13 @@ export function ActivityChart() {
   if (error || !data || data.length === 0) {
     return (
       <div className="chart-container">
-        <div className="mb-6 flex flex-col gap-1">
-          <h3 className="text-lg font-semibold font-display">Atividade Semanal</h3>
-          <p className="text-sm text-muted-foreground">
-            Mensagens e usuários ativos por dia
-          </p>
+        <div className="mb-6 flex items-center justify-between">
+          <div className="flex flex-col gap-1">
+            <h3 className="text-lg font-semibold font-display">Atividade</h3>
+            <p className="text-sm text-muted-foreground">
+              Mensagens e usuários ativos
+            </p>
+          </div>
         </div>
         <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground">
           <BarChart3 className="h-12 w-12 mb-4 opacity-50" />
@@ -47,11 +77,37 @@ export function ActivityChart() {
 
   return (
     <div className="chart-container">
-      <div className="mb-6 flex flex-col gap-1">
-        <h3 className="text-lg font-semibold font-display">Atividade Semanal</h3>
-        <p className="text-sm text-muted-foreground">
-          Mensagens e usuários ativos por dia
-        </p>
+      <div className="mb-6 flex items-center justify-between">
+        <div className="flex flex-col gap-1">
+          <h3 className="text-lg font-semibold font-display">Atividade</h3>
+          <p className="text-sm text-muted-foreground">
+            {viewMode === "week" 
+              ? "Mensagens e usuários por dia da semana" 
+              : "Mensagens e usuários hora a hora (hoje)"
+            }
+          </p>
+        </div>
+        <ToggleGroup 
+          type="single" 
+          value={viewMode} 
+          onValueChange={(value) => value && setViewMode(value as ViewMode)}
+          className="bg-muted rounded-lg p-1"
+        >
+          <ToggleGroupItem 
+            value="week" 
+            size="sm"
+            className="data-[state=on]:bg-background data-[state=on]:shadow-sm px-3"
+          >
+            Semana
+          </ToggleGroupItem>
+          <ToggleGroupItem 
+            value="day" 
+            size="sm"
+            className="data-[state=on]:bg-background data-[state=on]:shadow-sm px-3"
+          >
+            Hoje
+          </ToggleGroupItem>
+        </ToggleGroup>
       </div>
       
       <div className="h-[300px] w-full">
@@ -72,11 +128,12 @@ export function ActivityChart() {
             </defs>
             <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
             <XAxis
-              dataKey="dia"
+              dataKey="label"
               tick={{ fontSize: 12 }}
               tickLine={false}
               axisLine={false}
               className="text-muted-foreground"
+              interval={viewMode === "day" ? 2 : 0}
             />
             <YAxis
               tick={{ fontSize: 12 }}
