@@ -23,6 +23,7 @@ interface UserConversation {
   education: string | null;
   active_workflow: string | null;
   first_contact: string | null;
+  last_activity: string | null;
   total_messages: number;
   workflow: string | null;
   funnel_stage: string | null;
@@ -283,6 +284,7 @@ Deno.serve(async (req) => {
     const conversations: UserConversation[] = []
 
     for (const userId of uniqueUserIds) {
+      // Fetch last 20 messages (for display)
       const { data: messages, error: messagesError } = await supabase
         .from('chat_messages')
         .select('id, content, sender, workflow, created_at')
@@ -294,6 +296,19 @@ Deno.serve(async (req) => {
         console.error(`Error fetching messages for user ${userId}:`, messagesError)
         continue
       }
+
+      // Fetch the REAL first message (oldest) for this user
+      const { data: firstMsgData } = await supabase
+        .from('chat_messages')
+        .select('created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true })
+        .limit(1)
+
+      const realFirstContact = firstMsgData?.[0]?.created_at || null
+
+      // The most recent message is the first one before reverse
+      const lastActivity = messages?.[0]?.created_at || null
 
       // Reverse to get chronological order (oldest first in the array)
       const orderedMessages = (messages || []).reverse()
@@ -316,7 +331,6 @@ Deno.serve(async (req) => {
         }
 
         const profile = profileMap.get(userId)
-        const firstMessage = orderedMessages[0]
 
         // Determine funnel stage
         const funnelStage = determineFunnelStage(
@@ -337,7 +351,8 @@ Deno.serve(async (req) => {
           age: profile?.age || null,
           education: profile?.education || null,
           active_workflow: profile?.active_workflow || null,
-          first_contact: firstMessage?.created_at || profile?.created_at || null,
+          first_contact: realFirstContact || profile?.created_at || null,
+          last_activity: lastActivity,
           total_messages: messageCountMap.get(userId) || orderedMessages.length,
           workflow: dominantWorkflow,
           funnel_stage: funnelStage,
@@ -352,6 +367,13 @@ Deno.serve(async (req) => {
         })
       }
     }
+
+    // Sort conversations by last_activity (most recent first)
+    conversations.sort((a, b) => {
+      const dateA = a.last_activity ? new Date(a.last_activity).getTime() : 0
+      const dateB = b.last_activity ? new Date(b.last_activity).getTime() : 0
+      return dateB - dateA
+    })
 
     console.log(`Returning ${conversations.length} conversations`)
 
