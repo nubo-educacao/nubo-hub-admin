@@ -21,6 +21,7 @@ interface UserData {
   phone: string | null;
   city: string | null;
   created_at: string | null;
+  course_interest: string[] | null;
 }
 
 Deno.serve(async (req) => {
@@ -115,6 +116,22 @@ Deno.serve(async (req) => {
         .select('id, full_name, city, created_at')
         .in('id', allUserIds)
       
+      // Fetch user preferences (for course_interest)
+      const { data: preferencesData } = await supabase
+        .from('user_preferences')
+        .select('user_id, course_interest')
+        .in('user_id', allUserIds)
+      
+      // Create a map of user_id -> course_interest
+      const courseMap = new Map<string, string[]>()
+      if (preferencesData) {
+        for (const pref of preferencesData) {
+          if (pref.course_interest) {
+            courseMap.set(pref.user_id, pref.course_interest)
+          }
+        }
+      }
+      
       // Fetch phone numbers from auth.users using admin API
       const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers({
         perPage: 1000
@@ -142,12 +159,13 @@ Deno.serve(async (req) => {
             full_name: profile.full_name,
             phone: phoneMap.get(profile.id) || null,
             city: profile.city,
-            created_at: profile.created_at
+            created_at: profile.created_at,
+            course_interest: courseMap.get(profile.id) || null
           })
         }
       }
       
-      console.log(`Built user data map with ${usersDataMap.size} users, ${phoneMap.size} have phones`)
+      console.log(`Built user data map with ${usersDataMap.size} users, ${phoneMap.size} have phones, ${courseMap.size} have course interests`)
     }
 
     // Helper to get user data for a list of IDs
