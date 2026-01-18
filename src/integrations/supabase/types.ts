@@ -646,11 +646,13 @@ export type Database = {
           peso_linguagens: string | null
           peso_matematica: string | null
           peso_redacao: string | null
+          qt_inscricao_2025: string | null
           qt_semestre: string | null
-          qt_vagas_ofertadas: string | null
+          qt_vagas_ofertadas_2025: string | null
           tp_cota: string | null
           tp_mod_concorrencia: string | null
           updated_at: string | null
+          vagas_ociosas_2025: number | null
         }
         Insert: {
           created_at?: string | null
@@ -681,11 +683,13 @@ export type Database = {
           peso_linguagens?: string | null
           peso_matematica?: string | null
           peso_redacao?: string | null
+          qt_inscricao_2025?: string | null
           qt_semestre?: string | null
-          qt_vagas_ofertadas?: string | null
+          qt_vagas_ofertadas_2025?: string | null
           tp_cota?: string | null
           tp_mod_concorrencia?: string | null
           updated_at?: string | null
+          vagas_ociosas_2025?: number | null
         }
         Update: {
           created_at?: string | null
@@ -716,11 +720,13 @@ export type Database = {
           peso_linguagens?: string | null
           peso_matematica?: string | null
           peso_redacao?: string | null
+          qt_inscricao_2025?: string | null
           qt_semestre?: string | null
-          qt_vagas_ofertadas?: string | null
+          qt_vagas_ofertadas_2025?: string | null
           tp_cota?: string | null
           tp_mod_concorrencia?: string | null
           updated_at?: string | null
+          vagas_ociosas_2025?: number | null
         }
         Relationships: [
           {
