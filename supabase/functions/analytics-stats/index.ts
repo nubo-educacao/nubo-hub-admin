@@ -29,20 +29,24 @@ Deno.serve(async (req) => {
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
     const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
 
-    // Active users (users who sent messages in last 7 days)
-    const { count: activeUsers } = await supabase
+    // Active users (DISTINCT users who sent messages in last 7 days)
+    const { data: activeUsersData } = await supabase
       .from('chat_messages')
-      .select('user_id', { count: 'exact', head: true })
+      .select('user_id')
       .gte('created_at', sevenDaysAgo.toISOString())
+    
+    const activeUsers = new Set(activeUsersData?.map(m => m.user_id).filter(Boolean)).size
 
-    // Active users previous period (for comparison)
-    const { count: activeUsersPrev } = await supabase
+    // Active users previous period (DISTINCT, for comparison)
+    const { data: activeUsersPrevData } = await supabase
       .from('chat_messages')
-      .select('user_id', { count: 'exact', head: true })
+      .select('user_id')
       .gte('created_at', fourteenDaysAgo.toISOString())
       .lt('created_at', sevenDaysAgo.toISOString())
+    
+    const activeUsersPrev = new Set(activeUsersPrevData?.map(m => m.user_id).filter(Boolean)).size
 
-    // Total messages
+    // Total messages (count all rows in chat_messages)
     const { count: totalMessages } = await supabase
       .from('chat_messages')
       .select('*', { count: 'exact', head: true })
@@ -103,8 +107,8 @@ Deno.serve(async (req) => {
     }
 
     const response = {
-      activeUsers: activeUsers || 0,
-      activeUsersChange: calcChange(activeUsers || 0, activeUsersPrev || 0),
+      activeUsers: activeUsers,
+      activeUsersChange: calcChange(activeUsers, activeUsersPrev),
       totalMessages: totalMessages || 0,
       messagesChange: calcChange(messagesThisWeek || 0, messagesPrevWeek || 0),
       totalFavorites: totalFavorites || 0,
