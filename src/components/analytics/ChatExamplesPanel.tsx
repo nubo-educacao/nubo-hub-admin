@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import { MessageSquare, ChevronLeft, ChevronRight, User, Cloud, Loader2, MapPin, GraduationCap, Calendar, Hash, Filter, GitBranch, Target, Search, ChevronUp } from "lucide-react";
+import { MessageSquare, ChevronLeft, ChevronRight, User, Cloud, Loader2, MapPin, GraduationCap, Calendar, Hash, Filter, GitBranch, Target, Search, ChevronUp, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow, subDays, startOfDay, endOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   Select,
@@ -14,6 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 
 interface ChatMessage {
   id: string;
@@ -77,6 +79,14 @@ interface ChatExamplesPanelProps {
   fullPage?: boolean;
 }
 
+const datePresets = [
+  { value: 'today', label: 'Hoje', getRange: () => ({ from: startOfDay(new Date()), to: endOfDay(new Date()) }) },
+  { value: 'yesterday', label: 'Ontem', getRange: () => ({ from: startOfDay(subDays(new Date(), 1)), to: endOfDay(subDays(new Date(), 1)) }) },
+  { value: 'last7days', label: 'Últimos 7 dias', getRange: () => ({ from: startOfDay(subDays(new Date(), 7)), to: endOfDay(new Date()) }) },
+  { value: 'last30days', label: 'Últimos 30 dias', getRange: () => ({ from: startOfDay(subDays(new Date(), 30)), to: endOfDay(new Date()) }) },
+  { value: 'custom', label: 'Personalizado', getRange: () => null },
+];
+
 export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) {
   const [conversations, setConversations] = useState<UserConversation[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -86,15 +96,36 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingMore, setLoadingMore] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Date filter states
+  const [datePreset, setDatePreset] = useState('last30days');
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(subDays(new Date(), 30));
+  const [dateTo, setDateTo] = useState<Date | undefined>(new Date());
+  const [isDatePopoverOpen, setIsDatePopoverOpen] = useState(false);
 
   const fetchConversations = async () => {
     try {
       setLoading(true);
       setError(null);
-      console.log('Fetching conversations...');
+      console.log('Fetching conversations with date filter:', { dateFrom, dateTo });
+      
+      const requestBody: { 
+        limit: number; 
+        date_from?: string; 
+        date_to?: string 
+      } = { 
+        limit: fullPage ? 30 : 10 
+      };
+      
+      if (dateFrom) {
+        requestBody.date_from = startOfDay(dateFrom).toISOString();
+      }
+      if (dateTo) {
+        requestBody.date_to = endOfDay(dateTo).toISOString();
+      }
       
       const { data, error: fetchError } = await supabase.functions.invoke('analytics-chats', {
-        body: { limit: fullPage ? 30 : 10 }
+        body: requestBody
       });
 
       if (fetchError) {
@@ -116,10 +147,23 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
       setLoading(false);
     }
   };
+  
+  // Handle date preset change
+  const handleDatePresetChange = (preset: string) => {
+    setDatePreset(preset);
+    const presetConfig = datePresets.find(p => p.value === preset);
+    if (presetConfig && preset !== 'custom') {
+      const range = presetConfig.getRange();
+      if (range) {
+        setDateFrom(range.from);
+        setDateTo(range.to);
+      }
+    }
+  };
 
   useEffect(() => {
     fetchConversations();
-  }, []);
+  }, [dateFrom, dateTo]);
 
   // Filter conversations by funnel stage and search query
   const filteredConversations = conversations.filter(c => {
@@ -243,7 +287,72 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
           </div>
         </div>
 
-        {/* Filter */}
+        {/* Date Filter */}
+        <div className="mb-3 flex-shrink-0">
+          <div className="flex items-center gap-2 mb-2">
+            <CalendarDays className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium">Período</span>
+          </div>
+          <Select value={datePreset} onValueChange={handleDatePresetChange}>
+            <SelectTrigger className="w-full mb-2">
+              <SelectValue placeholder="Selecione o período" />
+            </SelectTrigger>
+            <SelectContent>
+              {datePresets.map((preset) => (
+                <SelectItem key={preset.value} value={preset.value}>
+                  {preset.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          
+          {datePreset === 'custom' && (
+            <div className="space-y-2">
+              <Popover open={isDatePopoverOpen} onOpenChange={setIsDatePopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-start text-left font-normal"
+                  >
+                    <Calendar className="mr-2 h-4 w-4" />
+                    {dateFrom && dateTo ? (
+                      <span className="truncate">
+                        {format(dateFrom, "dd/MM", { locale: ptBR })} - {format(dateTo, "dd/MM", { locale: ptBR })}
+                      </span>
+                    ) : (
+                      <span>Selecionar datas</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarComponent
+                    mode="range"
+                    selected={{ from: dateFrom, to: dateTo }}
+                    onSelect={(range) => {
+                      setDateFrom(range?.from);
+                      setDateTo(range?.to);
+                      if (range?.from && range?.to) {
+                        setIsDatePopoverOpen(false);
+                      }
+                    }}
+                    numberOfMonths={1}
+                    locale={ptBR}
+                    disabled={(date) => date > new Date()}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+          )}
+          
+          {dateFrom && dateTo && datePreset !== 'custom' && (
+            <p className="text-xs text-muted-foreground mt-1">
+              {format(dateFrom, "dd/MM/yyyy", { locale: ptBR })} - {format(dateTo, "dd/MM/yyyy", { locale: ptBR })}
+            </p>
+          )}
+        </div>
+
+        {/* Funnel Filter */}
         <div className="mb-3 flex-shrink-0">
           <div className="flex items-center gap-2 mb-2">
             <Filter className="h-4 w-4 text-muted-foreground" />
