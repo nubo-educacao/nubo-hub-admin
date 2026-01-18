@@ -7,18 +7,44 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-
-const data = [
-  { name: "Seg", mensagens: 240, usuarios: 45 },
-  { name: "Ter", mensagens: 380, usuarios: 62 },
-  { name: "Qua", mensagens: 520, usuarios: 78 },
-  { name: "Qui", mensagens: 450, usuarios: 71 },
-  { name: "Sex", mensagens: 680, usuarios: 95 },
-  { name: "Sáb", mensagens: 320, usuarios: 48 },
-  { name: "Dom", mensagens: 180, usuarios: 32 },
-];
+import { useActivityData } from "@/hooks/useAnalyticsData";
+import { Skeleton } from "@/components/ui/skeleton";
+import { BarChart3 } from "lucide-react";
 
 export function ActivityChart() {
+  const { data, isLoading, error } = useActivityData();
+
+  if (isLoading) {
+    return (
+      <div className="chart-container">
+        <div className="mb-6 flex flex-col gap-1">
+          <h3 className="text-lg font-semibold font-display">Atividade Semanal</h3>
+          <p className="text-sm text-muted-foreground">
+            Mensagens e usuários ativos por dia
+          </p>
+        </div>
+        <Skeleton className="h-[300px] w-full" />
+      </div>
+    );
+  }
+
+  if (error || !data || data.length === 0) {
+    return (
+      <div className="chart-container">
+        <div className="mb-6 flex flex-col gap-1">
+          <h3 className="text-lg font-semibold font-display">Atividade Semanal</h3>
+          <p className="text-sm text-muted-foreground">
+            Mensagens e usuários ativos por dia
+          </p>
+        </div>
+        <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground">
+          <BarChart3 className="h-12 w-12 mb-4 opacity-50" />
+          <p>Nenhum dado de atividade disponível</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="chart-container">
       <div className="mb-6 flex flex-col gap-1">

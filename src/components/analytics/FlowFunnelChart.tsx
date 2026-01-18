@@ -1,21 +1,58 @@
 import { cn } from "@/lib/utils";
-
-interface FunnelStep {
-  label: string;
-  value: number;
-  color: string;
-}
-
-const funnelData: FunnelStep[] = [
-  { label: "Iniciaram conversa", value: 1000, color: "bg-primary" },
-  { label: "Completaram perfil", value: 720, color: "bg-chart-2" },
-  { label: "Buscaram cursos", value: 580, color: "bg-chart-3" },
-  { label: "Favoritaram", value: 340, color: "bg-chart-4" },
-  { label: "Simularam nota", value: 180, color: "bg-chart-5" },
-];
+import { useFunnelData } from "@/hooks/useAnalyticsData";
+import { Skeleton } from "@/components/ui/skeleton";
+import { GitBranch } from "lucide-react";
 
 export function FlowFunnelChart() {
-  const maxValue = funnelData[0].value;
+  const { data: funnelData, isLoading, error } = useFunnelData();
+
+  if (isLoading) {
+    return (
+      <div className="chart-container">
+        <div className="mb-6 flex flex-col gap-1">
+          <h3 className="text-lg font-semibold font-display">Funil de Conversão</h3>
+          <p className="text-sm text-muted-foreground">Drop-off nos principais fluxos</p>
+        </div>
+        <div className="space-y-4">
+          {[...Array(5)].map((_, i) => (
+            <Skeleton key={i} className="h-12 w-full" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !funnelData || funnelData.length === 0) {
+    return (
+      <div className="chart-container">
+        <div className="mb-6 flex flex-col gap-1">
+          <h3 className="text-lg font-semibold font-display">Funil de Conversão</h3>
+          <p className="text-sm text-muted-foreground">Drop-off nos principais fluxos</p>
+        </div>
+        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+          <GitBranch className="h-12 w-12 mb-4 opacity-50" />
+          <p>Nenhum dado de funil disponível</p>
+        </div>
+      </div>
+    );
+  }
+
+  const maxValue = funnelData[0]?.value || 1;
+
+  // Find biggest drop-off
+  let biggestDropIndex = -1;
+  let biggestDrop = 0;
+  funnelData.forEach((step, index) => {
+    if (index > 0 && funnelData[index - 1].value > 0) {
+      const drop = Math.round(
+        ((funnelData[index - 1].value - step.value) / funnelData[index - 1].value) * 100
+      );
+      if (drop > biggestDrop) {
+        biggestDrop = drop;
+        biggestDropIndex = index;
+      }
+    }
+  });
 
   return (
     <div className="chart-container">
@@ -28,8 +65,8 @@ export function FlowFunnelChart() {
 
       <div className="space-y-4">
         {funnelData.map((step, index) => {
-          const percentage = (step.value / maxValue) * 100;
-          const dropOff = index > 0
+          const percentage = maxValue > 0 ? (step.value / maxValue) * 100 : 0;
+          const dropOff = index > 0 && funnelData[index - 1].value > 0
             ? Math.round(((funnelData[index - 1].value - step.value) / funnelData[index - 1].value) * 100)
             : 0;
 
@@ -61,12 +98,15 @@ export function FlowFunnelChart() {
         })}
       </div>
 
-      <div className="mt-6 p-4 rounded-lg bg-muted/50 border border-border">
-        <p className="text-sm text-muted-foreground">
-          <span className="font-semibold text-foreground">Insight:</span> A maior queda está entre
-          "Buscaram cursos" e "Favoritaram". Considere melhorar o fluxo de favoritos.
-        </p>
-      </div>
+      {biggestDropIndex > 0 && (
+        <div className="mt-6 p-4 rounded-lg bg-muted/50 border border-border">
+          <p className="text-sm text-muted-foreground">
+            <span className="font-semibold text-foreground">Insight:</span> A maior queda 
+            ({biggestDrop}%) está entre "{funnelData[biggestDropIndex - 1]?.label}" e "
+            {funnelData[biggestDropIndex]?.label}".
+          </p>
+        </div>
+      )}
     </div>
   );
 }

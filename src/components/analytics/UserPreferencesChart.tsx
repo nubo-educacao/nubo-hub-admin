@@ -1,13 +1,42 @@
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
-
-const data = [
-  { name: "SISU", value: 45, color: "hsl(199, 89%, 48%)" },
-  { name: "ProUni", value: 35, color: "hsl(142, 71%, 45%)" },
-  { name: "FIES", value: 15, color: "hsl(38, 92%, 50%)" },
-  { name: "Vestibular", value: 5, color: "hsl(280, 87%, 65%)" },
-];
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { useUserPreferences } from "@/hooks/useAnalyticsData";
+import { Skeleton } from "@/components/ui/skeleton";
+import { PieChartIcon } from "lucide-react";
 
 export function UserPreferencesChart() {
+  const { data, isLoading, error } = useUserPreferences();
+
+  if (isLoading) {
+    return (
+      <div className="chart-container">
+        <div className="mb-6 flex flex-col gap-1">
+          <h3 className="text-lg font-semibold font-display">Preferências de Acesso</h3>
+          <p className="text-sm text-muted-foreground">
+            Distribuição por tipo de ingresso
+          </p>
+        </div>
+        <Skeleton className="h-[250px] w-full" />
+      </div>
+    );
+  }
+
+  if (error || !data || data.length === 0) {
+    return (
+      <div className="chart-container">
+        <div className="mb-6 flex flex-col gap-1">
+          <h3 className="text-lg font-semibold font-display">Preferências de Acesso</h3>
+          <p className="text-sm text-muted-foreground">
+            Distribuição por tipo de ingresso
+          </p>
+        </div>
+        <div className="flex flex-col items-center justify-center h-[250px] text-muted-foreground">
+          <PieChartIcon className="h-12 w-12 mb-4 opacity-50" />
+          <p>Nenhuma preferência registrada</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="chart-container">
       <div className="mb-6 flex flex-col gap-1">

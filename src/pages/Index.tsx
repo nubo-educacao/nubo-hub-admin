@@ -1,4 +1,4 @@
-import { Users, MessageSquare, Heart, TrendingUp, AlertTriangle, Clock } from "lucide-react";
+import { Users, MessageSquare, Heart, TrendingUp, AlertTriangle, Clock, MapPin } from "lucide-react";
 import { DashboardHeader } from "@/components/analytics/DashboardHeader";
 import { StatCard } from "@/components/analytics/StatCard";
 import { ActivityChart } from "@/components/analytics/ActivityChart";
@@ -6,8 +6,14 @@ import { TopCoursesChart } from "@/components/analytics/TopCoursesChart";
 import { ErrorLogPanel } from "@/components/analytics/ErrorLogPanel";
 import { FlowFunnelChart } from "@/components/analytics/FlowFunnelChart";
 import { UserPreferencesChart } from "@/components/analytics/UserPreferencesChart";
+import { TopUsersChart } from "@/components/analytics/TopUsersChart";
+import { LocationChart } from "@/components/analytics/LocationChart";
+import { useDashboardStats } from "@/hooks/useAnalyticsData";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const Index = () => {
+  const { data: stats, isLoading: statsLoading } = useDashboardStats();
+
   return (
     <div className="min-h-screen bg-background">
       <DashboardHeader />
@@ -15,35 +21,45 @@ const Index = () => {
       <main className="container py-6 space-y-6">
         {/* Stats Overview */}
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title="Usuários Ativos"
-            value="2,847"
-            change={12.5}
-            icon={Users}
-            variant="default"
-          />
-          <StatCard
-            title="Total de Mensagens"
-            value="18.4k"
-            change={8.2}
-            icon={MessageSquare}
-            variant="default"
-          />
-          <StatCard
-            title="Favoritos Salvos"
-            value="5,621"
-            change={23.1}
-            icon={Heart}
-            variant="success"
-          />
-          <StatCard
-            title="Erros Hoje"
-            value="23"
-            change={-15}
-            changeLabel="menos que ontem"
-            icon={AlertTriangle}
-            variant="warning"
-          />
+          {statsLoading ? (
+            <>
+              {[...Array(4)].map((_, i) => (
+                <Skeleton key={i} className="h-32 w-full" />
+              ))}
+            </>
+          ) : (
+            <>
+              <StatCard
+                title="Usuários Ativos (7d)"
+                value={stats?.activeUsers.toLocaleString() || "0"}
+                change={stats?.activeUsersChange}
+                icon={Users}
+                variant="default"
+              />
+              <StatCard
+                title="Total de Mensagens"
+                value={stats?.totalMessages.toLocaleString() || "0"}
+                change={stats?.messagesChange}
+                icon={MessageSquare}
+                variant="default"
+              />
+              <StatCard
+                title="Favoritos Salvos"
+                value={stats?.favoritesSaved.toLocaleString() || "0"}
+                change={stats?.favoritesChange}
+                icon={Heart}
+                variant="success"
+              />
+              <StatCard
+                title="Erros Hoje"
+                value={stats?.errorsToday.toString() || "0"}
+                change={stats?.errorsChange}
+                changeLabel="vs ontem"
+                icon={AlertTriangle}
+                variant={stats?.errorsToday === 0 ? "success" : "warning"}
+              />
+            </>
+          )}
         </section>
 
         {/* Charts Row 1 */}
@@ -52,7 +68,13 @@ const Index = () => {
           <TopCoursesChart />
         </section>
 
-        {/* Charts Row 2 */}
+        {/* Charts Row 2 - Rankings */}
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <TopUsersChart />
+          <LocationChart />
+        </section>
+
+        {/* Charts Row 3 */}
         <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <FlowFunnelChart />
           <UserPreferencesChart />
@@ -66,11 +88,11 @@ const Index = () => {
               <div className="rounded-lg bg-success/10 p-2">
                 <TrendingUp className="h-4 w-4 text-success" />
               </div>
-              <h4 className="font-semibold">Engajamento em Alta</h4>
+              <h4 className="font-semibold">Dados em Tempo Real</h4>
             </div>
             <p className="text-sm text-muted-foreground">
-              Usuários estão passando em média <span className="font-semibold text-foreground">12 min</span> por
-              sessão, 20% mais que a semana passada.
+              Os dados são atualizados automaticamente a cada <span className="font-semibold text-foreground">5 minutos</span>.
+              Métricas baseadas nos últimos 7 dias.
             </p>
           </div>
 
@@ -79,24 +101,24 @@ const Index = () => {
               <div className="rounded-lg bg-warning/10 p-2">
                 <Clock className="h-4 w-4 text-warning" />
               </div>
-              <h4 className="font-semibold">Pico de Uso</h4>
+              <h4 className="font-semibold">Período de Análise</h4>
             </div>
             <p className="text-sm text-muted-foreground">
-              O horário de maior atividade é entre <span className="font-semibold text-foreground">19h e 21h</span>,
-              principalmente nos dias de semana.
+              Comparações são feitas entre a <span className="font-semibold text-foreground">semana atual</span> e a 
+              semana anterior para identificar tendências.
             </p>
           </div>
 
           <div className="stat-card sm:col-span-2 lg:col-span-1">
             <div className="flex items-center gap-3 mb-3">
               <div className="rounded-lg bg-primary/10 p-2">
-                <MessageSquare className="h-4 w-4 text-primary" />
+                <MapPin className="h-4 w-4 text-primary" />
               </div>
-              <h4 className="font-semibold">Top Pergunta</h4>
+              <h4 className="font-semibold">Conectado ao Supabase</h4>
             </div>
             <p className="text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground">"Qual minha chance no SISU?"</span> foi a pergunta
-              mais frequente, aparecendo 340 vezes.
+              Dashboard conectado ao banco <span className="font-semibold text-foreground">nubo-hub-prod</span> com 
+              dados reais da plataforma Cloudinha.
             </p>
           </div>
         </section>
