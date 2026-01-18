@@ -8,15 +8,9 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-
-const data = [
-  { name: "Medicina", buscas: 1240 },
-  { name: "Direito", buscas: 980 },
-  { name: "Engenharia", buscas: 850 },
-  { name: "Psicologia", buscas: 720 },
-  { name: "Administração", buscas: 650 },
-  { name: "Enfermagem", buscas: 580 },
-];
+import { useTopCourses } from "@/hooks/useAnalyticsData";
+import { Skeleton } from "@/components/ui/skeleton";
+import { GraduationCap } from "lucide-react";
 
 const colors = [
   "hsl(199, 89%, 48%)",
@@ -28,12 +22,45 @@ const colors = [
 ];
 
 export function TopCoursesChart() {
+  const { data, isLoading, error } = useTopCourses();
+
+  if (isLoading) {
+    return (
+      <div className="chart-container">
+        <div className="mb-6 flex flex-col gap-1">
+          <h3 className="text-lg font-semibold font-display">Cursos Mais Buscados</h3>
+          <p className="text-sm text-muted-foreground">
+            Top 6 cursos com maior interesse
+          </p>
+        </div>
+        <Skeleton className="h-[300px] w-full" />
+      </div>
+    );
+  }
+
+  if (error || !data || data.length === 0 || (data.length === 1 && data[0].buscas === 0)) {
+    return (
+      <div className="chart-container">
+        <div className="mb-6 flex flex-col gap-1">
+          <h3 className="text-lg font-semibold font-display">Cursos Mais Buscados</h3>
+          <p className="text-sm text-muted-foreground">
+            Top 6 cursos com maior interesse
+          </p>
+        </div>
+        <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground">
+          <GraduationCap className="h-12 w-12 mb-4 opacity-50" />
+          <p>Nenhum interesse de curso registrado</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="chart-container">
       <div className="mb-6 flex flex-col gap-1">
         <h3 className="text-lg font-semibold font-display">Cursos Mais Buscados</h3>
         <p className="text-sm text-muted-foreground">
-          Top 6 cursos com maior interesse
+          Top {data.length} cursos com maior interesse
         </p>
       </div>
       
@@ -69,6 +96,7 @@ export function TopCoursesChart() {
                 boxShadow: "var(--shadow-lg)",
               }}
               cursor={{ fill: "hsl(var(--muted))", opacity: 0.3 }}
+              formatter={(value: number) => [value, "Interessados"]}
             />
             <Bar dataKey="buscas" radius={[0, 6, 6, 0]} name="Buscas">
               {data.map((_, index) => (
