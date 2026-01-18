@@ -34,6 +34,8 @@ export interface FunnelStep {
   label?: string;
   value?: number;
   color?: string;
+  description?: string;
+  user_ids?: string[];
 }
 
 export interface UserPreference {

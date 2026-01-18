@@ -74,10 +74,9 @@ Deno.serve(async (req) => {
         }
       }) || []
 
-      // Sort by score and take top 10
+      // Sort by score (return ALL users, not just top 10)
       const topUsers = userScores
         .sort((a, b) => b.score - a.score)
-        .slice(0, 10)
 
       console.log('Analytics rankings (users) response:', topUsers.length, 'users')
 
