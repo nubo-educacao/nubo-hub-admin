@@ -22,28 +22,36 @@ async function fetchLocationPreferences(): Promise<LocationPreferenceData[]> {
   const { data, error } = await supabase
     .from('user_preferences')
     .select('location_preference')
-    .not('location_preference', 'is', null);
+    .not('location_preference', 'is', null)
+    .neq('location_preference', '');
 
   if (error) throw error;
 
-  // Count occurrences of each preference
+  // Count occurrences of each preference (normalize names)
   const counts: Record<string, number> = {};
   let total = 0;
 
   data?.forEach((row) => {
-    const pref = row.location_preference || 'Não especificado';
+    // Normalize: trim whitespace and capitalize first letter
+    let pref = (row.location_preference || '').trim();
+    if (!pref) return;
+    
+    // Normalize common variations
+    pref = pref.charAt(0).toUpperCase() + pref.slice(1);
+    
     counts[pref] = (counts[pref] || 0) + 1;
     total++;
   });
 
-  // Convert to array with percentages
+  // Convert to array with percentages, limit to top 8
   return Object.entries(counts)
     .map(([name, count]) => ({
       name,
       value: total > 0 ? Math.round((count / total) * 100) : 0,
       count,
     }))
-    .sort((a, b) => b.count - a.count);
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
 }
 
 export function LocationPreferenceChart() {

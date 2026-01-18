@@ -27,37 +27,53 @@ Deno.serve(async (req) => {
       // Use default
     }
 
-    // Brazil timezone offset (UTC-3 for Brasília standard time)
-    const BRAZIL_OFFSET_HOURS = -3
+    // Brazil is UTC-3, so we subtract 3 hours from UTC to get Brazil time
+    // When it's 19:00 UTC, it's 16:00 in Brazil
+    const BRAZIL_OFFSET_MS = 3 * 60 * 60 * 1000 // 3 hours in milliseconds
 
-    // Helper function to convert UTC date to Brazil timezone
-    const toBrazilTime = (utcDate: Date): Date => {
-      const brazilTime = new Date(utcDate.getTime() + (BRAZIL_OFFSET_HOURS * 60 * 60 * 1000))
-      return brazilTime
+    // Get hour in Brazil timezone from a UTC timestamp
+    const getBrazilHour = (utcTimestamp: string): number => {
+      const utcDate = new Date(utcTimestamp)
+      // Subtract 3 hours to get Brazil time
+      const brazilDate = new Date(utcDate.getTime() - BRAZIL_OFFSET_MS)
+      return brazilDate.getUTCHours()
     }
 
-    // Get Brazil "today" start
-    const getBrazilTodayStart = (): Date => {
-      const now = new Date()
-      const brazilNow = toBrazilTime(now)
-      // Create a date for midnight Brazil time in UTC
-      const brazilMidnight = new Date(Date.UTC(
+    // Get Brazil date string (YYYY-MM-DD) from a UTC timestamp
+    const getBrazilDateKey = (utcTimestamp: string): string => {
+      const utcDate = new Date(utcTimestamp)
+      const brazilDate = new Date(utcDate.getTime() - BRAZIL_OFFSET_MS)
+      return `${brazilDate.getUTCFullYear()}-${String(brazilDate.getUTCMonth() + 1).padStart(2, '0')}-${String(brazilDate.getUTCDate()).padStart(2, '0')}`
+    }
+
+    // Get current time in Brazil
+    const getNowInBrazil = (): Date => {
+      return new Date(Date.now() - BRAZIL_OFFSET_MS)
+    }
+
+    // Get start of today in Brazil (as UTC timestamp for querying)
+    const getBrazilTodayStartUTC = (): Date => {
+      const brazilNow = getNowInBrazil()
+      // Midnight Brazil time = 03:00 UTC
+      return new Date(Date.UTC(
         brazilNow.getUTCFullYear(),
         brazilNow.getUTCMonth(),
         brazilNow.getUTCDate(),
-        -BRAZIL_OFFSET_HOURS, 0, 0, 0
+        3, 0, 0, 0 // 03:00 UTC = 00:00 Brazil
       ))
-      return brazilMidnight
     }
 
     if (mode === 'day') {
       // Get messages from today (Brazil time), grouped by hour
-      const todayStart = getBrazilTodayStart()
+      const todayStartUTC = getBrazilTodayStartUTC()
+      
+      console.log('Brazil today start (UTC):', todayStartUTC.toISOString())
+      console.log('Current Brazil time:', getNowInBrazil().toISOString())
       
       const { data: messages, error } = await supabase
         .from('chat_messages')
         .select('created_at, user_id')
-        .gte('created_at', todayStart.toISOString())
+        .gte('created_at', todayStartUTC.toISOString())
         .order('created_at', { ascending: true })
 
       if (error) throw error
@@ -71,10 +87,8 @@ Deno.serve(async (req) => {
       // Count messages and unique users per hour (in Brazil timezone)
       messages?.forEach((msg) => {
         if (msg.created_at) {
-          const utcDate = new Date(msg.created_at)
-          const brazilDate = toBrazilTime(utcDate)
-          const hour = brazilDate.getUTCHours()
-          const hourData = hourlyMap.get(hour)!
+          const brazilHour = getBrazilHour(msg.created_at)
+          const hourData = hourlyMap.get(brazilHour)!
           hourData.mensagens++
           if (msg.user_id) {
             hourData.usuarios.add(msg.user_id)
@@ -89,7 +103,7 @@ Deno.serve(async (req) => {
         usuarios: data.usuarios.size,
       }))
 
-      console.log('Analytics activity (day - Brazil time) response:', activity.filter(a => a.mensagens > 0))
+      console.log('Analytics activity (day - Brasília) response:', activity.filter(a => a.mensagens > 0))
 
       return new Response(JSON.stringify(activity), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -112,20 +126,18 @@ Deno.serve(async (req) => {
       const activityMap = new Map<string, { mensagens: number; usuarios: Set<string>; dayOfWeek: number }>()
 
       // Initialize last 7 days (Brazil time)
+      const brazilNow = getNowInBrazil()
       for (let i = 6; i >= 0; i--) {
-        const date = new Date()
-        date.setDate(date.getDate() - i)
-        const brazilDate = toBrazilTime(date)
-        const dayKey = `${brazilDate.getUTCFullYear()}-${String(brazilDate.getUTCMonth() + 1).padStart(2, '0')}-${String(brazilDate.getUTCDate()).padStart(2, '0')}`
-        activityMap.set(dayKey, { mensagens: 0, usuarios: new Set(), dayOfWeek: brazilDate.getUTCDay() })
+        const date = new Date(brazilNow.getTime())
+        date.setUTCDate(date.getUTCDate() - i)
+        const dayKey = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`
+        activityMap.set(dayKey, { mensagens: 0, usuarios: new Set(), dayOfWeek: date.getUTCDay() })
       }
 
       // Count messages and unique users per day (in Brazil timezone)
       messages?.forEach((msg) => {
         if (msg.created_at) {
-          const utcDate = new Date(msg.created_at)
-          const brazilDate = toBrazilTime(utcDate)
-          const dayKey = `${brazilDate.getUTCFullYear()}-${String(brazilDate.getUTCMonth() + 1).padStart(2, '0')}-${String(brazilDate.getUTCDate()).padStart(2, '0')}`
+          const dayKey = getBrazilDateKey(msg.created_at)
           if (activityMap.has(dayKey)) {
             const dayData = activityMap.get(dayKey)!
             dayData.mensagens++
@@ -145,7 +157,7 @@ Deno.serve(async (req) => {
         }
       })
 
-      console.log('Analytics activity (week - Brazil time) response:', activity)
+      console.log('Analytics activity (week - Brasília) response:', activity)
 
       return new Response(JSON.stringify(activity), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
