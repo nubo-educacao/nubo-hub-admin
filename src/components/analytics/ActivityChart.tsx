@@ -32,7 +32,7 @@ async function fetchActivityByMode(mode: ViewMode): Promise<ActivityData[]> {
 }
 
 export function ActivityChart() {
-  const [viewMode, setViewMode] = useState<ViewMode>("week");
+  const [viewMode, setViewMode] = useState<ViewMode>("day");
   
   const { data, isLoading, error } = useQuery({
     queryKey: ["activity-data", viewMode],

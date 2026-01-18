@@ -5,7 +5,7 @@ import { ActivityChart } from "@/components/analytics/ActivityChart";
 import { TopCoursesChart } from "@/components/analytics/TopCoursesChart";
 import { OpportunityTypesChart } from "@/components/analytics/OpportunityTypesChart";
 import { FlowFunnelChart } from "@/components/analytics/FlowFunnelChart";
-import { UserPreferencesChart } from "@/components/analytics/UserPreferencesChart";
+import { LocationPreferenceChart } from "@/components/analytics/LocationPreferenceChart";
 import { TopUsersChart } from "@/components/analytics/TopUsersChart";
 import { LocationChart } from "@/components/analytics/LocationChart";
 import { useDashboardStats } from "@/hooks/useAnalyticsData";
@@ -70,7 +70,7 @@ const Index = () => {
         {/* Charts Row 3 */}
         <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <LocationChart />
-          <UserPreferencesChart />
+          <LocationPreferenceChart />
         </section>
 
         {/* Quick Insights */}

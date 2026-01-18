@@ -27,15 +27,37 @@ Deno.serve(async (req) => {
       // Use default
     }
 
+    // Brazil timezone offset (UTC-3 for Brasília standard time)
+    const BRAZIL_OFFSET_HOURS = -3
+
+    // Helper function to convert UTC date to Brazil timezone
+    const toBrazilTime = (utcDate: Date): Date => {
+      const brazilTime = new Date(utcDate.getTime() + (BRAZIL_OFFSET_HOURS * 60 * 60 * 1000))
+      return brazilTime
+    }
+
+    // Get Brazil "today" start
+    const getBrazilTodayStart = (): Date => {
+      const now = new Date()
+      const brazilNow = toBrazilTime(now)
+      // Create a date for midnight Brazil time in UTC
+      const brazilMidnight = new Date(Date.UTC(
+        brazilNow.getUTCFullYear(),
+        brazilNow.getUTCMonth(),
+        brazilNow.getUTCDate(),
+        -BRAZIL_OFFSET_HOURS, 0, 0, 0
+      ))
+      return brazilMidnight
+    }
+
     if (mode === 'day') {
-      // Get messages from today, grouped by hour
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
+      // Get messages from today (Brazil time), grouped by hour
+      const todayStart = getBrazilTodayStart()
       
       const { data: messages, error } = await supabase
         .from('chat_messages')
         .select('created_at, user_id')
-        .gte('created_at', today.toISOString())
+        .gte('created_at', todayStart.toISOString())
         .order('created_at', { ascending: true })
 
       if (error) throw error
@@ -46,10 +68,12 @@ Deno.serve(async (req) => {
         hourlyMap.set(h, { mensagens: 0, usuarios: new Set() })
       }
 
-      // Count messages and unique users per hour
+      // Count messages and unique users per hour (in Brazil timezone)
       messages?.forEach((msg) => {
         if (msg.created_at) {
-          const hour = new Date(msg.created_at).getHours()
+          const utcDate = new Date(msg.created_at)
+          const brazilDate = toBrazilTime(utcDate)
+          const hour = brazilDate.getUTCHours()
           const hourData = hourlyMap.get(hour)!
           hourData.mensagens++
           if (msg.user_id) {
@@ -65,7 +89,7 @@ Deno.serve(async (req) => {
         usuarios: data.usuarios.size,
       }))
 
-      console.log('Analytics activity (day) response:', activity.filter(a => a.mensagens > 0))
+      console.log('Analytics activity (day - Brazil time) response:', activity.filter(a => a.mensagens > 0))
 
       return new Response(JSON.stringify(activity), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -83,41 +107,45 @@ Deno.serve(async (req) => {
 
       if (error) throw error
 
-      // Aggregate by day
+      // Aggregate by day (in Brazil timezone)
       const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
-      const activityMap = new Map<string, { mensagens: number; usuarios: Set<string> }>()
+      const activityMap = new Map<string, { mensagens: number; usuarios: Set<string>; dayOfWeek: number }>()
 
-      // Initialize last 7 days
+      // Initialize last 7 days (Brazil time)
       for (let i = 6; i >= 0; i--) {
         const date = new Date()
         date.setDate(date.getDate() - i)
-        const dayKey = date.toISOString().split('T')[0]
-        activityMap.set(dayKey, { mensagens: 0, usuarios: new Set() })
+        const brazilDate = toBrazilTime(date)
+        const dayKey = `${brazilDate.getUTCFullYear()}-${String(brazilDate.getUTCMonth() + 1).padStart(2, '0')}-${String(brazilDate.getUTCDate()).padStart(2, '0')}`
+        activityMap.set(dayKey, { mensagens: 0, usuarios: new Set(), dayOfWeek: brazilDate.getUTCDay() })
       }
 
-      // Count messages and unique users per day
+      // Count messages and unique users per day (in Brazil timezone)
       messages?.forEach((msg) => {
-        const dayKey = msg.created_at?.split('T')[0]
-        if (dayKey && activityMap.has(dayKey)) {
-          const dayData = activityMap.get(dayKey)!
-          dayData.mensagens++
-          if (msg.user_id) {
-            dayData.usuarios.add(msg.user_id)
+        if (msg.created_at) {
+          const utcDate = new Date(msg.created_at)
+          const brazilDate = toBrazilTime(utcDate)
+          const dayKey = `${brazilDate.getUTCFullYear()}-${String(brazilDate.getUTCMonth() + 1).padStart(2, '0')}-${String(brazilDate.getUTCDate()).padStart(2, '0')}`
+          if (activityMap.has(dayKey)) {
+            const dayData = activityMap.get(dayKey)!
+            dayData.mensagens++
+            if (msg.user_id) {
+              dayData.usuarios.add(msg.user_id)
+            }
           }
         }
       })
 
       // Convert to array format
       const activity = Array.from(activityMap.entries()).map(([dateStr, data]) => {
-        const date = new Date(dateStr)
         return {
-          label: dayNames[date.getDay()],
+          label: dayNames[data.dayOfWeek],
           mensagens: data.mensagens,
           usuarios: data.usuarios.size,
         }
       })
 
-      console.log('Analytics activity (week) response:', activity)
+      console.log('Analytics activity (week - Brazil time) response:', activity)
 
       return new Response(JSON.stringify(activity), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
