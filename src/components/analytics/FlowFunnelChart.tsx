@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { useFunnelData } from "@/hooks/useAnalyticsData";
 import { Skeleton } from "@/components/ui/skeleton";
-import { GitBranch, Info, Users, Download, Phone } from "lucide-react";
+import { GitBranch, Info, Users, Download, Phone, BookOpen } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -46,6 +46,7 @@ interface UserData {
   phone: string | null;
   city: string | null;
   created_at: string | null;
+  course_interest: string[] | null;
 }
 
 interface FunnelStepLocal {
@@ -159,11 +160,12 @@ export function FlowFunnelChart() {
       });
 
       // Create CSV content
-      const headers = ['nome', 'telefone', 'cidade', 'etapa', 'data_cadastro'];
+      const headers = ['nome', 'telefone', 'cidade', 'curso', 'etapa', 'data_cadastro'];
       const rows = Array.from(userStages.values()).map(({ user, stage }) => [
         user.full_name || 'Anônimo',
         user.phone || '',
         user.city || '',
+        user.course_interest?.join('; ') || '',
         stage,
         user.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR') : ''
       ]);
@@ -363,6 +365,15 @@ export function FlowFunnelChart() {
                               {formatPhone(user.phone)}
                             </span>
                           </div>
+                          {user.course_interest && user.course_interest.length > 0 && (
+                            <div className="flex items-center gap-1 mt-1">
+                              <BookOpen className="h-3 w-3 text-primary" />
+                              <span className="text-xs text-primary truncate max-w-[200px]">
+                                {user.course_interest.slice(0, 2).join(', ')}
+                                {user.course_interest.length > 2 && ` +${user.course_interest.length - 2}`}
+                              </span>
+                            </div>
+                          )}
                         </div>
                         <div className="text-xs text-muted-foreground text-right">
                           {user.created_at

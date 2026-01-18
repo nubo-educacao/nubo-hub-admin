@@ -1,9 +1,8 @@
-import { Users, MessageSquare, Heart, TrendingUp, AlertTriangle, Clock, MapPin } from "lucide-react";
+import { Users, MessageSquare, Heart, TrendingUp, Clock, MapPin } from "lucide-react";
 import { DashboardHeader } from "@/components/analytics/DashboardHeader";
 import { StatCard } from "@/components/analytics/StatCard";
 import { ActivityChart } from "@/components/analytics/ActivityChart";
 import { TopCoursesChart } from "@/components/analytics/TopCoursesChart";
-import { ErrorLogPanel } from "@/components/analytics/ErrorLogPanel";
 import { FlowFunnelChart } from "@/components/analytics/FlowFunnelChart";
 import { UserPreferencesChart } from "@/components/analytics/UserPreferencesChart";
 import { TopUsersChart } from "@/components/analytics/TopUsersChart";
@@ -21,10 +20,10 @@ const Index = () => {
 
       <main className="container py-6 space-y-6">
         {/* Stats Overview */}
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {statsLoading ? (
             <>
-              {[...Array(4)].map((_, i) => (
+              {[...Array(3)].map((_, i) => (
                 <Skeleton key={i} className="h-32 w-full" />
               ))}
             </>
@@ -51,14 +50,6 @@ const Index = () => {
                 icon={Heart}
                 variant="success"
               />
-              <StatCard
-                title="Erros Hoje"
-                value={stats?.errorsToday.toString() || "0"}
-                change={stats?.errorsChange}
-                changeLabel="vs ontem"
-                icon={AlertTriangle}
-                variant={stats?.errorsToday === 0 ? "success" : "warning"}
-              />
             </>
           )}
         </section>
@@ -76,10 +67,9 @@ const Index = () => {
         </section>
 
         {/* Charts Row 3 */}
-        <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <FlowFunnelChart />
           <UserPreferencesChart />
-          <ErrorLogPanel />
         </section>
 
         {/* Chat Examples */}
