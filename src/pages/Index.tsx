@@ -63,12 +63,12 @@ const Index = () => {
         {/* Charts Row 2 - Rankings */}
         <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <TopUsersChart />
-          <LocationChart />
+          <FlowFunnelChart />
         </section>
 
         {/* Charts Row 3 */}
         <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <FlowFunnelChart />
+          <LocationChart />
           <UserPreferencesChart />
         </section>
 
