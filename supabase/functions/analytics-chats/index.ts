@@ -25,6 +25,7 @@ interface UserConversation {
   total_messages: number;
   workflow: string | null;
   funnel_stage: string | null;
+  has_more_messages: boolean;
   messages: ChatMessage[];
 }
 
@@ -58,11 +59,57 @@ Deno.serve(async (req) => {
 
     // Parse request body for optional filters
     let limit = 10
+    let body: { limit?: number; user_id?: string; offset?: number; messages_limit?: number } = {}
     try {
-      const body = await req.json()
+      body = await req.json()
       if (body.limit) limit = Math.min(body.limit, 50)
     } catch {
       // Use defaults
+    }
+
+    // Handle request for more messages from a specific user
+    if (body.user_id && body.offset !== undefined) {
+      const messagesLimit = body.messages_limit || 20
+      
+      // Get total message count for this user
+      const { count: totalCount } = await supabase
+        .from('chat_messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', body.user_id)
+
+      // Fetch messages with offset (ordered DESC to get most recent, then reverse)
+      const { data: messages, error: messagesError } = await supabase
+        .from('chat_messages')
+        .select('id, content, sender, workflow, created_at')
+        .eq('user_id', body.user_id)
+        .order('created_at', { ascending: false })
+        .range(body.offset, body.offset + messagesLimit - 1)
+
+      if (messagesError) {
+        console.error('Error fetching messages:', messagesError)
+        throw messagesError
+      }
+
+      // Reverse to get chronological order
+      const orderedMessages = (messages || []).reverse()
+      const total = totalCount || 0
+      const hasMore = total > body.offset + messagesLimit
+
+      console.log(`Returning ${orderedMessages.length} messages for user ${body.user_id} (offset: ${body.offset}, total: ${total})`)
+
+      return new Response(JSON.stringify({
+        messages: orderedMessages.map(m => ({
+          id: m.id,
+          content: m.content || '',
+          sender: m.sender || 'user',
+          workflow: m.workflow,
+          created_at: m.created_at || ''
+        })),
+        has_more: hasMore,
+        total: total
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     // Get unique user_ids with recent messages (last 30 days)
@@ -176,7 +223,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fetch messages for each user (last 20 messages per user)
+    // Fetch messages for each user (last 20 messages per user, most recent first then reverse)
     const conversations: UserConversation[] = []
 
     for (const userId of uniqueUserIds) {
@@ -184,7 +231,7 @@ Deno.serve(async (req) => {
         .from('chat_messages')
         .select('id, content, sender, workflow, created_at')
         .eq('user_id', userId)
-        .order('created_at', { ascending: true })
+        .order('created_at', { ascending: false })
         .limit(20)
 
       if (messagesError) {
@@ -192,10 +239,13 @@ Deno.serve(async (req) => {
         continue
       }
 
-      if (messages && messages.length > 0) {
+      // Reverse to get chronological order (oldest first in the array)
+      const orderedMessages = (messages || []).reverse()
+
+      if (orderedMessages.length > 0) {
         // Get the most common workflow for this conversation
         const workflowCounts = new Map<string, number>()
-        for (const msg of messages) {
+        for (const msg of orderedMessages) {
           if (msg.workflow) {
             workflowCounts.set(msg.workflow, (workflowCounts.get(msg.workflow) || 0) + 1)
           }
@@ -210,7 +260,7 @@ Deno.serve(async (req) => {
         }
 
         const profile = profileMap.get(userId)
-        const firstMessage = messages[0]
+        const firstMessage = orderedMessages[0]
 
         // Determine funnel stage
         const funnelStage = determineFunnelStage(
@@ -231,10 +281,11 @@ Deno.serve(async (req) => {
           education: profile?.education || null,
           active_workflow: profile?.active_workflow || null,
           first_contact: firstMessage?.created_at || profile?.created_at || null,
-          total_messages: messageCountMap.get(userId) || messages.length,
+          total_messages: messageCountMap.get(userId) || orderedMessages.length,
           workflow: dominantWorkflow,
           funnel_stage: funnelStage,
-          messages: messages.map(m => ({
+          has_more_messages: (messageCountMap.get(userId) || orderedMessages.length) > 20,
+          messages: orderedMessages.map(m => ({
             id: m.id,
             content: m.content || '',
             sender: m.sender || 'user',
