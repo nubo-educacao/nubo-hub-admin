@@ -1668,58 +1668,38 @@ export type Database = {
           similarity: number
         }[]
       }
-      match_opportunities:
-        | {
-            Args: {
-              city_names?: string[]
-              course_interests?: string[]
-              enem_score?: number
-              income_per_capita?: number
-              page_number?: number
-              page_size?: number
-              preferred_shifts?: string[]
-              program_preference?: string
-              quota_types?: string[]
-              state_names?: string[]
-              university_preference?: string
-              user_lat?: number
-              user_long?: number
-            }
-            Returns: {
-              campus_city: string
-              campus_state: string
-              course_id: string
-              course_name: string
-              distance_km: number
-              institution_name: string
-              opportunities_json: Json
-            }[]
-          }
-        | {
-            Args: {
-              city_names?: string[]
-              course_interests?: string[]
-              enem_score?: number
-              income_per_capita?: number
-              page_number?: number
-              page_size?: number
-              preferred_shifts?: string[]
-              program_preference?: string
-              quota_types?: string[]
-              state_names?: string[]
-              user_lat?: number
-              user_long?: number
-            }
-            Returns: {
-              campus_city: string
-              campus_state: string
-              course_id: string
-              course_name: string
-              distance_km: number
-              institution_name: string
-              opportunities_json: Json
-            }[]
-          }
+      match_opportunities: {
+        Args: {
+          city_names: string[]
+          course_interests: string[]
+          enem_score: number
+          income_per_capita: number
+          page_number?: number
+          page_size?: number
+          preferred_shifts: string[]
+          program_preference: string
+          quota_types: string[]
+          state_names: string[]
+          university_preference: string
+          user_lat: number
+          user_long: number
+        }
+        Returns: {
+          campus_city: string
+          campus_latitude: number
+          campus_longitude: number
+          campus_state: string
+          concurrency_tags: Json
+          course_id: string
+          course_name: string
+          cutoff_score: number
+          institution_name: string
+          opportunitiessisuvacancies: Json
+          opportunity_type: string
+          scholarship_tags: Json
+          shift: string
+        }[]
+      }
       refresh_course_catalog: { Args: never; Returns: undefined }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
