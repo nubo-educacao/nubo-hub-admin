@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { MessageSquare, ChevronLeft, ChevronRight, User, Cloud, Loader2, MapPin, GraduationCap, Calendar, Hash, Filter, GitBranch, Target } from "lucide-react";
+import { MessageSquare, ChevronLeft, ChevronRight, User, Cloud, Loader2, MapPin, GraduationCap, Calendar, Hash, Filter, GitBranch, Target, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
@@ -81,6 +82,7 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [funnelFilter, setFunnelFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchConversations = async () => {
     try {
@@ -116,15 +118,18 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
     fetchConversations();
   }, []);
 
-  // Filter conversations by funnel stage
-  const filteredConversations = funnelFilter === 'all' 
-    ? conversations 
-    : conversations.filter(c => c.funnel_stage === funnelFilter);
+  // Filter conversations by funnel stage and search query
+  const filteredConversations = conversations.filter(c => {
+    const matchesFunnel = funnelFilter === 'all' || c.funnel_stage === funnelFilter;
+    const matchesSearch = searchQuery === '' || 
+      c.user_name.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesFunnel && matchesSearch;
+  });
 
-  // Reset index when filter changes
+  // Reset index when filter or search changes
   useEffect(() => {
     setCurrentIndex(0);
-  }, [funnelFilter]);
+  }, [funnelFilter, searchQuery]);
 
   const currentConversation = filteredConversations[currentIndex];
 
@@ -169,6 +174,19 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
     <div className="flex h-full gap-4">
       {/* Left Sidebar - User List & Info (compact) */}
       <div className="w-72 flex-shrink-0 flex flex-col border-r border-border pr-4">
+        {/* Search */}
+        <div className="mb-3 flex-shrink-0">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por nome..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+        </div>
+
         {/* Filter */}
         <div className="mb-3 flex-shrink-0">
           <div className="flex items-center gap-2 mb-2">
