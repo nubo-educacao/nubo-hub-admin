@@ -45,7 +45,7 @@ const Index = () => {
               />
               <StatCard
                 title="Favoritos Salvos"
-                value={stats?.favoritesSaved.toLocaleString() || "0"}
+                value={stats?.totalFavorites?.toLocaleString() || "0"}
                 change={stats?.favoritesChange}
                 icon={Heart}
                 variant="success"

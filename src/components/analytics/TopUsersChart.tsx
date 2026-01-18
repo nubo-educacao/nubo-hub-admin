@@ -53,55 +53,44 @@ export function TopUsersChart() {
 
           return (
             <div
-              key={user.user_id}
+              key={user.id}
               className={cn(
-                "relative rounded-lg border p-4 transition-all hover:shadow-md",
-                "opacity-0 animate-fade-in",
+                "relative rounded-lg border p-4 transition-all hover:shadow-md opacity-0 animate-fade-in",
                 isTop3 && "border-primary/30 bg-primary/5"
               )}
               style={{ animationDelay: `${index * 50}ms` }}
             >
               <div className="flex items-center gap-4">
-                {/* Rank */}
-                <div
-                  className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold",
-                    index === 0 && "bg-amber-500 text-white",
-                    index === 1 && "bg-slate-400 text-white",
-                    index === 2 && "bg-amber-700 text-white",
-                    index > 2 && "bg-muted text-muted-foreground"
-                  )}
-                >
+                <div className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold",
+                  index === 0 && "bg-amber-500 text-white",
+                  index === 1 && "bg-slate-400 text-white",
+                  index === 2 && "bg-amber-700 text-white",
+                  index > 2 && "bg-muted text-muted-foreground"
+                )}>
                   {index === 0 ? <Trophy className="h-4 w-4" /> : index + 1}
                 </div>
 
-                {/* User Info */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium truncate">
-                      {user.full_name || `Usuário ${user.user_id.slice(0, 8)}...`}
-                    </span>
-                  </div>
+                  <span className="font-medium truncate">{user.name}</span>
                   <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <MessageSquare className="h-3 w-3" />
-                      {user.message_count} msgs
+                      {user.messages} msgs
                     </span>
                     <span className="flex items-center gap-1">
                       <Heart className="h-3 w-3" />
-                      {user.favorites_count} favs
+                      {user.favorites} favs
                     </span>
                   </div>
                 </div>
 
-                {/* Score */}
                 <div className="text-right">
                   <span className="text-lg font-bold text-primary">{user.score}</span>
                   <p className="text-xs text-muted-foreground">pontos</p>
                 </div>
               </div>
 
-              {/* Progress bar */}
               <div className="mt-3 h-1.5 w-full rounded-full bg-muted overflow-hidden">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-primary to-chart-2 transition-all duration-500"
