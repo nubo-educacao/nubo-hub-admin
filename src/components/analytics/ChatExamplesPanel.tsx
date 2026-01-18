@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { MessageSquare, ChevronLeft, ChevronRight, User, Cloud, Loader2, MapPin, GraduationCap, Calendar, Hash, Filter, GitBranch } from "lucide-react";
+import { MessageSquare, ChevronLeft, ChevronRight, User, Cloud, Loader2, MapPin, GraduationCap, Calendar, Hash, Filter, GitBranch, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,6 +26,7 @@ interface UserConversation {
   user_id: string;
   user_name: string;
   city: string | null;
+  location_preference: string | null;
   age: number | null;
   education: string | null;
   active_workflow: string | null;
@@ -137,68 +138,45 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
 
   if (loading) {
     return (
-      <div className="flex flex-col h-full">
-        <div className="mb-4 flex items-center gap-2">
-          <MessageSquare className="h-5 w-5 text-primary" />
-          <h3 className="text-lg font-semibold font-display">Conversas Recentes</h3>
-        </div>
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex flex-col h-full">
-        <div className="mb-4 flex items-center gap-2">
-          <MessageSquare className="h-5 w-5 text-primary" />
-          <h3 className="text-lg font-semibold font-display">Conversas Recentes</h3>
-        </div>
-        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-          <MessageSquare className="h-12 w-12 mb-4 opacity-50" />
-          <p className="mb-4">{error}</p>
-          <Button variant="outline" size="sm" onClick={fetchConversations}>
-            Tentar novamente
-          </Button>
-        </div>
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+        <MessageSquare className="h-12 w-12 mb-4 opacity-50" />
+        <p className="mb-4">{error}</p>
+        <Button variant="outline" size="sm" onClick={fetchConversations}>
+          Tentar novamente
+        </Button>
       </div>
     );
   }
 
   if (conversations.length === 0) {
     return (
-      <div className="flex flex-col h-full">
-        <div className="mb-4 flex items-center gap-2">
-          <MessageSquare className="h-5 w-5 text-primary" />
-          <h3 className="text-lg font-semibold font-display">Conversas Recentes</h3>
-        </div>
-        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-          <MessageSquare className="h-12 w-12 mb-4 opacity-50" />
-          <p>Nenhuma conversa encontrada</p>
-        </div>
+      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+        <MessageSquare className="h-12 w-12 mb-4 opacity-50" />
+        <p>Nenhuma conversa encontrada</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header with Filter */}
-      <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <MessageSquare className="h-5 w-5 text-primary" />
-          <h3 className="text-lg font-semibold font-display">Conversas Recentes</h3>
-          <span className="text-sm text-muted-foreground">
-            ({currentIndex + 1} de {filteredConversations.length})
-          </span>
-        </div>
-        
-        {/* Funnel Filter */}
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-muted-foreground" />
+    <div className="flex h-full gap-4">
+      {/* Left Sidebar - User List & Info (compact) */}
+      <div className="w-72 flex-shrink-0 flex flex-col border-r border-border pr-4">
+        {/* Filter */}
+        <div className="mb-3 flex-shrink-0">
+          <div className="flex items-center gap-2 mb-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium">Filtrar por etapa</span>
+          </div>
           <Select value={funnelFilter} onValueChange={setFunnelFilter}>
-            <SelectTrigger className="w-[200px]">
+            <SelectTrigger className="w-full">
               <SelectValue placeholder="Filtrar por etapa" />
             </SelectTrigger>
             <SelectContent>
@@ -210,188 +188,208 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
             </SelectContent>
           </Select>
         </div>
-      </div>
 
-      {filteredConversations.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-          <Filter className="h-12 w-12 mb-4 opacity-50" />
-          <p>Nenhuma conversa nesta etapa do funil</p>
-          <Button variant="outline" size="sm" className="mt-4" onClick={() => setFunnelFilter('all')}>
-            Limpar filtro
+        {/* Navigation */}
+        <div className="flex items-center justify-between mb-3 flex-shrink-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={goToPrevious}
+            disabled={filteredConversations.length <= 1}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            {currentIndex + 1} de {filteredConversations.length}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={goToNext}
+            disabled={filteredConversations.length <= 1}
+          >
+            <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-      ) : (
-        <>
-          {/* User Profile Card - Fixed at top */}
-          <div className="mb-4 p-4 rounded-lg bg-muted/50 border border-border flex-shrink-0">
-            <div className="flex items-center justify-between mb-3">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={goToPrevious}
-                disabled={filteredConversations.length <= 1}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
 
-              <div className="flex-1 text-center">
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    <User className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold">{currentConversation?.user_name}</h4>
-                    {currentConversation?.age && (
-                      <span className="text-xs text-muted-foreground">{currentConversation.age} anos</span>
-                    )}
-                  </div>
+        {filteredConversations.length === 0 ? (
+          <div className="flex flex-col items-center justify-center flex-1 text-muted-foreground">
+            <Filter className="h-8 w-8 mb-2 opacity-50" />
+            <p className="text-sm text-center">Nenhuma conversa nesta etapa</p>
+            <Button variant="outline" size="sm" className="mt-2" onClick={() => setFunnelFilter('all')}>
+              Limpar filtro
+            </Button>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto">
+            {/* Current User Card */}
+            <div className="p-3 rounded-lg bg-muted/50 border border-border">
+              {/* User Header */}
+              <div className="flex items-center gap-2 mb-3">
+                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <User className="h-5 w-5 text-primary" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-semibold truncate">{currentConversation?.user_name}</h4>
+                  {currentConversation?.age && (
+                    <span className="text-xs text-muted-foreground">{currentConversation.age} anos</span>
+                  )}
                 </div>
               </div>
 
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={goToNext}
-                disabled={filteredConversations.length <= 1}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-
-            {/* Funnel Stage Badge - Highlighted */}
-            {currentConversation?.funnel_stage && (
-              <div className="flex items-center justify-center mb-3">
+              {/* Funnel Stage Badge */}
+              {currentConversation?.funnel_stage && (
                 <Badge 
                   variant="outline" 
                   className={cn(
-                    "px-3 py-1 text-sm font-medium",
+                    "w-full justify-center mb-3 text-xs",
                     funnelStageColors[currentConversation.funnel_stage] || "bg-muted"
                   )}
                 >
-                  <GitBranch className="h-3.5 w-3.5 mr-1.5" />
+                  <GitBranch className="h-3 w-3 mr-1" />
                   {currentConversation.funnel_stage}
                 </Badge>
-              </div>
-            )}
+              )}
 
-            {/* User Details Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-              {currentConversation?.city && (
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <MapPin className="h-3.5 w-3.5" />
-                  <span className="truncate">{currentConversation.city}</span>
-                </div>
-              )}
-              {currentConversation?.education && (
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <GraduationCap className="h-3.5 w-3.5" />
-                  <span className="truncate">
-                    {educationLabels[currentConversation.education] || currentConversation.education}
-                  </span>
-                </div>
-              )}
-              {currentConversation?.first_contact && (
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Calendar className="h-3.5 w-3.5" />
-                  <span className="truncate">
-                    {formatDistanceToNow(new Date(currentConversation.first_contact), { 
-                      addSuffix: true, 
-                      locale: ptBR 
-                    })}
-                  </span>
-                </div>
-              )}
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                <Hash className="h-3.5 w-3.5" />
-                <span>{currentConversation?.total_messages || 0} msgs</span>
-              </div>
-            </div>
-
-            {/* Workflow Badges */}
-            <div className="flex flex-wrap gap-2 mt-3">
-              {currentConversation?.workflow && (
-                <Badge variant="secondary">
-                  {workflowLabels[currentConversation.workflow] || currentConversation.workflow}
-                </Badge>
-              )}
-              {currentConversation?.active_workflow && currentConversation.active_workflow !== currentConversation.workflow && (
-                <Badge variant="outline">
-                  Atual: {workflowLabels[currentConversation.active_workflow] || currentConversation.active_workflow}
-                </Badge>
-              )}
-            </div>
-          </div>
-
-          {/* Chat Messages - Scrollable area with fixed height */}
-          <div className="flex-1 min-h-0 overflow-hidden rounded-lg border border-border bg-card">
-            <div className="h-[calc(100vh-420px)] min-h-[400px] overflow-y-auto p-4">
-              <div className="space-y-3">
-                {currentConversation?.messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={cn(
-                      "flex gap-2",
-                      message.sender === 'user' ? "justify-start" : "justify-end"
-                    )}
-                  >
-                    {message.sender === 'user' && (
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                        <User className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    )}
-                    
-                    <div
-                      className={cn(
-                        "max-w-[80%] rounded-lg px-3 py-2 text-sm",
-                        message.sender === 'user'
-                          ? "bg-muted text-foreground"
-                          : "bg-primary text-primary-foreground"
-                      )}
-                    >
-                      <p className="whitespace-pre-wrap break-words">
-                        {message.content?.slice(0, 500)}
-                        {message.content && message.content.length > 500 && '...'}
-                      </p>
-                      <p className={cn(
-                        "text-xs mt-1 opacity-70",
-                        message.sender === 'user' ? "text-muted-foreground" : "text-primary-foreground/70"
-                      )}>
-                        {message.created_at && new Date(message.created_at).toLocaleTimeString('pt-BR', {
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </p>
+              {/* User Details */}
+              <div className="space-y-2 text-xs">
+                {/* Location: Where user IS from */}
+                {currentConversation?.city && (
+                  <div className="flex items-start gap-2 text-muted-foreground">
+                    <MapPin className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <span className="text-foreground/70">Mora em:</span>
+                      <p className="truncate font-medium text-foreground">{currentConversation.city}</p>
                     </div>
-
-                    {message.sender !== 'user' && (
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Cloud className="h-4 w-4 text-primary" />
-                      </div>
-                    )}
                   </div>
-                ))}
+                )}
+
+                {/* Location: Where user WANTS to study */}
+                {currentConversation?.location_preference && (
+                  <div className="flex items-start gap-2 text-muted-foreground">
+                    <Target className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-chart-2" />
+                    <div className="min-w-0">
+                      <span className="text-foreground/70">Quer estudar em:</span>
+                      <p className="truncate font-medium text-chart-2">{currentConversation.location_preference}</p>
+                    </div>
+                  </div>
+                )}
+
+                {currentConversation?.education && (
+                  <div className="flex items-start gap-2 text-muted-foreground">
+                    <GraduationCap className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+                    <span className="truncate">
+                      {educationLabels[currentConversation.education] || currentConversation.education}
+                    </span>
+                  </div>
+                )}
+
+                {currentConversation?.first_contact && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Calendar className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span className="truncate">
+                      {formatDistanceToNow(new Date(currentConversation.first_contact), { 
+                        addSuffix: true, 
+                        locale: ptBR 
+                      })}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Hash className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span>{currentConversation?.total_messages || 0} mensagens</span>
+                </div>
+              </div>
+
+              {/* Workflow Badges */}
+              <div className="flex flex-wrap gap-1 mt-3">
+                {currentConversation?.workflow && (
+                  <Badge variant="secondary" className="text-xs">
+                    {workflowLabels[currentConversation.workflow] || currentConversation.workflow}
+                  </Badge>
+                )}
+                {currentConversation?.active_workflow && currentConversation.active_workflow !== currentConversation.workflow && (
+                  <Badge variant="outline" className="text-xs">
+                    {workflowLabels[currentConversation.active_workflow] || currentConversation.active_workflow}
+                  </Badge>
+                )}
               </div>
             </div>
           </div>
+        )}
+      </div>
 
-          {/* Insight - Fixed at bottom */}
-          <div className="mt-4 p-3 rounded-lg bg-muted/50 border border-border flex-shrink-0">
-            <p className="text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground">💡 Insight:</span> {' '}
-              {currentConversation?.total_messages || 0} mensagens totais.
-              {currentConversation?.funnel_stage && (
-                <> Etapa: <strong>{currentConversation.funnel_stage}</strong>.</>
-              )}
-              {currentConversation?.workflow && (
-                <> Fluxo: <strong>{workflowLabels[currentConversation.workflow] || currentConversation.workflow}</strong>.</>
-              )}
-              {currentConversation?.city && (
-                <> Local: <strong>{currentConversation.city}</strong>.</>
+      {/* Main Chat Area - Takes remaining space */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Chat Header */}
+        <div className="flex items-center gap-2 mb-3 pb-3 border-b border-border flex-shrink-0">
+          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+            <Cloud className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-sm">Conversa com Cloudinha</h3>
+            <p className="text-xs text-muted-foreground">
+              {currentConversation?.user_name}
+              {currentConversation?.city && ` • ${currentConversation.city}`}
+              {currentConversation?.location_preference && currentConversation.location_preference !== currentConversation.city && (
+                <span className="text-chart-2"> → {currentConversation.location_preference}</span>
               )}
             </p>
           </div>
-        </>
-      )}
+        </div>
+
+        {/* Chat Messages - Full remaining height */}
+        {filteredConversations.length > 0 && (
+          <div className="flex-1 overflow-y-auto rounded-lg border border-border bg-card/50 p-4">
+            <div className="space-y-4">
+              {currentConversation?.messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={cn(
+                    "flex gap-3",
+                    message.sender === 'user' ? "justify-start" : "justify-end"
+                  )}
+                >
+                  {message.sender === 'user' && (
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                      <User className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  )}
+                  
+                  <div
+                    className={cn(
+                      "max-w-[75%] rounded-2xl px-4 py-3",
+                      message.sender === 'user'
+                        ? "bg-muted text-foreground rounded-tl-sm"
+                        : "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-tr-sm"
+                    )}
+                  >
+                    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+                      {message.content}
+                    </p>
+                    <p className={cn(
+                      "text-[10px] mt-2",
+                      message.sender === 'user' ? "text-muted-foreground" : "text-primary-foreground/60"
+                    )}>
+                      {message.created_at && new Date(message.created_at).toLocaleTimeString('pt-BR', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </p>
+                  </div>
+
+                  {message.sender !== 'user' && (
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center">
+                      <Cloud className="h-4 w-4 text-primary-foreground" />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
