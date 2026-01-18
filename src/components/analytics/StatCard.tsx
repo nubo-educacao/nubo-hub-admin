@@ -55,7 +55,7 @@ export function StatCard({
                   <TooltipTrigger asChild>
                     <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
                   </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-xs">
+                  <TooltipContent side="bottom" className="max-w-xs">
                     <p className="text-xs">{tooltip}</p>
                   </TooltipContent>
                 </Tooltip>
