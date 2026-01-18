@@ -194,7 +194,13 @@ export async function fetchLocationData(): Promise<LocationData[]> {
   return response.data as LocationData[];
 }
 
-// Opportunity Types interfaces
+// Opportunity Types interfaces - Updated for user behavior focus
+export interface SavedOpportunity {
+  type: string;
+  count: number;
+  uniqueUsers: number;
+}
+
 export interface ProgramPreference {
   name: string;
   count: number;
@@ -206,16 +212,25 @@ export interface ModalityBreakdown {
   count: number;
 }
 
+export interface ConversionInsight {
+  interestedInSisu: number;
+  savedSisu: number;
+  interestedInProuni: number;
+  savedProuni: number;
+}
+
 export interface OpportunityTypesData {
+  savedOpportunities: {
+    byType: SavedOpportunity[];
+    withVagasOciosas: number;
+    total: number;
+  };
   programPreferences: ProgramPreference[];
   vagasOciosas: {
     total: number;
     byModality: ModalityBreakdown[];
   };
-  totalOpportunities: {
-    sisu: number;
-    prouni: number;
-  };
+  conversionInsight: ConversionInsight;
 }
 
 // Fetch opportunity types data
