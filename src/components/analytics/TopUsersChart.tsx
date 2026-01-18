@@ -90,8 +90,8 @@ export function TopUsersChart() {
                   </div>
 
                   <div className="text-right">
-                    <span className="text-lg font-bold text-primary">{user.score}</span>
-                    <p className="text-xs text-muted-foreground">pontos</p>
+                    <span className="text-lg font-bold text-primary">{user.messages}</span>
+                    <p className="text-xs text-muted-foreground">mensagens</p>
                   </div>
                 </div>
 
