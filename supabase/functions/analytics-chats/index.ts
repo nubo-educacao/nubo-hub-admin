@@ -59,7 +59,14 @@ Deno.serve(async (req) => {
 
     // Parse request body for optional filters
     let limit = 10
-    let body: { limit?: number; user_id?: string; offset?: number; messages_limit?: number } = {}
+    let body: { 
+      limit?: number; 
+      user_id?: string; 
+      offset?: number; 
+      messages_limit?: number;
+      date_from?: string;
+      date_to?: string;
+    } = {}
     try {
       body = await req.json()
       if (body.limit) limit = Math.min(body.limit, 50)
@@ -67,21 +74,39 @@ Deno.serve(async (req) => {
       // Use defaults
     }
 
+    // Parse date filters
+    const dateFrom = body.date_from ? new Date(body.date_from) : null
+    const dateTo = body.date_to ? new Date(body.date_to) : null
+    // If dateTo is provided, set it to end of day
+    if (dateTo) {
+      dateTo.setHours(23, 59, 59, 999)
+    }
+
     // Handle request for more messages from a specific user
     if (body.user_id && body.offset !== undefined) {
       const messagesLimit = body.messages_limit || 20
       
-      // Get total message count for this user
-      const { count: totalCount } = await supabase
+      // Build query with optional date filters
+      let countQuery = supabase
         .from('chat_messages')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', body.user_id)
+      
+      if (dateFrom) countQuery = countQuery.gte('created_at', dateFrom.toISOString())
+      if (dateTo) countQuery = countQuery.lte('created_at', dateTo.toISOString())
+      
+      const { count: totalCount } = await countQuery
 
       // Fetch messages with offset (ordered DESC to get most recent, then reverse)
-      const { data: messages, error: messagesError } = await supabase
+      let messagesQuery = supabase
         .from('chat_messages')
         .select('id, content, sender, workflow, created_at')
         .eq('user_id', body.user_id)
+      
+      if (dateFrom) messagesQuery = messagesQuery.gte('created_at', dateFrom.toISOString())
+      if (dateTo) messagesQuery = messagesQuery.lte('created_at', dateTo.toISOString())
+      
+      const { data: messages, error: messagesError } = await messagesQuery
         .order('created_at', { ascending: false })
         .range(body.offset, body.offset + messagesLimit - 1)
 
@@ -112,16 +137,23 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Get unique user_ids with recent messages (last 30 days)
-    const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    // Get unique user_ids with recent messages
+    // Use date filters if provided, otherwise default to last 30 days
+    const defaultDateFrom = new Date()
+    defaultDateFrom.setDate(defaultDateFrom.getDate() - 30)
+    
+    const effectiveDateFrom = dateFrom || defaultDateFrom
+    const effectiveDateTo = dateTo || new Date()
 
-    const { data: recentUsers, error: usersError } = await supabase
+    let recentUsersQuery = supabase
       .from('chat_messages')
       .select('user_id')
-      .gte('created_at', thirtyDaysAgo.toISOString())
+      .gte('created_at', effectiveDateFrom.toISOString())
+      .lte('created_at', effectiveDateTo.toISOString())
       .not('user_id', 'is', null)
       .order('created_at', { ascending: false })
+
+    const { data: recentUsers, error: usersError } = await recentUsersQuery
 
     if (usersError) {
       console.error('Error fetching recent users:', usersError)
