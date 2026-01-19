@@ -8,6 +8,7 @@ const corsHeaders = {
 // Descriptions for each funnel step
 const funnelDescriptions: Record<string, string> = {
   'Cadastrados': 'Total de usuários na tabela user_profiles',
+  'Ativação': 'Usuários que enviaram ao menos 1 mensagem (registro em chat_messages)',
   'Onboarding Completo': 'Usuários com onboarding_completed = true na tabela user_profiles',
   'Preferências Definidas': 'Usuários únicos com registro em user_preferences',
   'Match Iniciado': 'Usuários únicos que iniciaram o workflow de match (workflow = match_workflow em chat_messages)',
@@ -52,6 +53,14 @@ Deno.serve(async (req) => {
       .select('id, full_name, city, created_at', { count: 'exact' })
     
     const allProfileIds = allProfiles?.map(p => p.id) || []
+
+    // Step 1.5: Users who sent at least 1 message (Activation)
+    const { data: activatedMessages } = await supabase
+      .from('chat_messages')
+      .select('user_id')
+    
+    const activatedUserIds = [...new Set(activatedMessages?.map(m => m.user_id).filter(Boolean) || [])]
+    const uniqueActivatedUsers = activatedUserIds.length
 
     // Step 2: Users who completed onboarding
     const { data: onboardingProfiles, count: onboardingCompleted } = await supabase
@@ -122,6 +131,7 @@ Deno.serve(async (req) => {
       // Get all unique user IDs across all steps
       const allUserIds = [...new Set([
         ...allProfileIds,
+        ...activatedUserIds,
         ...onboardingUserIds,
         ...preferencesUserIds,
         ...matchUserIds,
@@ -206,6 +216,15 @@ Deno.serve(async (req) => {
         ...(includeDetails && { 
           user_ids: allProfileIds,
           users: getUsersData(allProfileIds)
+        })
+      },
+      { 
+        etapa: 'Ativação', 
+        valor: uniqueActivatedUsers,
+        description: funnelDescriptions['Ativação'],
+        ...(includeDetails && { 
+          user_ids: activatedUserIds,
+          users: getUsersData(activatedUserIds as string[])
         })
       },
       { 
