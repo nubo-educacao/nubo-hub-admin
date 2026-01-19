@@ -170,11 +170,25 @@ Deno.serve(async (req) => {
       userSessionCounts.set(userId, sessions)
     })
 
+    // Get user profiles for names
+    const { data: profiles } = await supabase
+      .from('user_profiles')
+      .select('id, full_name')
+
+    const profileMap = new Map<string, string>()
+    profiles?.forEach(p => {
+      profileMap.set(p.id, p.full_name || 'Usuário Anônimo')
+    })
+
     // Power users are those with 2+ sessions (indicating repeated access)
-    const powerUsersList: { userId: string; accessCount: number }[] = []
+    const powerUsersList: { userId: string; userName: string; accessCount: number }[] = []
     userSessionCounts.forEach((sessions, userId) => {
       if (sessions >= 2) {
-        powerUsersList.push({ userId, accessCount: sessions })
+        powerUsersList.push({ 
+          userId, 
+          userName: profileMap.get(userId) || 'Usuário Anônimo',
+          accessCount: sessions 
+        })
       }
     })
     powerUsersList.sort((a, b) => b.accessCount - a.accessCount)
