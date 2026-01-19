@@ -60,7 +60,6 @@ Deno.serve(async (req) => {
     )
 
     // Parse request body for optional filters
-    let limit = 10
     let body: { 
       limit?: number; 
       user_id?: string; 
@@ -71,7 +70,6 @@ Deno.serve(async (req) => {
     } = {}
     try {
       body = await req.json()
-      if (body.limit) limit = Math.min(body.limit, 50)
     } catch {
       // Use defaults
     }
@@ -162,14 +160,13 @@ Deno.serve(async (req) => {
       throw usersError
     }
 
-    // Get unique user IDs with most recent activity first
+    // Get unique user IDs with most recent activity first (NO LIMIT - get all)
     const uniqueUserIds: string[] = []
     const seenUsers = new Set<string>()
     for (const row of recentUsers || []) {
       if (row.user_id && !seenUsers.has(row.user_id)) {
         seenUsers.add(row.user_id)
         uniqueUserIds.push(row.user_id)
-        if (uniqueUserIds.length >= limit) break
       }
     }
 
