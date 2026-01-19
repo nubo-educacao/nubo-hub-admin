@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { useFunnelData } from "@/hooks/useAnalyticsData";
 import { Skeleton } from "@/components/ui/skeleton";
-import { GitBranch, Info, Users, Download, Phone, BookOpen } from "lucide-react";
+import { GitBranch, Info, Users, Download, Phone, BookOpen, RefreshCw } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -78,42 +78,50 @@ function formatPhone(phone: string | null): string {
 }
 
 export function FlowFunnelChart() {
-  const { data: funnelData, isLoading, error } = useFunnelData();
+  const { data: funnelData, isLoading, error, refetch, isRefetching } = useFunnelData();
   const [selectedStep, setSelectedStep] = useState<FunnelStepLocal | null>(null);
   const [funnelWithDetails, setFunnelWithDetails] = useState<FunnelStepLocal[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [exporting, setExporting] = useState(false);
 
+  // Refresh funnel details when main data is refetched
+  const handleRefresh = async () => {
+    await refetch();
+    // Also refresh the detailed data
+    fetchFunnelWithDetails();
+  };
+
+  const fetchFunnelWithDetails = async () => {
+    setLoadingDetails(true);
+    try {
+      console.log('Fetching funnel with details...');
+      const { data, error } = await supabase.functions.invoke('analytics-funnel', {
+        body: { details: true }
+      });
+      
+      if (error) {
+        console.error('Error from analytics-funnel:', error);
+        toast.error('Erro ao carregar detalhes do funil');
+        return;
+      }
+      
+      if (data && Array.isArray(data)) {
+        console.log('Funnel with details loaded:', data.length, 'steps');
+        console.log('First step has', data[0]?.users?.length || 0, 'users');
+        setFunnelWithDetails(data);
+      } else {
+        console.warn('Unexpected data format from analytics-funnel:', data);
+      }
+    } catch (e) {
+      console.error('Exception fetching funnel details:', e);
+      toast.error('Erro ao carregar detalhes do funil');
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
   // Fetch funnel data with full user details for drill-down
   useEffect(() => {
-    const fetchFunnelWithDetails = async () => {
-      setLoadingDetails(true);
-      try {
-        console.log('Fetching funnel with details...');
-        const { data, error } = await supabase.functions.invoke('analytics-funnel', {
-          body: { details: true }
-        });
-        
-        if (error) {
-          console.error('Error from analytics-funnel:', error);
-          toast.error('Erro ao carregar detalhes do funil');
-          return;
-        }
-        
-        if (data && Array.isArray(data)) {
-          console.log('Funnel with details loaded:', data.length, 'steps');
-          console.log('First step has', data[0]?.users?.length || 0, 'users');
-          setFunnelWithDetails(data);
-        } else {
-          console.warn('Unexpected data format from analytics-funnel:', data);
-        }
-      } catch (e) {
-        console.error('Exception fetching funnel details:', e);
-        toast.error('Erro ao carregar detalhes do funil');
-      } finally {
-        setLoadingDetails(false);
-      }
-    };
     fetchFunnelWithDetails();
   }, []);
 
@@ -251,15 +259,26 @@ export function FlowFunnelChart() {
             <h3 className="text-lg font-semibold font-display">Funil de Conversão</h3>
             <p className="text-sm text-muted-foreground">Clique em uma etapa para ver os usuários</p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={exportToCSV}
-            disabled={exporting || loadingDetails}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            {exporting ? 'Exportando...' : 'Exportar CSV'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={isRefetching || loadingDetails}
+              title="Atualizar dados"
+            >
+              <RefreshCw className={cn("h-4 w-4", (isRefetching || loadingDetails) && "animate-spin")} />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportToCSV}
+              disabled={exporting || loadingDetails}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              {exporting ? 'Exportando...' : 'Exportar CSV'}
+            </Button>
+          </div>
         </div>
 
         {/* Visual Funnel - Fixed proportional widths for readability */}

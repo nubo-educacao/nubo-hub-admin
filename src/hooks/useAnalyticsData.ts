@@ -42,7 +42,8 @@ export function useFunnelData() {
   return useQuery({
     queryKey: ["funnel-data"],
     queryFn: fetchFunnelData,
-    staleTime: 1000 * 60 * 10,
+    staleTime: 1000 * 30, // 30 seconds for fresher data
+    refetchOnWindowFocus: true,
   });
 }
 
