@@ -36,8 +36,6 @@ export interface FunnelStep {
   color?: string;
   description?: string;
   user_ids?: string[];
-  taxa_conversao?: string; // % from first step (cadastrados)
-  taxa_conversao_anterior?: string | null; // % from previous step
 }
 
 export interface UserPreference {

@@ -5,15 +5,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Descriptions for each funnel step (CUMULATIVE - each step requires previous steps)
+// Descriptions for each funnel step (INDEPENDENT - each step counted separately)
 const funnelDescriptions: Record<string, string> = {
   'Cadastrados': 'Total de usuários na tabela user_profiles',
-  'Ativação': 'Cadastrados que enviaram ao menos 1 mensagem',
-  'Onboarding Completo': 'Ativados que completaram onboarding (onboarding_completed = true)',
-  'Preferências Definidas': 'Onboarding completo que definiram preferências',
-  'Match Iniciado': 'Preferências definidas que iniciaram o workflow de match',
-  'Match Realizado': 'Match iniciado que receberam resultado (workflow_data preenchido)',
-  'Salvaram Favoritos': 'Match realizado que salvaram ao menos 1 favorito',
+  'Ativação': 'Usuários que enviaram ao menos 1 mensagem',
+  'Onboarding Completo': 'Usuários com onboarding_completed = true',
+  'Preferências Definidas': 'Usuários que preencheram preferências',
+  'Match Iniciado': 'Usuários que iniciaram o workflow de match',
+  'Match Realizado': 'Usuários que receberam resultado (workflow_data preenchido)',
+  'Salvaram Favoritos': 'Usuários que salvaram ao menos 1 favorito',
 }
 
 interface UserData {
@@ -72,12 +72,6 @@ async function fetchAllWithPagination<T>(
   return allRecords
 }
 
-// Helper to calculate conversion rate
-function calcConversionRate(current: number, previous: number): string {
-  if (previous === 0) return '0.0'
-  return ((current / previous) * 100).toFixed(1)
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -99,7 +93,7 @@ Deno.serve(async (req) => {
       includeDetails = url.searchParams.get('details') === 'true'
     }
 
-    console.log('Starting CUMULATIVE funnel analysis...')
+    console.log('Starting INDEPENDENT funnel analysis...')
 
     // ============================================
     // STEP 1: Cadastrados - todos os user_profiles
@@ -109,47 +103,41 @@ Deno.serve(async (req) => {
       'user_profiles',
       'id, full_name, city, created_at, onboarding_completed'
     )
-    const cadastradosSet = new Set(allProfiles.map(p => p.id))
-    console.log(`Step 1 - Cadastrados: ${cadastradosSet.size}`)
+    const cadastradosIds = allProfiles.map(p => p.id)
+    console.log(`Step 1 - Cadastrados: ${cadastradosIds.length}`)
 
     // ============================================
-    // STEP 2: Ativação - cadastrados QUE enviaram mensagem
+    // STEP 2: Ativação - usuários que enviaram mensagem (INDEPENDENTE)
     // ============================================
     const activatedMessages = await fetchAllWithPagination<{ user_id: string }>(
       supabase,
       'chat_messages',
       'user_id'
     )
-    const allActivatedIds = [...new Set(activatedMessages.map(m => m.user_id).filter(Boolean))]
-    // CUMULATIVE: only count those who are in cadastradosSet
-    const ativacaoSet = new Set(allActivatedIds.filter(id => cadastradosSet.has(id)))
-    console.log(`Step 2 - Ativação: ${ativacaoSet.size} (of ${allActivatedIds.length} total activated)`)
+    const ativacaoIds = [...new Set(activatedMessages.map(m => m.user_id).filter(Boolean))]
+    console.log(`Step 2 - Ativação: ${ativacaoIds.length}`)
 
     // ============================================
-    // STEP 3: Onboarding Completo - ativados QUE completaram onboarding
+    // STEP 3: Onboarding Completo - usuários com onboarding_completed = true (INDEPENDENTE)
     // ============================================
     const onboardingCompletedIds = allProfiles
       .filter(p => p.onboarding_completed === true)
       .map(p => p.id)
-    // CUMULATIVE: only count those who are in ativacaoSet
-    const onboardingSet = new Set(onboardingCompletedIds.filter(id => ativacaoSet.has(id)))
-    console.log(`Step 3 - Onboarding Completo: ${onboardingSet.size} (of ${onboardingCompletedIds.length} total with onboarding)`)
+    console.log(`Step 3 - Onboarding Completo: ${onboardingCompletedIds.length}`)
 
     // ============================================
-    // STEP 4: Preferências Definidas - onboarding QUE definiram preferências
+    // STEP 4: Preferências Definidas - usuários com preferências (INDEPENDENTE)
     // ============================================
     const preferencesProfiles = await fetchAllWithPagination<{ user_id: string; workflow_data: any; course_interest: string[] | null }>(
       supabase,
       'user_preferences',
       'user_id, workflow_data, course_interest'
     )
-    const allPreferencesIds = [...new Set(preferencesProfiles.map(p => p.user_id).filter(Boolean))]
-    // CUMULATIVE: only count those who are in onboardingSet
-    const preferenciasSet = new Set(allPreferencesIds.filter(id => onboardingSet.has(id)))
-    console.log(`Step 4 - Preferências Definidas: ${preferenciasSet.size} (of ${allPreferencesIds.length} total with preferences)`)
+    const preferenciasIds = [...new Set(preferencesProfiles.map(p => p.user_id).filter(Boolean))]
+    console.log(`Step 4 - Preferências Definidas: ${preferenciasIds.length}`)
 
     // ============================================
-    // STEP 5: Match Iniciado - preferências QUE iniciaram match workflow
+    // STEP 5: Match Iniciado - usuários que iniciaram match workflow (INDEPENDENTE)
     // ============================================
     const matchMessages = await fetchAllWithPagination<{ user_id: string }>(
       supabase,
@@ -157,16 +145,13 @@ Deno.serve(async (req) => {
       'user_id',
       [{ column: 'workflow', operator: 'eq', value: 'match_workflow' }]
     )
-    const allMatchInitiatedIds = [...new Set(matchMessages.map(m => m.user_id).filter(Boolean))]
-    // CUMULATIVE: only count those who are in preferenciasSet
-    const matchIniciadoSet = new Set(allMatchInitiatedIds.filter(id => preferenciasSet.has(id)))
-    console.log(`Step 5 - Match Iniciado: ${matchIniciadoSet.size} (of ${allMatchInitiatedIds.length} total who initiated match)`)
+    const matchIniciadoIds = [...new Set(matchMessages.map(m => m.user_id).filter(Boolean))]
+    console.log(`Step 5 - Match Iniciado: ${matchIniciadoIds.length}`)
 
     // ============================================
-    // STEP 6: Match Realizado - match iniciado QUE receberam resultado
+    // STEP 6: Match Realizado - usuários que receberam resultado (INDEPENDENTE)
     // ============================================
-    // Filter users where workflow_data is not null and not an empty object
-    const allMatchCompletedIds = [...new Set(
+    const matchRealizadoIds = [...new Set(
       preferencesProfiles
         .filter(p => {
           if (!p.workflow_data) return false
@@ -176,22 +161,18 @@ Deno.serve(async (req) => {
         .map(p => p.user_id)
         .filter(Boolean)
     )]
-    // CUMULATIVE: only count those who are in matchIniciadoSet
-    const matchRealizadoSet = new Set(allMatchCompletedIds.filter(id => matchIniciadoSet.has(id)))
-    console.log(`Step 6 - Match Realizado: ${matchRealizadoSet.size} (of ${allMatchCompletedIds.length} total who completed match)`)
+    console.log(`Step 6 - Match Realizado: ${matchRealizadoIds.length}`)
 
     // ============================================
-    // STEP 7: Salvaram Favoritos - match realizado QUE salvaram favoritos
+    // STEP 7: Salvaram Favoritos - usuários que salvaram favoritos (INDEPENDENTE)
     // ============================================
     const favoriteRecords = await fetchAllWithPagination<{ user_id: string }>(
       supabase,
       'user_favorites',
       'user_id'
     )
-    const allFavoriteIds = [...new Set(favoriteRecords.map(f => f.user_id).filter(Boolean))]
-    // CUMULATIVE: only count those who are in matchRealizadoSet
-    const favoritosSet = new Set(allFavoriteIds.filter(id => matchRealizadoSet.has(id)))
-    console.log(`Step 7 - Salvaram Favoritos: ${favoritosSet.size} (of ${allFavoriteIds.length} total who saved favorites)`)
+    const favoritosIds = [...new Set(favoriteRecords.map(f => f.user_id).filter(Boolean))]
+    console.log(`Step 7 - Salvaram Favoritos: ${favoritosIds.length}`)
 
     // ============================================
     // Build user data map for drill-down (if requested)
@@ -199,8 +180,7 @@ Deno.serve(async (req) => {
     let usersDataMap: Map<string, UserData> = new Map()
     
     if (includeDetails) {
-      const allUserIds = [...cadastradosSet]
-      console.log(`Fetching details for ${allUserIds.length} users`)
+      console.log(`Fetching details for ${cadastradosIds.length} users`)
       
       // Create a map of user_id -> course_interest from preferences
       const courseMap = new Map<string, string[]>()
@@ -260,100 +240,76 @@ Deno.serve(async (req) => {
         .filter((u): u is UserData => u !== undefined)
     }
 
-    // Convert Sets to arrays for response
-    const cadastradosArr = [...cadastradosSet]
-    const ativacaoArr = [...ativacaoSet]
-    const onboardingArr = [...onboardingSet]
-    const preferenciasArr = [...preferenciasSet]
-    const matchIniciadoArr = [...matchIniciadoSet]
-    const matchRealizadoArr = [...matchRealizadoSet]
-    const favoritosArr = [...favoritosSet]
-
-    // Build CUMULATIVE funnel with conversion rates
+    // Build INDEPENDENT funnel (no conversion rates - each step counted separately)
     const funnel = [
       { 
         etapa: 'Cadastrados', 
-        valor: cadastradosSet.size,
-        taxa_conversao: '100.0',
-        taxa_conversao_anterior: null,
+        valor: cadastradosIds.length,
         description: funnelDescriptions['Cadastrados'],
         ...(includeDetails && { 
-          user_ids: cadastradosArr,
-          users: getUsersData(cadastradosArr)
+          user_ids: cadastradosIds,
+          users: getUsersData(cadastradosIds)
         })
       },
       { 
         etapa: 'Ativação', 
-        valor: ativacaoSet.size,
-        taxa_conversao: calcConversionRate(ativacaoSet.size, cadastradosSet.size),
-        taxa_conversao_anterior: calcConversionRate(ativacaoSet.size, cadastradosSet.size),
+        valor: ativacaoIds.length,
         description: funnelDescriptions['Ativação'],
         ...(includeDetails && { 
-          user_ids: ativacaoArr,
-          users: getUsersData(ativacaoArr)
+          user_ids: ativacaoIds,
+          users: getUsersData(ativacaoIds)
         })
       },
       { 
         etapa: 'Onboarding Completo', 
-        valor: onboardingSet.size,
-        taxa_conversao: calcConversionRate(onboardingSet.size, cadastradosSet.size),
-        taxa_conversao_anterior: calcConversionRate(onboardingSet.size, ativacaoSet.size),
+        valor: onboardingCompletedIds.length,
         description: funnelDescriptions['Onboarding Completo'],
         ...(includeDetails && { 
-          user_ids: onboardingArr,
-          users: getUsersData(onboardingArr)
+          user_ids: onboardingCompletedIds,
+          users: getUsersData(onboardingCompletedIds)
         })
       },
       { 
         etapa: 'Preferências Definidas', 
-        valor: preferenciasSet.size,
-        taxa_conversao: calcConversionRate(preferenciasSet.size, cadastradosSet.size),
-        taxa_conversao_anterior: calcConversionRate(preferenciasSet.size, onboardingSet.size),
+        valor: preferenciasIds.length,
         description: funnelDescriptions['Preferências Definidas'],
         ...(includeDetails && { 
-          user_ids: preferenciasArr,
-          users: getUsersData(preferenciasArr)
+          user_ids: preferenciasIds,
+          users: getUsersData(preferenciasIds)
         })
       },
       { 
         etapa: 'Match Iniciado', 
-        valor: matchIniciadoSet.size,
-        taxa_conversao: calcConversionRate(matchIniciadoSet.size, cadastradosSet.size),
-        taxa_conversao_anterior: calcConversionRate(matchIniciadoSet.size, preferenciasSet.size),
+        valor: matchIniciadoIds.length,
         description: funnelDescriptions['Match Iniciado'],
         ...(includeDetails && { 
-          user_ids: matchIniciadoArr,
-          users: getUsersData(matchIniciadoArr)
+          user_ids: matchIniciadoIds,
+          users: getUsersData(matchIniciadoIds)
         })
       },
       { 
         etapa: 'Match Realizado', 
-        valor: matchRealizadoSet.size,
-        taxa_conversao: calcConversionRate(matchRealizadoSet.size, cadastradosSet.size),
-        taxa_conversao_anterior: calcConversionRate(matchRealizadoSet.size, matchIniciadoSet.size),
+        valor: matchRealizadoIds.length,
         description: funnelDescriptions['Match Realizado'],
         ...(includeDetails && { 
-          user_ids: matchRealizadoArr,
-          users: getUsersData(matchRealizadoArr)
+          user_ids: matchRealizadoIds,
+          users: getUsersData(matchRealizadoIds)
         })
       },
       { 
         etapa: 'Salvaram Favoritos', 
-        valor: favoritosSet.size,
-        taxa_conversao: calcConversionRate(favoritosSet.size, cadastradosSet.size),
-        taxa_conversao_anterior: calcConversionRate(favoritosSet.size, matchRealizadoSet.size),
+        valor: favoritosIds.length,
         description: funnelDescriptions['Salvaram Favoritos'],
         ...(includeDetails && { 
-          user_ids: favoritosArr,
-          users: getUsersData(favoritosArr)
+          user_ids: favoritosIds,
+          users: getUsersData(favoritosIds)
         })
       },
     ]
 
-    console.log('CUMULATIVE funnel response:', funnel.map(f => ({ 
+    console.log('INDEPENDENT funnel response:', funnel.map(f => ({ 
       etapa: f.etapa, 
       valor: f.valor, 
-      taxa_anterior: f.taxa_conversao_anterior,
       usersCount: f.users?.length 
     })))
 
