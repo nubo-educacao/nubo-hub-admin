@@ -29,23 +29,37 @@ Deno.serve(async (req) => {
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
     const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
 
+    // Session gap definition (30 minutes = new session)
+    const SESSION_GAP_MS = 30 * 60 * 1000
+
     // Active users (DISTINCT users who sent messages in last 7 days)
     // Using pagination to overcome 1000-row limit
     const batchSize = 1000
     
     let activeUserIds: string[] = []
+    const userMessagesCurrentPeriod = new Map<string, Date[]>()
     let offset = 0
     while (true) {
       const { data: batch } = await supabase
         .from('chat_messages')
-        .select('user_id')
+        .select('user_id, created_at')
         .gte('created_at', sevenDaysAgo.toISOString())
+        .order('created_at', { ascending: true })
         .range(offset, offset + batchSize - 1)
       
       if (!batch || batch.length === 0) break
       
       for (const row of batch) {
-        if (row.user_id) activeUserIds.push(row.user_id)
+        if (row.user_id) {
+          activeUserIds.push(row.user_id)
+          // Track timestamps for session calculation
+          if (row.created_at) {
+            if (!userMessagesCurrentPeriod.has(row.user_id)) {
+              userMessagesCurrentPeriod.set(row.user_id, [])
+            }
+            userMessagesCurrentPeriod.get(row.user_id)!.push(new Date(row.created_at))
+          }
+        }
       }
       
       offset += batchSize
@@ -54,26 +68,46 @@ Deno.serve(async (req) => {
     const activeUsers = new Set(activeUserIds.filter(Boolean)).size
 
     // Active users previous period (DISTINCT, for comparison)
-    let prevUserIds: string[] = []
+    const userMessagesPrevPeriod = new Map<string, Date[]>()
     offset = 0
     while (true) {
       const { data: batch } = await supabase
         .from('chat_messages')
-        .select('user_id')
+        .select('user_id, created_at')
         .gte('created_at', fourteenDaysAgo.toISOString())
         .lt('created_at', sevenDaysAgo.toISOString())
+        .order('created_at', { ascending: true })
         .range(offset, offset + batchSize - 1)
       
       if (!batch || batch.length === 0) break
       
       for (const row of batch) {
-        if (row.user_id) prevUserIds.push(row.user_id)
+        if (row.user_id && row.created_at) {
+          if (!userMessagesPrevPeriod.has(row.user_id)) {
+            userMessagesPrevPeriod.set(row.user_id, [])
+          }
+          userMessagesPrevPeriod.get(row.user_id)!.push(new Date(row.created_at))
+        }
       }
       
       offset += batchSize
       if (batch.length < batchSize) break
     }
-    const activeUsersPrev = new Set(prevUserIds.filter(Boolean)).size
+    const activeUsersPrev = userMessagesPrevPeriod.size
+
+    // Helper function to calculate sessions from timestamps
+    const calculateSessions = (timestamps: Date[]): number => {
+      if (timestamps.length === 0) return 0
+      timestamps.sort((a, b) => a.getTime() - b.getTime())
+      let sessions = 1
+      for (let i = 1; i < timestamps.length; i++) {
+        const gap = timestamps[i].getTime() - timestamps[i - 1].getTime()
+        if (gap > SESSION_GAP_MS) {
+          sessions++
+        }
+      }
+      return sessions
+    }
 
     // Total messages (count all rows in chat_messages)
     const { count: totalMessages } = await supabase
@@ -129,20 +163,18 @@ Deno.serve(async (req) => {
       .lt('created_at', today.toISOString())
       .eq('resolved', false)
 
-    // Power Users - users with 2+ accesses (message sessions) in last 7 days
-    // Group by user_id and count distinct days they accessed
-    const userAccessCount = new Map<string, number>()
-    activeUserIds.forEach(userId => {
-      if (userId) {
-        userAccessCount.set(userId, (userAccessCount.get(userId) || 0) + 1)
-      }
+    // Power Users - users with 2+ sessions (30min gap = new session) in last 7 days
+    const userSessionCounts = new Map<string, number>()
+    userMessagesCurrentPeriod.forEach((timestamps, userId) => {
+      const sessions = calculateSessions(timestamps)
+      userSessionCounts.set(userId, sessions)
     })
 
-    // Power users are those with 2+ messages (indicating repeated engagement)
+    // Power users are those with 2+ sessions (indicating repeated access)
     const powerUsersList: { userId: string; accessCount: number }[] = []
-    userAccessCount.forEach((count, userId) => {
-      if (count >= 2) {
-        powerUsersList.push({ userId, accessCount: count })
+    userSessionCounts.forEach((sessions, userId) => {
+      if (sessions >= 2) {
+        powerUsersList.push({ userId, accessCount: sessions })
       }
     })
     powerUsersList.sort((a, b) => b.accessCount - a.accessCount)
@@ -150,15 +182,10 @@ Deno.serve(async (req) => {
     const powerUsersCount = powerUsersList.length
 
     // Previous period power users for comparison
-    const prevUserAccessCount = new Map<string, number>()
-    prevUserIds.forEach(userId => {
-      if (userId) {
-        prevUserAccessCount.set(userId, (prevUserAccessCount.get(userId) || 0) + 1)
-      }
-    })
     let powerUsersPrevCount = 0
-    prevUserAccessCount.forEach((count) => {
-      if (count >= 2) powerUsersPrevCount++
+    userMessagesPrevPeriod.forEach((timestamps, userId) => {
+      const sessions = calculateSessions(timestamps)
+      if (sessions >= 2) powerUsersPrevCount++
     })
 
     // Calculate percentage changes
