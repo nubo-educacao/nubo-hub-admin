@@ -253,21 +253,7 @@ Deno.serve(async (req) => {
     const effectiveDateFrom = dateFrom || defaultDateFrom
     const effectiveDateTo = dateTo || new Date()
 
-    // Get all messages in date range with user_id and workflow
-    const { data: allMessages, error: messagesError } = await supabase
-      .from('chat_messages')
-      .select('user_id, workflow, created_at')
-      .gte('created_at', effectiveDateFrom.toISOString())
-      .lte('created_at', effectiveDateTo.toISOString())
-      .not('user_id', 'is', null)
-      .order('created_at', { ascending: false })
-
-    if (messagesError) {
-      console.error('Error fetching messages:', messagesError)
-      throw messagesError
-    }
-
-    // Aggregate data per user
+    // Get all messages in date range with PAGINATION to overcome 1000-row limit
     const userDataMap = new Map<string, {
       last_activity: string;
       total_messages: number;
@@ -276,34 +262,65 @@ Deno.serve(async (req) => {
       hasSpecificFlow: boolean;
     }>()
 
-    for (const row of allMessages || []) {
-      if (!row.user_id) continue
-      
-      let userData = userDataMap.get(row.user_id)
-      if (!userData) {
-        userData = {
-          last_activity: row.created_at,
-          total_messages: 0,
-          workflows: new Map(),
-          hasMatch: false,
-          hasSpecificFlow: false
-        }
-        userDataMap.set(row.user_id, userData)
+    let offset = 0
+    const batchSize = 1000
+    let totalFetched = 0
+
+    while (true) {
+      const { data: batch, error: batchError } = await supabase
+        .from('chat_messages')
+        .select('user_id, workflow, created_at')
+        .gte('created_at', effectiveDateFrom.toISOString())
+        .lte('created_at', effectiveDateTo.toISOString())
+        .not('user_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + batchSize - 1)
+
+      if (batchError) {
+        console.error('Error fetching messages batch:', batchError)
+        throw batchError
       }
-      
-      userData.total_messages++
-      
-      if (row.workflow) {
-        userData.workflows.set(row.workflow, (userData.workflows.get(row.workflow) || 0) + 1)
-        if (row.workflow === 'match_workflow') userData.hasMatch = true
-        if (['sisu_workflow', 'prouni_workflow', 'fies_workflow'].includes(row.workflow)) {
-          userData.hasSpecificFlow = true
+
+      if (!batch || batch.length === 0) break
+
+      totalFetched += batch.length
+
+      // Aggregate data per user
+      for (const row of batch) {
+        if (!row.user_id) continue
+        
+        let userData = userDataMap.get(row.user_id)
+        if (!userData) {
+          userData = {
+            last_activity: row.created_at,
+            total_messages: 0,
+            workflows: new Map(),
+            hasMatch: false,
+            hasSpecificFlow: false
+          }
+          userDataMap.set(row.user_id, userData)
+        }
+        
+        userData.total_messages++
+        
+        if (row.workflow) {
+          userData.workflows.set(row.workflow, (userData.workflows.get(row.workflow) || 0) + 1)
+          if (row.workflow === 'match_workflow') userData.hasMatch = true
+          if (['sisu_workflow', 'prouni_workflow', 'fies_workflow'].includes(row.workflow)) {
+            userData.hasSpecificFlow = true
+          }
         }
       }
+
+      offset += batchSize
+      
+      // If we got less than batchSize, we've reached the end
+      if (batch.length < batchSize) break
     }
 
+    console.log(`Fetched ${totalFetched} messages, found ${userDataMap.size} unique users`)
+
     const uniqueUserIds = Array.from(userDataMap.keys())
-    console.log(`Found ${uniqueUserIds.length} unique users with recent messages`)
 
     if (uniqueUserIds.length === 0) {
       return new Response(JSON.stringify({ users: [], total: 0 }), {

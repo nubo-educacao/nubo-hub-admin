@@ -30,21 +30,50 @@ Deno.serve(async (req) => {
     const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000)
 
     // Active users (DISTINCT users who sent messages in last 7 days)
-    const { data: activeUsersData } = await supabase
-      .from('chat_messages')
-      .select('user_id')
-      .gte('created_at', sevenDaysAgo.toISOString())
+    // Using pagination to overcome 1000-row limit
+    const batchSize = 1000
     
-    const activeUsers = new Set(activeUsersData?.map(m => m.user_id).filter(Boolean)).size
+    let activeUserIds: string[] = []
+    let offset = 0
+    while (true) {
+      const { data: batch } = await supabase
+        .from('chat_messages')
+        .select('user_id')
+        .gte('created_at', sevenDaysAgo.toISOString())
+        .range(offset, offset + batchSize - 1)
+      
+      if (!batch || batch.length === 0) break
+      
+      for (const row of batch) {
+        if (row.user_id) activeUserIds.push(row.user_id)
+      }
+      
+      offset += batchSize
+      if (batch.length < batchSize) break
+    }
+    const activeUsers = new Set(activeUserIds.filter(Boolean)).size
 
     // Active users previous period (DISTINCT, for comparison)
-    const { data: activeUsersPrevData } = await supabase
-      .from('chat_messages')
-      .select('user_id')
-      .gte('created_at', fourteenDaysAgo.toISOString())
-      .lt('created_at', sevenDaysAgo.toISOString())
-    
-    const activeUsersPrev = new Set(activeUsersPrevData?.map(m => m.user_id).filter(Boolean)).size
+    let prevUserIds: string[] = []
+    offset = 0
+    while (true) {
+      const { data: batch } = await supabase
+        .from('chat_messages')
+        .select('user_id')
+        .gte('created_at', fourteenDaysAgo.toISOString())
+        .lt('created_at', sevenDaysAgo.toISOString())
+        .range(offset, offset + batchSize - 1)
+      
+      if (!batch || batch.length === 0) break
+      
+      for (const row of batch) {
+        if (row.user_id) prevUserIds.push(row.user_id)
+      }
+      
+      offset += batchSize
+      if (batch.length < batchSize) break
+    }
+    const activeUsersPrev = new Set(prevUserIds.filter(Boolean)).size
 
     // Total messages (count all rows in chat_messages)
     const { count: totalMessages } = await supabase
