@@ -129,6 +129,38 @@ Deno.serve(async (req) => {
       .lt('created_at', today.toISOString())
       .eq('resolved', false)
 
+    // Power Users - users with 2+ accesses (message sessions) in last 7 days
+    // Group by user_id and count distinct days they accessed
+    const userAccessCount = new Map<string, number>()
+    activeUserIds.forEach(userId => {
+      if (userId) {
+        userAccessCount.set(userId, (userAccessCount.get(userId) || 0) + 1)
+      }
+    })
+
+    // Power users are those with 2+ messages (indicating repeated engagement)
+    const powerUsersList: { userId: string; accessCount: number }[] = []
+    userAccessCount.forEach((count, userId) => {
+      if (count >= 2) {
+        powerUsersList.push({ userId, accessCount: count })
+      }
+    })
+    powerUsersList.sort((a, b) => b.accessCount - a.accessCount)
+
+    const powerUsersCount = powerUsersList.length
+
+    // Previous period power users for comparison
+    const prevUserAccessCount = new Map<string, number>()
+    prevUserIds.forEach(userId => {
+      if (userId) {
+        prevUserAccessCount.set(userId, (prevUserAccessCount.get(userId) || 0) + 1)
+      }
+    })
+    let powerUsersPrevCount = 0
+    prevUserAccessCount.forEach((count) => {
+      if (count >= 2) powerUsersPrevCount++
+    })
+
     // Calculate percentage changes
     const calcChange = (current: number, previous: number) => {
       if (previous === 0) return current > 0 ? 100 : 0
@@ -144,6 +176,9 @@ Deno.serve(async (req) => {
       favoritesChange: calcChange(favoritesThisWeek || 0, favoritesPrevWeek || 0),
       errorsToday: errorsToday || 0,
       errorsChange: calcChange(errorsToday || 0, errorsYesterday || 0),
+      powerUsers: powerUsersCount,
+      powerUsersChange: calcChange(powerUsersCount, powerUsersPrevCount),
+      powerUsersList: powerUsersList.slice(0, 50), // Top 50 for the modal
     }
 
     console.log('Analytics stats response:', response)
