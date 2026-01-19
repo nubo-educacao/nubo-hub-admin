@@ -39,6 +39,16 @@ Deno.serve(async (req) => {
       return brazilDate.getUTCHours()
     }
 
+    // Get 15-minute slot key (e.g., "14:15") from a UTC timestamp
+    const get15MinSlot = (utcTimestamp: string): string => {
+      const utcDate = new Date(utcTimestamp)
+      const brazilDate = new Date(utcDate.getTime() - BRAZIL_OFFSET_MS)
+      const hour = brazilDate.getUTCHours()
+      const minutes = brazilDate.getUTCMinutes()
+      const slot = Math.floor(minutes / 15) * 15
+      return `${hour.toString().padStart(2, '0')}:${slot.toString().padStart(2, '0')}`
+    }
+
     // Get Brazil date string (YYYY-MM-DD) from a UTC timestamp
     const getBrazilDateKey = (utcTimestamp: string): string => {
       const utcDate = new Date(utcTimestamp)
@@ -78,32 +88,37 @@ Deno.serve(async (req) => {
 
       if (error) throw error
 
-      // Initialize 24 hours
-      const hourlyMap = new Map<number, { mensagens: number; usuarios: Set<string> }>()
+      // Initialize 96 slots (24 hours * 4 slots per hour = 15-minute intervals)
+      const slotMap = new Map<string, { mensagens: number; usuarios: Set<string> }>()
       for (let h = 0; h < 24; h++) {
-        hourlyMap.set(h, { mensagens: 0, usuarios: new Set() })
+        for (let m = 0; m < 60; m += 15) {
+          const key = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
+          slotMap.set(key, { mensagens: 0, usuarios: new Set() })
+        }
       }
 
-      // Count messages and unique users per hour (in Brazil timezone)
+      // Count messages and unique users per 15-min slot (in Brazil timezone)
       messages?.forEach((msg) => {
         if (msg.created_at) {
-          const brazilHour = getBrazilHour(msg.created_at)
-          const hourData = hourlyMap.get(brazilHour)!
-          hourData.mensagens++
-          if (msg.user_id) {
-            hourData.usuarios.add(msg.user_id)
+          const slotKey = get15MinSlot(msg.created_at)
+          const slotData = slotMap.get(slotKey)
+          if (slotData) {
+            slotData.mensagens++
+            if (msg.user_id) {
+              slotData.usuarios.add(msg.user_id)
+            }
           }
         }
       })
 
-      // Convert to array format
-      const activity = Array.from(hourlyMap.entries()).map(([hour, data]) => ({
-        label: `${hour.toString().padStart(2, '0')}h`,
+      // Convert to array format - only include slots with data or from hours with data
+      const activity = Array.from(slotMap.entries()).map(([slot, data]) => ({
+        label: slot,
         mensagens: data.mensagens,
         usuarios: data.usuarios.size,
       }))
 
-      console.log('Analytics activity (day - Brasília) response:', activity.filter(a => a.mensagens > 0))
+      console.log('Analytics activity (day - Brasília - 15min) response:', activity.filter(a => a.mensagens > 0).length, 'slots with data')
 
       return new Response(JSON.stringify(activity), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
