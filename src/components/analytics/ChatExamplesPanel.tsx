@@ -130,12 +130,9 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
       console.log('Fetching conversations with date filter:', { dateFrom, dateTo });
       
       const requestBody: { 
-        limit: number; 
         date_from?: string; 
         date_to?: string 
-      } = { 
-        limit: fullPage ? 30 : 10 
-      };
+      } = {};
       
       if (dateFrom) {
         requestBody.date_from = startOfDay(dateFrom).toISOString();
