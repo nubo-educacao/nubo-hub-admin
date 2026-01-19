@@ -1,6 +1,7 @@
 import { Users, MessageSquare, Heart, TrendingUp, Clock, MapPin } from "lucide-react";
 import { DashboardHeader } from "@/components/analytics/DashboardHeader";
 import { StatCard } from "@/components/analytics/StatCard";
+import { PowerUsersCard } from "@/components/analytics/PowerUsersCard";
 import { ActivityChart } from "@/components/analytics/ActivityChart";
 import { TopCoursesChart } from "@/components/analytics/TopCoursesChart";
 import { OpportunityTypesChart } from "@/components/analytics/OpportunityTypesChart";
@@ -20,10 +21,10 @@ const Index = () => {
 
       <main className="container py-6 space-y-6">
         {/* Stats Overview */}
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {statsLoading ? (
             <>
-              {[...Array(3)].map((_, i) => (
+              {[...Array(4)].map((_, i) => (
                 <Skeleton key={i} className="h-32 w-full" />
               ))}
             </>
@@ -36,6 +37,11 @@ const Index = () => {
                 icon={Users}
                 variant="default"
                 tooltip="Número de usuários únicos que enviaram pelo menos uma mensagem nos últimos 7 dias."
+              />
+              <PowerUsersCard
+                count={stats?.powerUsers || 0}
+                change={stats?.powerUsersChange}
+                powerUsersList={stats?.powerUsersList || []}
               />
               <StatCard
                 title="Total de Mensagens"

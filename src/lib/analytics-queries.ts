@@ -5,6 +5,11 @@ export interface DateRange {
   to?: Date;
 }
 
+export interface PowerUser {
+  userId: string;
+  accessCount: number;
+}
+
 export interface DashboardStats {
   activeUsers: number;
   activeUsersChange: number;
@@ -14,6 +19,9 @@ export interface DashboardStats {
   favoritesChange: number;
   errorsToday: number;
   errorsChange: number;
+  powerUsers: number;
+  powerUsersChange: number;
+  powerUsersList: PowerUser[];
 }
 
 export interface ActivityData {
