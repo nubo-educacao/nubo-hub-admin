@@ -167,7 +167,7 @@ export function FlowFunnelChart() {
         user.city || '',
         user.course_interest?.join('; ') || '',
         stage,
-        user.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR') : ''
+        user.created_at ? new Date(user.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
       ]);
 
       const csvContent = [
