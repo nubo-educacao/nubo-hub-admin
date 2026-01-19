@@ -16,12 +16,16 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Parse request body for mode
+    // Parse request body for mode and zoomHour
     let mode = 'week'
+    let zoomHour: number | null = null
     try {
       const body = await req.json()
       if (body.mode === 'day' || body.mode === 'week') {
         mode = body.mode
+      }
+      if (typeof body.zoomHour === 'number' && body.zoomHour >= 0 && body.zoomHour < 24) {
+        zoomHour = body.zoomHour
       }
     } catch {
       // Use default
@@ -74,11 +78,12 @@ Deno.serve(async (req) => {
     }
 
     if (mode === 'day') {
-      // Get messages from today (Brazil time), grouped by hour
+      // Get messages from today (Brazil time)
       const todayStartUTC = getBrazilTodayStartUTC()
       
       console.log('Brazil today start (UTC):', todayStartUTC.toISOString())
       console.log('Current Brazil time:', getNowInBrazil().toISOString())
+      console.log('Zoom hour:', zoomHour)
       
       const { data: messages, error } = await supabase
         .from('chat_messages')
@@ -88,37 +93,67 @@ Deno.serve(async (req) => {
 
       if (error) throw error
 
-      // Initialize 96 slots (24 hours * 4 slots per hour = 15-minute intervals)
-      const slotMap = new Map<string, { mensagens: number; usuarios: Set<string> }>()
-      for (let h = 0; h < 24; h++) {
+      // If zoomHour is provided, show 15-minute intervals for that hour only
+      if (zoomHour !== null) {
+        const slotMap = new Map<string, { mensagens: number; usuarios: Set<string> }>()
         for (let m = 0; m < 60; m += 15) {
-          const key = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
+          const key = `${zoomHour.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
           slotMap.set(key, { mensagens: 0, usuarios: new Set() })
         }
+
+        messages?.forEach((msg) => {
+          if (msg.created_at) {
+            const brazilHour = getBrazilHour(msg.created_at)
+            if (brazilHour === zoomHour) {
+              const slotKey = get15MinSlot(msg.created_at)
+              const slotData = slotMap.get(slotKey)
+              if (slotData) {
+                slotData.mensagens++
+                if (msg.user_id) {
+                  slotData.usuarios.add(msg.user_id)
+                }
+              }
+            }
+          }
+        })
+
+        const activity = Array.from(slotMap.entries()).map(([slot, data]) => ({
+          label: slot,
+          mensagens: data.mensagens,
+          usuarios: data.usuarios.size,
+        }))
+
+        console.log('Analytics activity (zoom hour', zoomHour, ') response:', activity)
+
+        return new Response(JSON.stringify(activity), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
       }
 
-      // Count messages and unique users per 15-min slot (in Brazil timezone)
+      // Default: show hourly data
+      const hourlyMap = new Map<number, { mensagens: number; usuarios: Set<string> }>()
+      for (let h = 0; h < 24; h++) {
+        hourlyMap.set(h, { mensagens: 0, usuarios: new Set() })
+      }
+
       messages?.forEach((msg) => {
         if (msg.created_at) {
-          const slotKey = get15MinSlot(msg.created_at)
-          const slotData = slotMap.get(slotKey)
-          if (slotData) {
-            slotData.mensagens++
-            if (msg.user_id) {
-              slotData.usuarios.add(msg.user_id)
-            }
+          const brazilHour = getBrazilHour(msg.created_at)
+          const hourData = hourlyMap.get(brazilHour)!
+          hourData.mensagens++
+          if (msg.user_id) {
+            hourData.usuarios.add(msg.user_id)
           }
         }
       })
 
-      // Convert to array format - only include slots with data or from hours with data
-      const activity = Array.from(slotMap.entries()).map(([slot, data]) => ({
-        label: slot,
+      const activity = Array.from(hourlyMap.entries()).map(([hour, data]) => ({
+        label: `${hour.toString().padStart(2, '0')}h`,
         mensagens: data.mensagens,
         usuarios: data.usuarios.size,
       }))
 
-      console.log('Analytics activity (day - Brasília - 15min) response:', activity.filter(a => a.mensagens > 0).length, 'slots with data')
+      console.log('Analytics activity (day - Brasília) response:', activity.filter(a => a.mensagens > 0))
 
       return new Response(JSON.stringify(activity), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
