@@ -69,6 +69,7 @@ export interface TopUser {
   messages: number;
   favorites: number;
   score: number;
+  sessions: number;
   user_id?: string;
   full_name?: string;
   message_count?: number;

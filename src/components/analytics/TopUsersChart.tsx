@@ -1,5 +1,5 @@
 import { useTopUsers } from "@/hooks/useAnalyticsData";
-import { User, MessageSquare, Heart, Trophy } from "lucide-react";
+import { User, MessageSquare, Heart, Trophy, RefreshCw } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -76,8 +76,19 @@ export function TopUsersChart() {
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <span className="font-medium truncate block">{user.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium truncate">{user.name}</span>
+                      {user.sessions > 1 && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 font-medium">
+                          Recorrente
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <RefreshCw className="h-3 w-3" />
+                        {user.sessions} {user.sessions === 1 ? 'acesso' : 'acessos'}
+                      </span>
                       <span className="flex items-center gap-1">
                         <MessageSquare className="h-3 w-3" />
                         {user.messages} msgs
