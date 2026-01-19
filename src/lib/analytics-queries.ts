@@ -8,6 +8,7 @@ export interface DateRange {
 export interface PowerUser {
   userId: string;
   userName: string;
+  userPhone: string;
   accessCount: number;
 }
 
