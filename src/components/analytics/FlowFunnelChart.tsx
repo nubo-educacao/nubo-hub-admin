@@ -55,8 +55,6 @@ interface FunnelStepLocal {
   description?: string;
   user_ids?: string[];
   users?: UserData[];
-  taxa_conversao?: string;
-  taxa_conversao_anterior?: string | null;
 }
 
 function formatPhone(phone: string | null): string {
@@ -295,10 +293,8 @@ export function FlowFunnelChart() {
             const totalSteps = funnelData.length;
             const widthPercent = 100 - (index * (60 / totalSteps)); // From 100% to ~40%
             
-            // Use API-provided conversion rate if available, otherwise calculate
-            const dropOff = step.taxa_conversao_anterior 
-              ? Math.round(100 - parseFloat(step.taxa_conversao_anterior))
-              : (index > 0 && prevValue > 0 ? Math.round(((prevValue - stepValue) / prevValue) * 100) : 0);
+            // Calculate drop-off from previous step
+            const dropOff = index > 0 && prevValue > 0 ? Math.round(((prevValue - stepValue) / prevValue) * 100) : 0;
 
             const description = step.description || funnelDescriptions[step.etapa] || 'Etapa do funil';
             const isBottleneck = index === biggestDropIndex;
@@ -354,11 +350,6 @@ export function FlowFunnelChart() {
                     <p className="font-medium">{step.etapa}</p>
                     <p className="text-sm text-muted-foreground">{description}</p>
                     <p className="text-sm"><strong>{stepValue.toLocaleString()}</strong> usuários ({Math.round(percentage)}% do total)</p>
-                    {step.taxa_conversao_anterior && index > 0 && (
-                      <p className="text-sm text-primary">
-                        Conversão da etapa anterior: {step.taxa_conversao_anterior}%
-                      </p>
-                    )}
                     {dropOff > 0 && (
                       <p className="text-sm text-destructive">Queda de {dropOff}% da etapa anterior</p>
                     )}
