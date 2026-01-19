@@ -135,27 +135,35 @@ export function PowerUsersCard({ count, change, powerUsersList }: PowerUsersCard
           )}
         </div>
         
-        <ScrollArea className="h-[400px] pr-4">
+        <ScrollArea className="h-[400px] pr-2">
           <div className="space-y-2">
             {powerUsersList.map((user, index) => (
               <div
                 key={user.userId}
-                className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
               >
-                <span className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-chart-3/20 text-chart-3 text-xs font-bold">
+                <span className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-chart-3/20 text-chart-3 text-xs font-bold mt-0.5">
                   {index + 1}
                 </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate" title={user.userName}>
-                    {user.userName}
-                  </p>
+                <div className="flex-1 min-w-0 overflow-hidden">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium truncate flex-1" title={user.userName}>
+                      {user.userName}
+                    </p>
+                    <div className="flex-shrink-0 bg-chart-3/10 rounded-md px-2 py-0.5 flex items-center gap-1">
+                      <span className="text-sm font-bold text-chart-3">
+                        {user.accessCount}
+                      </span>
+                      <span className="text-[10px] text-chart-3/80">acessos</span>
+                    </div>
+                  </div>
                   {user.userPhone ? (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         copyToClipboard(user.userPhone, user.userId);
                       }}
-                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors group"
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors group mt-0.5"
                     >
                       <span>{formatPhone(user.userPhone)}</span>
                       {copiedId === user.userId ? (
@@ -165,14 +173,8 @@ export function PowerUsersCard({ count, change, powerUsersList }: PowerUsersCard
                       )}
                     </button>
                   ) : (
-                    <span className="text-xs text-muted-foreground/60">Telefone não disponível</span>
+                    <span className="text-xs text-muted-foreground/60 mt-0.5">Telefone não disponível</span>
                   )}
-                </div>
-                <div className="flex-shrink-0 flex flex-col items-end">
-                  <span className="text-lg font-bold text-chart-3">
-                    {user.accessCount}
-                  </span>
-                  <span className="text-xs text-muted-foreground">acessos</span>
                 </div>
               </div>
             ))}
