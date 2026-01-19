@@ -63,10 +63,14 @@ const Index = () => {
           <FlowFunnelChart />
         </section>
 
-        {/* Charts Row 2 - Rankings & Opportunities */}
-        <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* Charts Row 2 - Rankings */}
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <TopUsersChart />
           <TopCoursesChart />
+        </section>
+
+        {/* Charts Row 3 - Opportunities */}
+        <section>
           <OpportunityTypesChart />
         </section>
 
