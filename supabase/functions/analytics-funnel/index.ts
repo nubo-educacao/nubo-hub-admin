@@ -26,6 +26,53 @@ interface UserData {
   course_interest: string[] | null;
 }
 
+// Helper to fetch all records with pagination (overcomes 1000 row limit)
+async function fetchAllWithPagination<T>(
+  supabase: any,
+  table: string,
+  selectColumns: string,
+  filters?: { column: string; operator: string; value: any }[]
+): Promise<T[]> {
+  const allRecords: T[] = []
+  let offset = 0
+  const batchSize = 1000
+
+  while (true) {
+    let query = supabase.from(table).select(selectColumns)
+    
+    // Apply filters
+    if (filters) {
+      for (const filter of filters) {
+        if (filter.operator === 'eq') {
+          query = query.eq(filter.column, filter.value)
+        } else if (filter.operator === 'in') {
+          query = query.in(filter.column, filter.value)
+        } else if (filter.operator === 'neq') {
+          query = query.neq(filter.column, filter.value)
+        } else if (filter.operator === 'not.is') {
+          query = query.not(filter.column, 'is', filter.value)
+        }
+      }
+    }
+    
+    const { data: batch, error } = await query.range(offset, offset + batchSize - 1)
+    
+    if (error) {
+      console.error(`Error fetching from ${table}:`, error)
+      break
+    }
+    
+    if (!batch || batch.length === 0) break
+    
+    allRecords.push(...batch)
+    
+    offset += batchSize
+    if (batch.length < batchSize) break // Last page
+  }
+  
+  return allRecords
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -47,82 +94,101 @@ Deno.serve(async (req) => {
       includeDetails = url.searchParams.get('details') === 'true'
     }
 
-    // Step 1: Total registered users
-    const { data: allProfiles, count: totalUsers } = await supabase
-      .from('user_profiles')
-      .select('id, full_name, city, created_at', { count: 'exact' })
-    
-    const allProfileIds = allProfiles?.map(p => p.id) || []
+    console.log('Starting funnel analysis with pagination...')
 
-    // Step 1.5: Users who sent at least 1 message (Activation)
-    const { data: activatedMessages } = await supabase
-      .from('chat_messages')
-      .select('user_id')
-    
-    const activatedUserIds = [...new Set(activatedMessages?.map(m => m.user_id).filter(Boolean) || [])]
+    // Step 1: Total registered users (with pagination)
+    const allProfiles = await fetchAllWithPagination<{ id: string; full_name: string | null; city: string | null; created_at: string | null }>(
+      supabase,
+      'user_profiles',
+      'id, full_name, city, created_at'
+    )
+    const totalUsers = allProfiles.length
+    const allProfileIds = allProfiles.map(p => p.id)
+    console.log(`Step 1 - Cadastrados: ${totalUsers}`)
+
+    // Step 1.5: Users who sent at least 1 message (Activation) - with pagination
+    const activatedMessages = await fetchAllWithPagination<{ user_id: string }>(
+      supabase,
+      'chat_messages',
+      'user_id'
+    )
+    const activatedUserIds = [...new Set(activatedMessages.map(m => m.user_id).filter(Boolean))]
     const uniqueActivatedUsers = activatedUserIds.length
+    console.log(`Step 1.5 - Ativação: ${uniqueActivatedUsers}`)
 
-    // Step 2: Users who completed onboarding
-    const { data: onboardingProfiles, count: onboardingCompleted } = await supabase
-      .from('user_profiles')
-      .select('id, full_name, city, created_at', { count: 'exact' })
-      .eq('onboarding_completed', true)
-    
-    const onboardingUserIds = onboardingProfiles?.map(p => p.id) || []
+    // Step 2: Users who completed onboarding (with pagination)
+    const onboardingProfiles = await fetchAllWithPagination<{ id: string; full_name: string | null; city: string | null; created_at: string | null }>(
+      supabase,
+      'user_profiles',
+      'id, full_name, city, created_at',
+      [{ column: 'onboarding_completed', operator: 'eq', value: true }]
+    )
+    const onboardingCompleted = onboardingProfiles.length
+    const onboardingUserIds = onboardingProfiles.map(p => p.id)
+    console.log(`Step 2 - Onboarding Completo: ${onboardingCompleted}`)
 
-    // Step 3: Users who have any preferences record
-    const { data: preferencesProfiles } = await supabase
-      .from('user_preferences')
-      .select('user_id')
-
-    // Count unique users that appear in user_preferences
-    const preferencesUserIds = [...new Set(preferencesProfiles?.map(p => p.user_id).filter(Boolean) || [])]
+    // Step 3: Users who have any preferences record (with pagination)
+    const preferencesProfiles = await fetchAllWithPagination<{ user_id: string }>(
+      supabase,
+      'user_preferences',
+      'user_id'
+    )
+    const preferencesUserIds = [...new Set(preferencesProfiles.map(p => p.user_id).filter(Boolean))]
     const preferencesSet = preferencesUserIds.length
+    console.log(`Step 3 - Preferências Definidas: ${preferencesSet}`)
 
-    // Step 4: Users who started match workflow
-    const { data: matchMessages } = await supabase
-      .from('chat_messages')
-      .select('user_id')
-      .eq('workflow', 'match_workflow')
-    
-    const matchUserIds = [...new Set(matchMessages?.map(m => m.user_id).filter(Boolean) || [])]
+    // Step 4: Users who started match workflow (with pagination)
+    const matchMessages = await fetchAllWithPagination<{ user_id: string }>(
+      supabase,
+      'chat_messages',
+      'user_id',
+      [{ column: 'workflow', operator: 'eq', value: 'match_workflow' }]
+    )
+    const matchUserIds = [...new Set(matchMessages.map(m => m.user_id).filter(Boolean))]
     const uniqueMatchUsers = matchUserIds.length
+    console.log(`Step 4 - Match Iniciado: ${uniqueMatchUsers}`)
 
-    // Step 4.5: Users who completed match (workflow_data is not empty {})
-    const { data: matchCompletedProfiles } = await supabase
-      .from('user_preferences')
-      .select('user_id, workflow_data')
-    
+    // Step 4.5: Users who completed match (workflow_data is not empty {}) - with pagination
+    const matchCompletedProfiles = await fetchAllWithPagination<{ user_id: string; workflow_data: any }>(
+      supabase,
+      'user_preferences',
+      'user_id, workflow_data'
+    )
     // Filter users where workflow_data is not null and not an empty object
     const matchCompletedUserIds = [...new Set(
       matchCompletedProfiles
-        ?.filter(p => {
+        .filter(p => {
           if (!p.workflow_data) return false
           // Check if it's an empty object
           if (typeof p.workflow_data === 'object' && Object.keys(p.workflow_data).length === 0) return false
           return true
         })
         .map(p => p.user_id)
-        .filter(Boolean) || []
+        .filter(Boolean)
     )]
     const uniqueMatchCompletedUsers = matchCompletedUserIds.length
+    console.log(`Step 4.5 - Match Realizado: ${uniqueMatchCompletedUsers}`)
 
-    // Step 5: Users who saved favorites
-    const { data: favoriteRecords } = await supabase
-      .from('user_favorites')
-      .select('user_id')
-    
-    const favoriteUserIds = [...new Set(favoriteRecords?.map(f => f.user_id).filter(Boolean) || [])]
+    // Step 5: Users who saved favorites (with pagination)
+    const favoriteRecords = await fetchAllWithPagination<{ user_id: string }>(
+      supabase,
+      'user_favorites',
+      'user_id'
+    )
+    const favoriteUserIds = [...new Set(favoriteRecords.map(f => f.user_id).filter(Boolean))]
     const uniqueFavoriteUsers = favoriteUserIds.length
+    console.log(`Step 5 - Salvaram Favoritos: ${uniqueFavoriteUsers}`)
 
-    // Step 6: Users who engaged in specific workflows (sisu/prouni/fies)
-    const { data: specificWorkflowMessages } = await supabase
-      .from('chat_messages')
-      .select('user_id')
-      .in('workflow', ['sisu_workflow', 'prouni_workflow', 'fies_workflow'])
-    
-    const specificWorkflowUserIds = [...new Set(specificWorkflowMessages?.map(u => u.user_id).filter(Boolean) || [])]
+    // Step 6: Users who engaged in specific workflows (sisu/prouni/fies) - with pagination
+    const specificWorkflowMessages = await fetchAllWithPagination<{ user_id: string }>(
+      supabase,
+      'chat_messages',
+      'user_id',
+      [{ column: 'workflow', operator: 'in', value: ['sisu_workflow', 'prouni_workflow', 'fies_workflow'] }]
+    )
+    const specificWorkflowUserIds = [...new Set(specificWorkflowMessages.map(u => u.user_id).filter(Boolean))]
     const uniqueSpecificWorkflowUsers = specificWorkflowUserIds.length
+    console.log(`Step 6 - Fluxo Específico: ${uniqueSpecificWorkflowUsers}`)
 
     // If details are requested, fetch complete user data including phone from auth.users
     let usersDataMap: Map<string, UserData> = new Map()
@@ -142,59 +208,62 @@ Deno.serve(async (req) => {
       
       console.log(`Fetching details for ${allUserIds.length} users`)
       
-      // Fetch user profiles
-      const { data: profilesData } = await supabase
-        .from('user_profiles')
-        .select('id, full_name, city, created_at')
-        .in('id', allUserIds)
+      // Fetch user profiles with pagination (already fetched above, reuse)
+      const profilesData = allProfiles
       
-      // Fetch user preferences (for course_interest)
-      const { data: preferencesData } = await supabase
-        .from('user_preferences')
-        .select('user_id, course_interest')
-        .in('user_id', allUserIds)
+      // Fetch user preferences (for course_interest) with pagination
+      const preferencesData = await fetchAllWithPagination<{ user_id: string; course_interest: string[] | null }>(
+        supabase,
+        'user_preferences',
+        'user_id, course_interest'
+      )
       
       // Create a map of user_id -> course_interest
       const courseMap = new Map<string, string[]>()
-      if (preferencesData) {
-        for (const pref of preferencesData) {
-          if (pref.course_interest) {
-            courseMap.set(pref.user_id, pref.course_interest)
-          }
+      for (const pref of preferencesData) {
+        if (pref.course_interest) {
+          courseMap.set(pref.user_id, pref.course_interest)
         }
       }
       
-      // Fetch phone numbers from auth.users using admin API
-      const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers({
-        perPage: 1000
-      })
-      
-      if (authError) {
-        console.error('Error fetching auth users:', authError)
-      }
-      
-      // Create a map of user_id -> phone from auth.users
+      // Fetch phone numbers from auth.users using admin API with pagination
       const phoneMap = new Map<string, string>()
-      if (authUsers?.users) {
+      let page = 1
+      const perPage = 1000
+      
+      while (true) {
+        const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers({
+          page,
+          perPage
+        })
+        
+        if (authError) {
+          console.error('Error fetching auth users:', authError)
+          break
+        }
+        
+        if (!authUsers?.users || authUsers.users.length === 0) break
+        
         for (const user of authUsers.users) {
           if (user.phone) {
             phoneMap.set(user.id, user.phone)
           }
         }
+        
+        if (authUsers.users.length < perPage) break
+        page++
       }
       
       // Build complete user data map
-      if (profilesData) {
-        for (const profile of profilesData) {
-          usersDataMap.set(profile.id, {
-            id: profile.id,
-            full_name: profile.full_name,
-            phone: phoneMap.get(profile.id) || null,
-            city: profile.city,
-            created_at: profile.created_at,
-            course_interest: courseMap.get(profile.id) || null
-          })
-        }
+      for (const profile of profilesData) {
+        usersDataMap.set(profile.id, {
+          id: profile.id,
+          full_name: profile.full_name,
+          phone: phoneMap.get(profile.id) || null,
+          city: profile.city,
+          created_at: profile.created_at,
+          course_interest: courseMap.get(profile.id) || null
+        })
       }
       
       console.log(`Built user data map with ${usersDataMap.size} users, ${phoneMap.size} have phones, ${courseMap.size} have course interests`)
@@ -211,7 +280,7 @@ Deno.serve(async (req) => {
     const funnel = [
       { 
         etapa: 'Cadastrados', 
-        valor: totalUsers || 0,
+        valor: totalUsers,
         description: funnelDescriptions['Cadastrados'],
         ...(includeDetails && { 
           user_ids: allProfileIds,
@@ -229,7 +298,7 @@ Deno.serve(async (req) => {
       },
       { 
         etapa: 'Onboarding Completo', 
-        valor: onboardingCompleted || 0,
+        valor: onboardingCompleted,
         description: funnelDescriptions['Onboarding Completo'],
         ...(includeDetails && { 
           user_ids: onboardingUserIds,
@@ -238,7 +307,7 @@ Deno.serve(async (req) => {
       },
       { 
         etapa: 'Preferências Definidas', 
-        valor: preferencesSet || 0,
+        valor: preferencesSet,
         description: funnelDescriptions['Preferências Definidas'],
         ...(includeDetails && { 
           user_ids: preferencesUserIds,
