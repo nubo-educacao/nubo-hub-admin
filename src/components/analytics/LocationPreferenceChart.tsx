@@ -14,31 +14,12 @@ interface LocationPreferenceData {
 }
 
 async function fetchLocationPreferences(): Promise<LocationPreferenceData[]> {
-  const { data, error } = await supabase
-    .from('user_preferences')
-    .select('location_preference')
-    .not('location_preference', 'is', null);
-
-  if (error) throw error;
-
-  // Count occurrences of each preference (normalize names)
-  const counts: Record<string, number> = {};
-
-  data?.forEach((row) => {
-    let pref = (row.location_preference || '').trim();
-    if (!pref) return;
-    
-    // Normalize: primeira letra maiúscula
-    pref = pref.charAt(0).toUpperCase() + pref.slice(1);
-    
-    counts[pref] = (counts[pref] || 0) + 1;
+  const { data, error } = await supabase.functions.invoke('analytics-rankings', {
+    body: { type: 'location_preferences' }
   });
 
-  // Convert to array and sort by count
-  return Object.entries(counts)
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 8);
+  if (error) throw error;
+  return data || [];
 }
 
 export function LocationPreferenceChart() {

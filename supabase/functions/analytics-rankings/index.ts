@@ -223,6 +223,37 @@ Deno.serve(async (req) => {
       })
     }
 
+    if (type === 'location_preferences') {
+      // Get location preferences from user_preferences
+      const { data: preferences } = await supabase
+        .from('user_preferences')
+        .select('location_preference')
+        .not('location_preference', 'is', null)
+
+      // Count location occurrences with normalization
+      const locationCounts = new Map<string, number>()
+      
+      preferences?.forEach(p => {
+        let loc = (p.location_preference || '').trim()
+        if (!loc) return
+        // Normalize: primeira letra maiúscula
+        loc = loc.charAt(0).toUpperCase() + loc.slice(1)
+        locationCounts.set(loc, (locationCounts.get(loc) || 0) + 1)
+      })
+
+      // Convert to array and sort
+      const locations = Array.from(locationCounts.entries())
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 8)
+
+      console.log('Analytics rankings (location_preferences) response:', locations.length, 'locations')
+
+      return new Response(JSON.stringify(locations), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
     return new Response(JSON.stringify({ error: 'Invalid type parameter' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
