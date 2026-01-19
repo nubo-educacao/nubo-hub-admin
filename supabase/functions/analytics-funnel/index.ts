@@ -9,7 +9,7 @@ const corsHeaders = {
 const funnelDescriptions: Record<string, string> = {
   'Cadastrados': 'Total de usuários na tabela user_profiles',
   'Ativação': 'Usuários que enviaram ao menos 1 mensagem',
-  'Onboarding Completo': 'Usuários com onboarding_completed = true',
+  'Onboarding Completo': 'Usuários que passaram pelo workflow de onboarding',
   'Preferências Definidas': 'Usuários que preencheram preferências',
   'Match Iniciado': 'Usuários que iniciaram o workflow de match',
   'Match Realizado': 'Usuários que receberam resultado (workflow_data preenchido)',
@@ -118,11 +118,15 @@ Deno.serve(async (req) => {
     console.log(`Step 2 - Ativação: ${ativacaoIds.length}`)
 
     // ============================================
-    // STEP 3: Onboarding Completo - usuários com onboarding_completed = true (INDEPENDENTE)
+    // STEP 3: Onboarding Completo - usuários que passaram pelo onboarding_workflow (INDEPENDENTE)
     // ============================================
-    const onboardingCompletedIds = allProfiles
-      .filter(p => p.onboarding_completed === true)
-      .map(p => p.id)
+    const onboardingMessages = await fetchAllWithPagination<{ user_id: string }>(
+      supabase,
+      'chat_messages',
+      'user_id',
+      [{ column: 'workflow', operator: 'eq', value: 'onboarding_workflow' }]
+    )
+    const onboardingCompletedIds = [...new Set(onboardingMessages.map(m => m.user_id).filter(Boolean))]
     console.log(`Step 3 - Onboarding Completo: ${onboardingCompletedIds.length}`)
 
     // ============================================
