@@ -30,16 +30,45 @@ Deno.serve(async (req) => {
     console.log('Analytics rankings - type:', type)
 
     if (type === 'users') {
-      // Get message counts per user
+      const SESSION_GAP_MS = 30 * 60 * 1000 // 30 minutos em milissegundos
+
+      // Get messages with timestamps per user
       const { data: messages } = await supabase
         .from('chat_messages')
-        .select('user_id')
+        .select('user_id, created_at')
+        .order('created_at', { ascending: true })
 
       const messageCounts = new Map<string, number>()
+      const userMessages = new Map<string, Date[]>()
+      
       messages?.forEach(m => {
         if (m.user_id) {
           messageCounts.set(m.user_id, (messageCounts.get(m.user_id) || 0) + 1)
+          
+          // Track timestamps for session calculation
+          if (m.created_at) {
+            if (!userMessages.has(m.user_id)) {
+              userMessages.set(m.user_id, [])
+            }
+            userMessages.get(m.user_id)!.push(new Date(m.created_at))
+          }
         }
+      })
+
+      // Calculate sessions for each user (gap of 30min = new session)
+      const sessionCounts = new Map<string, number>()
+      userMessages.forEach((timestamps, userId) => {
+        // Sort timestamps just in case
+        timestamps.sort((a, b) => a.getTime() - b.getTime())
+        
+        let sessions = timestamps.length > 0 ? 1 : 0
+        for (let i = 1; i < timestamps.length; i++) {
+          const gap = timestamps[i].getTime() - timestamps[i-1].getTime()
+          if (gap > SESSION_GAP_MS) {
+            sessions++
+          }
+        }
+        sessionCounts.set(userId, sessions)
       })
 
       // Get favorite counts per user
@@ -63,6 +92,7 @@ Deno.serve(async (req) => {
       const userScores = profiles?.map(profile => {
         const messageCount = messageCounts.get(profile.id) || 0
         const favoriteCount = favoriteCounts.get(profile.id) || 0
+        const sessions = sessionCounts.get(profile.id) || 0
         const engagementScore = messageCount * 1 + favoriteCount * 3
 
         return {
@@ -71,6 +101,7 @@ Deno.serve(async (req) => {
           messages: messageCount,
           favorites: favoriteCount,
           score: engagementScore,
+          sessions: sessions,
         }
       }) || []
 
