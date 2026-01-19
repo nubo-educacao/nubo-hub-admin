@@ -11,8 +11,9 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BarChart3 } from "lucide-react";
+import { BarChart3, ZoomOut } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Button } from "@/components/ui/button";
 
 type ViewMode = "week" | "day";
 
@@ -22,9 +23,9 @@ interface ActivityData {
   usuarios: number;
 }
 
-async function fetchActivityByMode(mode: ViewMode): Promise<ActivityData[]> {
+async function fetchActivityByMode(mode: ViewMode, zoomHour: number | null): Promise<ActivityData[]> {
   const { data, error } = await supabase.functions.invoke('analytics-activity', {
-    body: { mode }
+    body: { mode, ...(zoomHour !== null && { zoomHour }) }
   });
   
   if (error) throw error;
@@ -33,12 +34,27 @@ async function fetchActivityByMode(mode: ViewMode): Promise<ActivityData[]> {
 
 export function ActivityChart() {
   const [viewMode, setViewMode] = useState<ViewMode>("day");
+  const [zoomHour, setZoomHour] = useState<number | null>(null);
   
   const { data, isLoading, error } = useQuery({
-    queryKey: ["activity-data", viewMode],
-    queryFn: () => fetchActivityByMode(viewMode),
+    queryKey: ["activity-data", viewMode, zoomHour],
+    queryFn: () => fetchActivityByMode(viewMode, zoomHour),
     staleTime: 1000 * 60 * 5,
   });
+
+  const handleBarClick = (data: ActivityData) => {
+    if (viewMode === "day" && zoomHour === null && data.label.endsWith('h')) {
+      // Extract hour from label like "20h" -> 20
+      const hour = parseInt(data.label.replace('h', ''), 10);
+      if (!isNaN(hour)) {
+        setZoomHour(hour);
+      }
+    }
+  };
+
+  const handleZoomOut = () => {
+    setZoomHour(null);
+  };
 
   if (isLoading) {
     return (
@@ -75,39 +91,64 @@ export function ActivityChart() {
     );
   }
 
+  const getSubtitle = () => {
+    if (viewMode === "week") {
+      return "Mensagens e usuários por dia da semana";
+    }
+    if (zoomHour !== null) {
+      return `Detalhes das ${zoomHour.toString().padStart(2, '0')}h às ${(zoomHour + 1).toString().padStart(2, '0')}h (15 em 15 min)`;
+    }
+    return "Mensagens e usuários hora a hora (clique para detalhar)";
+  };
+
   return (
     <div className="chart-container">
       <div className="mb-6 flex items-center justify-between">
         <div className="flex flex-col gap-1">
           <h3 className="text-lg font-semibold font-display">Atividade</h3>
           <p className="text-sm text-muted-foreground">
-            {viewMode === "week" 
-              ? "Mensagens e usuários por dia da semana" 
-              : "Mensagens e usuários hora a hora (hoje)"
-            }
+            {getSubtitle()}
           </p>
         </div>
-        <ToggleGroup 
-          type="single" 
-          value={viewMode} 
-          onValueChange={(value) => value && setViewMode(value as ViewMode)}
-          className="bg-muted rounded-lg p-1"
-        >
-          <ToggleGroupItem 
-            value="week" 
-            size="sm"
-            className="data-[state=on]:bg-background data-[state=on]:shadow-sm px-3"
+        <div className="flex items-center gap-2">
+          {zoomHour !== null && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleZoomOut}
+              className="gap-1"
+            >
+              <ZoomOut className="h-4 w-4" />
+              Voltar
+            </Button>
+          )}
+          <ToggleGroup 
+            type="single" 
+            value={viewMode} 
+            onValueChange={(value) => {
+              if (value) {
+                setViewMode(value as ViewMode);
+                setZoomHour(null);
+              }
+            }}
+            className="bg-muted rounded-lg p-1"
           >
-            Semana
-          </ToggleGroupItem>
-          <ToggleGroupItem 
-            value="day" 
-            size="sm"
-            className="data-[state=on]:bg-background data-[state=on]:shadow-sm px-3"
-          >
-            Hoje
-          </ToggleGroupItem>
-        </ToggleGroup>
+            <ToggleGroupItem 
+              value="week" 
+              size="sm"
+              className="data-[state=on]:bg-background data-[state=on]:shadow-sm px-3"
+            >
+              Semana
+            </ToggleGroupItem>
+            <ToggleGroupItem 
+              value="day" 
+              size="sm"
+              className="data-[state=on]:bg-background data-[state=on]:shadow-sm px-3"
+            >
+              Hoje
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
       </div>
       
       <div className="h-[300px] w-full">
@@ -115,6 +156,12 @@ export function ActivityChart() {
           <AreaChart
             data={data}
             margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+            onClick={(e) => {
+              if (e && e.activePayload && e.activePayload[0]) {
+                handleBarClick(e.activePayload[0].payload);
+              }
+            }}
+            style={{ cursor: viewMode === "day" && zoomHour === null ? 'pointer' : 'default' }}
           >
             <defs>
               <linearGradient id="colorMensagens" x1="0" y1="0" x2="0" y2="1">
@@ -133,7 +180,7 @@ export function ActivityChart() {
               tickLine={false}
               axisLine={false}
               className="text-muted-foreground"
-              interval={viewMode === "day" ? 2 : 0}
+              interval={zoomHour !== null ? 0 : (viewMode === "day" ? 2 : 0)}
             />
             <YAxis
               tick={{ fontSize: 12 }}
