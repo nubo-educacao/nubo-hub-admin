@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { format, formatDistanceToNow, subDays, startOfDay, endOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -23,6 +24,17 @@ interface ChatMessage {
   sender: string;
   workflow: string | null;
   created_at: string;
+}
+
+interface UserSummary {
+  user_id: string;
+  user_name: string;
+  city: string | null;
+  age: number | null;
+  funnel_stage: string | null;
+  last_activity: string | null;
+  total_messages: number;
+  workflow: string | null;
 }
 
 interface UserConversation {
@@ -107,9 +119,15 @@ const formatRelativeTime = (dateString: string | null) => {
 };
 
 export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) {
-  const [conversations, setConversations] = useState<UserConversation[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
+  // Phase 1: User list (fast load)
+  const [userList, setUserList] = useState<UserSummary[]>([]);
+  const [loadingList, setLoadingList] = useState(true);
+  
+  // Phase 2: Active conversation (on-demand load)
+  const [activeConversation, setActiveConversation] = useState<UserConversation | null>(null);
+  const [loadingConversation, setLoadingConversation] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  
   const [error, setError] = useState<string | null>(null);
   const [funnelFilter, setFunnelFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -123,16 +141,18 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
   const [dateTo, setDateTo] = useState<Date | undefined>(new Date());
   const [isDatePopoverOpen, setIsDatePopoverOpen] = useState(false);
 
-  const fetchConversations = async () => {
+  // Phase 1: Fetch user list (fast)
+  const fetchUserList = async () => {
     try {
-      setLoading(true);
+      setLoadingList(true);
       setError(null);
-      console.log('Fetching conversations with date filter:', { dateFrom, dateTo });
+      console.log('Fetching user list (fast mode):', { dateFrom, dateTo });
       
       const requestBody: { 
+        mode: 'list';
         date_from?: string; 
         date_to?: string 
-      } = {};
+      } = { mode: 'list' };
       
       if (dateFrom) {
         requestBody.date_from = startOfDay(dateFrom).toISOString();
@@ -150,18 +170,59 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
         throw fetchError;
       }
       
-      if (data && Array.isArray(data)) {
-        console.log('Loaded', data.length, 'conversations');
-        setConversations(data);
+      if (data && data.users && Array.isArray(data.users)) {
+        console.log('Loaded', data.users.length, 'users (fast mode)');
+        setUserList(data.users);
+        
+        // Auto-select first user if none selected
+        if (data.users.length > 0 && !selectedUserId) {
+          loadConversation(data.users[0].user_id);
+        }
       } else {
         console.warn('Unexpected data format from analytics-chats:', data);
-        setConversations([]);
+        setUserList([]);
       }
     } catch (e) {
-      console.error('Error fetching conversations:', e);
+      console.error('Error fetching user list:', e);
       setError('Erro ao carregar conversas. Clique para tentar novamente.');
     } finally {
-      setLoading(false);
+      setLoadingList(false);
+    }
+  };
+
+  // Phase 2: Load conversation details on-demand
+  const loadConversation = async (userId: string) => {
+    try {
+      setLoadingConversation(true);
+      setSelectedUserId(userId);
+      console.log('Loading conversation for user:', userId);
+      
+      const { data, error: fetchError } = await supabase.functions.invoke('analytics-chats', {
+        body: { 
+          mode: 'conversation',
+          user_id: userId 
+        }
+      });
+
+      if (fetchError) {
+        console.error('Error loading conversation:', fetchError);
+        return;
+      }
+
+      if (data) {
+        setActiveConversation(data);
+        
+        // Scroll to bottom of messages
+        setTimeout(() => {
+          if (chatContainerRef.current) {
+            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+          }
+        }, 100);
+      }
+    } catch (e) {
+      console.error('Error loading conversation:', e);
+    } finally {
+      setLoadingConversation(false);
     }
   };
   
@@ -179,36 +240,24 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
   };
 
   useEffect(() => {
-    fetchConversations();
+    setSelectedUserId(null);
+    setActiveConversation(null);
+    fetchUserList();
   }, [dateFrom, dateTo]);
 
-  // Filter conversations by funnel stage and search query
-  const filteredConversations = conversations.filter(c => {
-    const matchesFunnel = funnelFilter === 'all' || c.funnel_stage === funnelFilter;
+  // Filter users by funnel stage and search query
+  const filteredUsers = userList.filter(u => {
+    const matchesFunnel = funnelFilter === 'all' || u.funnel_stage === funnelFilter;
     const matchesSearch = searchQuery === '' || 
-      c.user_name.toLowerCase().includes(searchQuery.toLowerCase());
+      u.user_name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesFunnel && matchesSearch;
   });
 
-  // Reset index when filter or search changes
-  useEffect(() => {
-    setCurrentIndex(0);
-  }, [funnelFilter, searchQuery]);
-
-  const currentConversation = filteredConversations[currentIndex];
-
-  const goToPrevious = () => {
-    setCurrentIndex((prev) => (prev > 0 ? prev - 1 : filteredConversations.length - 1));
-  };
-
-  const goToNext = () => {
-    setCurrentIndex((prev) => (prev < filteredConversations.length - 1 ? prev + 1 : 0));
-  };
-
+  // Load more messages for current conversation
   const loadMoreMessages = async () => {
-    if (!currentConversation || loadingMore) return;
+    if (!activeConversation || loadingMore) return;
     
-    const currentMessagesCount = currentConversation.messages.length;
+    const currentMessagesCount = activeConversation.messages.length;
     
     try {
       setLoadingMore(true);
@@ -219,7 +268,8 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
       
       const { data, error: fetchError } = await supabase.functions.invoke('analytics-chats', {
         body: { 
-          user_id: currentConversation.user_id, 
+          mode: 'conversation',
+          user_id: activeConversation.user_id, 
           offset: currentMessagesCount,
           messages_limit: 20
         }
@@ -232,16 +282,14 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
 
       if (data && data.messages && Array.isArray(data.messages)) {
         // Update the conversation with new messages prepended
-        setConversations(prev => prev.map(conv => {
-          if (conv.user_id === currentConversation.user_id) {
-            return {
-              ...conv,
-              messages: [...data.messages, ...conv.messages],
-              has_more_messages: data.has_more
-            };
-          }
-          return conv;
-        }));
+        setActiveConversation(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            messages: [...data.messages, ...prev.messages],
+            has_more_messages: data.has_more_messages
+          };
+        });
 
         // After state update, maintain scroll position
         setTimeout(() => {
@@ -258,7 +306,7 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
     }
   };
 
-  if (loading) {
+  if (loadingList) {
     return (
       <div className="flex items-center justify-center h-full">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -271,14 +319,14 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
         <MessageSquare className="h-12 w-12 mb-4 opacity-50" />
         <p className="mb-4">{error}</p>
-        <Button variant="outline" size="sm" onClick={fetchConversations}>
+        <Button variant="outline" size="sm" onClick={fetchUserList}>
           Tentar novamente
         </Button>
       </div>
     );
   }
 
-  if (conversations.length === 0) {
+  if (userList.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
         <MessageSquare className="h-12 w-12 mb-4 opacity-50" />
@@ -289,7 +337,7 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
 
   return (
     <div className="flex h-full gap-4">
-      {/* Left Sidebar - User List & Info (compact) */}
+      {/* Left Sidebar - User List */}
       <div className="w-72 flex-shrink-0 flex flex-col border-r border-border pr-4">
         {/* Search */}
         <div className="mb-3 flex-shrink-0">
@@ -389,40 +437,173 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
           </Select>
         </div>
 
-        {/* Navigation */}
-        <div className="flex items-center justify-between mb-3 flex-shrink-0">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={goToPrevious}
-            disabled={filteredConversations.length <= 1}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
+        {/* User Count */}
+        <div className="mb-2 flex-shrink-0">
           <span className="text-sm text-muted-foreground">
-            {currentIndex + 1} de {filteredConversations.length}
+            {filteredUsers.length} conversas
           </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={goToNext}
-            disabled={filteredConversations.length <= 1}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
         </div>
 
-        {filteredConversations.length === 0 ? (
-          <div className="flex flex-col items-center justify-center flex-1 text-muted-foreground">
-            <Filter className="h-8 w-8 mb-2 opacity-50" />
-            <p className="text-sm text-center">Nenhuma conversa nesta etapa</p>
-            <Button variant="outline" size="sm" className="mt-2" onClick={() => setFunnelFilter('all')}>
-              Limpar filtro
-            </Button>
+        {/* Scrollable User List */}
+        <ScrollArea className="flex-1">
+          <div className="space-y-1 pr-2">
+            {filteredUsers.map((user) => (
+              <div
+                key={user.user_id}
+                onClick={() => loadConversation(user.user_id)}
+                className={cn(
+                  "p-2 rounded-lg cursor-pointer transition-colors",
+                  "hover:bg-muted/80",
+                  selectedUserId === user.user_id 
+                    ? "bg-primary/10 border border-primary/30" 
+                    : "bg-muted/30 border border-transparent"
+                )}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-medium text-sm truncate flex-1">
+                    {user.user_name}
+                  </span>
+                  <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">
+                    {formatRelativeTime(user.last_activity)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge 
+                    variant="outline" 
+                    className={cn(
+                      "text-[10px] px-1.5 py-0",
+                      funnelStageColors[user.funnel_stage || ''] || "bg-muted"
+                    )}
+                  >
+                    {user.funnel_stage}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {user.total_messages} msgs
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
-        ) : (
-          <div className="flex-1 overflow-y-auto">
-            {/* Current User Card */}
+        </ScrollArea>
+      </div>
+
+      {/* Main Area */}
+      <div className="flex-1 flex gap-4 min-w-0">
+        {/* Chat Messages */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Chat Header */}
+          <div className="flex items-center gap-2 mb-3 pb-3 border-b border-border flex-shrink-0">
+            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+              <Cloud className="h-4 w-4 text-primary" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-semibold text-sm">Conversa com Cloudinha</h3>
+              <p className="text-xs text-muted-foreground truncate">
+                {activeConversation?.user_name || 'Selecione uma conversa'}
+                {activeConversation?.city && ` • ${activeConversation.city}`}
+              </p>
+            </div>
+            {loadingConversation && (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            )}
+          </div>
+
+          {/* Chat Messages */}
+          {!activeConversation && !loadingConversation && (
+            <div className="flex-1 flex items-center justify-center text-muted-foreground">
+              <div className="text-center">
+                <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>Selecione uma conversa na lista</p>
+              </div>
+            </div>
+          )}
+
+          {loadingConversation && !activeConversation && (
+            <div className="flex-1 flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          )}
+
+          {activeConversation && (
+            <div 
+              ref={chatContainerRef}
+              className="flex-1 overflow-y-auto rounded-lg border border-border bg-card/50 p-4"
+            >
+              <div className="space-y-4">
+                {/* Load More Button */}
+                {activeConversation.has_more_messages && (
+                  <div className="flex flex-col items-center gap-2 pb-4 border-b border-border/50">
+                    <span className="text-xs text-muted-foreground">
+                      Mostrando {activeConversation.messages.length} de {activeConversation.total_messages} mensagens
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={loadMoreMessages}
+                      disabled={loadingMore}
+                      className="gap-2"
+                    >
+                      {loadingMore ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <ChevronUp className="h-4 w-4" />
+                      )}
+                      {loadingMore ? 'Carregando...' : 'Carregar conversa anterior'}
+                    </Button>
+                  </div>
+                )}
+
+                {activeConversation.messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={cn(
+                      "flex gap-3",
+                      message.sender === 'user' ? "justify-start" : "justify-end"
+                    )}
+                  >
+                    {message.sender === 'user' && (
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                        <User className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    )}
+                    
+                    <div
+                      className={cn(
+                        "max-w-[75%] rounded-2xl px-4 py-3",
+                        message.sender === 'user'
+                          ? "bg-muted text-foreground rounded-tl-sm"
+                          : "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-tr-sm"
+                      )}
+                    >
+                      <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+                        {message.content}
+                      </p>
+                      <p className={cn(
+                        "text-[10px] mt-2",
+                        message.sender === 'user' ? "text-muted-foreground" : "text-primary-foreground/60"
+                      )}>
+                        {message.created_at && new Date(message.created_at).toLocaleTimeString('pt-BR', {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                    </div>
+
+                    {message.sender !== 'user' && (
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center">
+                        <Cloud className="h-4 w-4 text-primary-foreground" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right Sidebar - User Details */}
+        {activeConversation && (
+          <div className="w-64 flex-shrink-0 flex flex-col">
             <div className="p-3 rounded-lg bg-muted/50 border border-border">
               {/* User Header */}
               <div className="flex items-center gap-2 mb-3">
@@ -430,14 +611,14 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
                   <User className="h-5 w-5 text-primary" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h4 className="font-semibold truncate">{currentConversation?.user_name}</h4>
+                  <h4 className="font-semibold truncate">{activeConversation.user_name}</h4>
                   <div className="flex items-center gap-2">
-                    {currentConversation?.age && (
-                      <span className="text-xs text-muted-foreground">{currentConversation.age} anos</span>
+                    {activeConversation.age && (
+                      <span className="text-xs text-muted-foreground">{activeConversation.age} anos</span>
                     )}
-                    {currentConversation?.last_activity && (
+                    {activeConversation.last_activity && (
                       <span className="text-xs text-primary font-medium">
-                        • {formatRelativeTime(currentConversation.last_activity)}
+                        • {formatRelativeTime(activeConversation.last_activity)}
                       </span>
                     )}
                   </div>
@@ -445,35 +626,35 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
               </div>
 
               {/* Funnel Stage Badge */}
-              {currentConversation?.funnel_stage && (
+              {activeConversation.funnel_stage && (
                 <Badge 
                   variant="outline" 
                   className={cn(
                     "w-full justify-center mb-3 text-xs",
-                    funnelStageColors[currentConversation.funnel_stage] || "bg-muted"
+                    funnelStageColors[activeConversation.funnel_stage] || "bg-muted"
                   )}
                 >
                   <GitBranch className="h-3 w-3 mr-1" />
-                  {currentConversation.funnel_stage}
+                  {activeConversation.funnel_stage}
                 </Badge>
               )}
 
               {/* Phone Number with Copy Button */}
-              {currentConversation?.phone && (
+              {activeConversation.phone && (
                 <div className="flex items-center gap-2 p-2 rounded-md bg-success/10 border border-success/20 mb-3">
                   <Phone className="h-4 w-4 text-success flex-shrink-0" />
-                  <span className="text-sm font-mono flex-1 truncate">{currentConversation.phone}</span>
+                  <span className="text-sm font-mono flex-1 truncate">{activeConversation.phone}</span>
                   <Button
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 flex-shrink-0"
                     onClick={() => {
-                      navigator.clipboard.writeText(currentConversation.phone!);
-                      setCopiedPhone(currentConversation.phone);
+                      navigator.clipboard.writeText(activeConversation.phone!);
+                      setCopiedPhone(activeConversation.phone);
                       setTimeout(() => setCopiedPhone(null), 2000);
                     }}
                   >
-                    {copiedPhone === currentConversation.phone ? (
+                    {copiedPhone === activeConversation.phone ? (
                       <Check className="h-3.5 w-3.5 text-success" />
                     ) : (
                       <Copy className="h-3.5 w-3.5 text-muted-foreground" />
@@ -485,41 +666,41 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
               {/* User Details */}
               <div className="space-y-2 text-xs">
                 {/* Location: Where user IS from */}
-                {currentConversation?.city && (
+                {activeConversation.city && (
                   <div className="flex items-start gap-2 text-muted-foreground">
                     <MapPin className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
                     <div className="min-w-0">
                       <span className="text-foreground/70">Mora em:</span>
-                      <p className="truncate font-medium text-foreground">{currentConversation.city}</p>
+                      <p className="truncate font-medium text-foreground">{activeConversation.city}</p>
                     </div>
                   </div>
                 )}
 
                 {/* Location: Where user WANTS to study */}
-                {currentConversation?.location_preference && (
+                {activeConversation.location_preference && (
                   <div className="flex items-start gap-2 text-muted-foreground">
                     <Target className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-chart-2" />
                     <div className="min-w-0">
                       <span className="text-foreground/70">Quer estudar em:</span>
-                      <p className="truncate font-medium text-chart-2">{currentConversation.location_preference}</p>
+                      <p className="truncate font-medium text-chart-2">{activeConversation.location_preference}</p>
                     </div>
                   </div>
                 )}
 
-                {currentConversation?.education && (
+                {activeConversation.education && (
                   <div className="flex items-start gap-2 text-muted-foreground">
                     <GraduationCap className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
                     <span className="truncate">
-                      {educationLabels[currentConversation.education] || currentConversation.education}
+                      {educationLabels[activeConversation.education] || activeConversation.education}
                     </span>
                   </div>
                 )}
 
-                {currentConversation?.first_contact && (
+                {activeConversation.first_contact && (
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Calendar className="h-3.5 w-3.5 flex-shrink-0" />
                     <span className="truncate">
-                      {formatDistanceToNow(new Date(currentConversation.first_contact), { 
+                      {formatDistanceToNow(new Date(activeConversation.first_contact), { 
                         addSuffix: true, 
                         locale: ptBR 
                       })}
@@ -529,120 +710,23 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
 
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Hash className="h-3.5 w-3.5 flex-shrink-0" />
-                  <span>{currentConversation?.total_messages || 0} mensagens</span>
+                  <span>{activeConversation.total_messages} mensagens</span>
                 </div>
               </div>
 
               {/* Workflow Badges */}
               <div className="flex flex-wrap gap-1 mt-3">
-                {currentConversation?.workflow && (
+                {activeConversation.workflow && (
                   <Badge variant="secondary" className="text-xs">
-                    {workflowLabels[currentConversation.workflow] || currentConversation.workflow}
+                    {workflowLabels[activeConversation.workflow] || activeConversation.workflow}
                   </Badge>
                 )}
-                {currentConversation?.active_workflow && currentConversation.active_workflow !== currentConversation.workflow && (
+                {activeConversation.active_workflow && activeConversation.active_workflow !== activeConversation.workflow && (
                   <Badge variant="outline" className="text-xs">
-                    {workflowLabels[currentConversation.active_workflow] || currentConversation.active_workflow}
+                    {workflowLabels[activeConversation.active_workflow] || activeConversation.active_workflow}
                   </Badge>
                 )}
               </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Main Chat Area - Takes remaining space */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Chat Header */}
-        <div className="flex items-center gap-2 mb-3 pb-3 border-b border-border flex-shrink-0">
-          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-            <Cloud className="h-4 w-4 text-primary" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-sm">Conversa com Cloudinha</h3>
-            <p className="text-xs text-muted-foreground">
-              {currentConversation?.user_name}
-              {currentConversation?.city && ` • ${currentConversation.city}`}
-              {currentConversation?.location_preference && currentConversation.location_preference !== currentConversation.city && (
-                <span className="text-chart-2"> → {currentConversation.location_preference}</span>
-              )}
-            </p>
-          </div>
-        </div>
-
-        {/* Chat Messages - Full remaining height */}
-        {filteredConversations.length > 0 && (
-          <div 
-            ref={chatContainerRef}
-            className="flex-1 overflow-y-auto rounded-lg border border-border bg-card/50 p-4"
-          >
-            <div className="space-y-4">
-              {/* Load More Button */}
-              {currentConversation?.has_more_messages && (
-                <div className="flex flex-col items-center gap-2 pb-4 border-b border-border/50">
-                  <span className="text-xs text-muted-foreground">
-                    Mostrando {currentConversation.messages.length} de {currentConversation.total_messages} mensagens
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={loadMoreMessages}
-                    disabled={loadingMore}
-                    className="gap-2"
-                  >
-                    {loadingMore ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <ChevronUp className="h-4 w-4" />
-                    )}
-                    {loadingMore ? 'Carregando...' : 'Carregar conversa anterior'}
-                  </Button>
-                </div>
-              )}
-
-              {currentConversation?.messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={cn(
-                    "flex gap-3",
-                    message.sender === 'user' ? "justify-start" : "justify-end"
-                  )}
-                >
-                  {message.sender === 'user' && (
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                  )}
-                  
-                  <div
-                    className={cn(
-                      "max-w-[75%] rounded-2xl px-4 py-3",
-                      message.sender === 'user'
-                        ? "bg-muted text-foreground rounded-tl-sm"
-                        : "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-tr-sm"
-                    )}
-                  >
-                    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-                      {message.content}
-                    </p>
-                    <p className={cn(
-                      "text-[10px] mt-2",
-                      message.sender === 'user' ? "text-muted-foreground" : "text-primary-foreground/60"
-                    )}>
-                      {message.created_at && new Date(message.created_at).toLocaleTimeString('pt-BR', {
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </p>
-                  </div>
-
-                  {message.sender !== 'user' && (
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center">
-                      <Cloud className="h-4 w-4 text-primary-foreground" />
-                    </div>
-                  )}
-                </div>
-              ))}
             </div>
           </div>
         )}
