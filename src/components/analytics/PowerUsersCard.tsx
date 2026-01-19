@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { UserCheck, ChevronRight } from "lucide-react";
+import { UserCheck, ChevronRight, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -16,10 +16,12 @@ import {
 } from "@/components/ui/tooltip";
 import { HelpCircle } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { toast } from "sonner";
 
 interface PowerUser {
   userId: string;
   userName: string;
+  userPhone: string;
   accessCount: number;
 }
 
@@ -31,13 +33,33 @@ interface PowerUsersCardProps {
 
 export function PowerUsersCard({ count, change, powerUsersList }: PowerUsersCardProps) {
   const [open, setOpen] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const isPositive = change && change > 0;
   const isNegative = change && change < 0;
 
-  // Format user ID to show only first and last parts
-  const formatUserId = (userId: string) => {
-    if (userId.length <= 12) return userId;
-    return `${userId.slice(0, 6)}...${userId.slice(-4)}`;
+  // Format phone for display (e.g., 5581981846070 -> +55 81 98184-6070)
+  const formatPhone = (phone: string) => {
+    if (!phone) return '';
+    // Remove any non-digits
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length === 13) {
+      return `+${digits.slice(0, 2)} ${digits.slice(2, 4)} ${digits.slice(4, 9)}-${digits.slice(9)}`;
+    }
+    if (digits.length === 12) {
+      return `+${digits.slice(0, 2)} ${digits.slice(2, 4)} ${digits.slice(4, 8)}-${digits.slice(8)}`;
+    }
+    return phone;
+  };
+
+  const copyToClipboard = async (phone: string, userId: string) => {
+    try {
+      await navigator.clipboard.writeText(phone);
+      setCopiedId(userId);
+      toast.success('Telefone copiado!');
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (err) {
+      toast.error('Erro ao copiar');
+    }
   };
 
   return (
@@ -124,10 +146,26 @@ export function PowerUsersCard({ count, change, powerUsersList }: PowerUsersCard
                   <span className="flex items-center justify-center w-6 h-6 rounded-full bg-chart-3/20 text-chart-3 text-xs font-bold">
                     {index + 1}
                   </span>
-                  <div>
-                    <p className="text-sm font-medium" title={user.userId}>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate" title={user.userId}>
                       {user.userName}
                     </p>
+                    {user.userPhone && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyToClipboard(user.userPhone, user.userId);
+                        }}
+                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors group"
+                      >
+                        <span>{formatPhone(user.userPhone)}</span>
+                        {copiedId === user.userId ? (
+                          <Check className="h-3 w-3 text-success" />
+                        ) : (
+                          <Copy className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-1">

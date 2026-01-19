@@ -180,13 +180,23 @@ Deno.serve(async (req) => {
       profileMap.set(p.id, p.full_name || 'Usuário Anônimo')
     })
 
+    // Get phone numbers from auth.users
+    const { data: authUsers } = await supabase.auth.admin.listUsers()
+    const phoneMap = new Map<string, string>()
+    authUsers?.users?.forEach(u => {
+      if (u.phone) {
+        phoneMap.set(u.id, u.phone)
+      }
+    })
+
     // Power users are those with 2+ sessions (indicating repeated access)
-    const powerUsersList: { userId: string; userName: string; accessCount: number }[] = []
+    const powerUsersList: { userId: string; userName: string; userPhone: string; accessCount: number }[] = []
     userSessionCounts.forEach((sessions, userId) => {
       if (sessions >= 2) {
         powerUsersList.push({ 
           userId, 
           userName: profileMap.get(userId) || 'Usuário Anônimo',
+          userPhone: phoneMap.get(userId) || '',
           accessCount: sessions 
         })
       }
