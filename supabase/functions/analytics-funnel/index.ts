@@ -5,16 +5,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Descriptions for each funnel step
+// Descriptions for each funnel step (CUMULATIVE - each step requires previous steps)
 const funnelDescriptions: Record<string, string> = {
   'Cadastrados': 'Total de usuários na tabela user_profiles',
-  'Ativação': 'Usuários que enviaram ao menos 1 mensagem (registro em chat_messages)',
-  'Onboarding Completo': 'Usuários com onboarding_completed = true na tabela user_profiles',
-  'Preferências Definidas': 'Usuários únicos com registro em user_preferences',
-  'Match Iniciado': 'Usuários únicos que iniciaram o workflow de match (workflow = match_workflow em chat_messages)',
-  'Match Realizado': 'Usuários que receberam resultado do match (workflow_data diferente de {} em user_preferences)',
-  'Salvaram Favoritos': 'Usuários únicos que salvaram ao menos 1 favorito na tabela user_favorites',
-  'Fluxo Específico': 'Usuários que entraram em SISU, ProUni ou FIES workflow (workflow in sisu_workflow, prouni_workflow, fies_workflow)',
+  'Ativação': 'Cadastrados que enviaram ao menos 1 mensagem',
+  'Onboarding Completo': 'Ativados que completaram onboarding (onboarding_completed = true)',
+  'Preferências Definidas': 'Onboarding completo que definiram preferências',
+  'Match Iniciado': 'Preferências definidas que iniciaram o workflow de match',
+  'Match Realizado': 'Match iniciado que receberam resultado (workflow_data preenchido)',
+  'Salvaram Favoritos': 'Match realizado que salvaram ao menos 1 favorito',
 }
 
 interface UserData {
@@ -73,6 +72,12 @@ async function fetchAllWithPagination<T>(
   return allRecords
 }
 
+// Helper to calculate conversion rate
+function calcConversionRate(current: number, previous: number): string {
+  if (previous === 0) return '0.0'
+  return ((current / previous) * 100).toFixed(1)
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -94,139 +99,118 @@ Deno.serve(async (req) => {
       includeDetails = url.searchParams.get('details') === 'true'
     }
 
-    console.log('Starting funnel analysis with pagination...')
+    console.log('Starting CUMULATIVE funnel analysis...')
 
-    // Step 1: Total registered users (with pagination)
-    const allProfiles = await fetchAllWithPagination<{ id: string; full_name: string | null; city: string | null; created_at: string | null }>(
+    // ============================================
+    // STEP 1: Cadastrados - todos os user_profiles
+    // ============================================
+    const allProfiles = await fetchAllWithPagination<{ id: string; full_name: string | null; city: string | null; created_at: string | null; onboarding_completed: boolean | null }>(
       supabase,
       'user_profiles',
-      'id, full_name, city, created_at'
+      'id, full_name, city, created_at, onboarding_completed'
     )
-    const totalUsers = allProfiles.length
-    const allProfileIds = allProfiles.map(p => p.id)
-    console.log(`Step 1 - Cadastrados: ${totalUsers}`)
+    const cadastradosSet = new Set(allProfiles.map(p => p.id))
+    console.log(`Step 1 - Cadastrados: ${cadastradosSet.size}`)
 
-    // Step 1.5: Users who sent at least 1 message (Activation) - with pagination
+    // ============================================
+    // STEP 2: Ativação - cadastrados QUE enviaram mensagem
+    // ============================================
     const activatedMessages = await fetchAllWithPagination<{ user_id: string }>(
       supabase,
       'chat_messages',
       'user_id'
     )
-    const activatedUserIds = [...new Set(activatedMessages.map(m => m.user_id).filter(Boolean))]
-    const uniqueActivatedUsers = activatedUserIds.length
-    console.log(`Step 1.5 - Ativação: ${uniqueActivatedUsers}`)
+    const allActivatedIds = [...new Set(activatedMessages.map(m => m.user_id).filter(Boolean))]
+    // CUMULATIVE: only count those who are in cadastradosSet
+    const ativacaoSet = new Set(allActivatedIds.filter(id => cadastradosSet.has(id)))
+    console.log(`Step 2 - Ativação: ${ativacaoSet.size} (of ${allActivatedIds.length} total activated)`)
 
-    // Step 2: Users who completed onboarding (with pagination)
-    const onboardingProfiles = await fetchAllWithPagination<{ id: string; full_name: string | null; city: string | null; created_at: string | null }>(
-      supabase,
-      'user_profiles',
-      'id, full_name, city, created_at',
-      [{ column: 'onboarding_completed', operator: 'eq', value: true }]
-    )
-    const onboardingCompleted = onboardingProfiles.length
-    const onboardingUserIds = onboardingProfiles.map(p => p.id)
-    console.log(`Step 2 - Onboarding Completo: ${onboardingCompleted}`)
+    // ============================================
+    // STEP 3: Onboarding Completo - ativados QUE completaram onboarding
+    // ============================================
+    const onboardingCompletedIds = allProfiles
+      .filter(p => p.onboarding_completed === true)
+      .map(p => p.id)
+    // CUMULATIVE: only count those who are in ativacaoSet
+    const onboardingSet = new Set(onboardingCompletedIds.filter(id => ativacaoSet.has(id)))
+    console.log(`Step 3 - Onboarding Completo: ${onboardingSet.size} (of ${onboardingCompletedIds.length} total with onboarding)`)
 
-    // Step 3: Users who have any preferences record (with pagination)
-    const preferencesProfiles = await fetchAllWithPagination<{ user_id: string }>(
+    // ============================================
+    // STEP 4: Preferências Definidas - onboarding QUE definiram preferências
+    // ============================================
+    const preferencesProfiles = await fetchAllWithPagination<{ user_id: string; workflow_data: any; course_interest: string[] | null }>(
       supabase,
       'user_preferences',
-      'user_id'
+      'user_id, workflow_data, course_interest'
     )
-    const preferencesUserIds = [...new Set(preferencesProfiles.map(p => p.user_id).filter(Boolean))]
-    const preferencesSet = preferencesUserIds.length
-    console.log(`Step 3 - Preferências Definidas: ${preferencesSet}`)
+    const allPreferencesIds = [...new Set(preferencesProfiles.map(p => p.user_id).filter(Boolean))]
+    // CUMULATIVE: only count those who are in onboardingSet
+    const preferenciasSet = new Set(allPreferencesIds.filter(id => onboardingSet.has(id)))
+    console.log(`Step 4 - Preferências Definidas: ${preferenciasSet.size} (of ${allPreferencesIds.length} total with preferences)`)
 
-    // Step 4: Users who started match workflow (with pagination)
+    // ============================================
+    // STEP 5: Match Iniciado - preferências QUE iniciaram match workflow
+    // ============================================
     const matchMessages = await fetchAllWithPagination<{ user_id: string }>(
       supabase,
       'chat_messages',
       'user_id',
       [{ column: 'workflow', operator: 'eq', value: 'match_workflow' }]
     )
-    const matchUserIds = [...new Set(matchMessages.map(m => m.user_id).filter(Boolean))]
-    const uniqueMatchUsers = matchUserIds.length
-    console.log(`Step 4 - Match Iniciado: ${uniqueMatchUsers}`)
+    const allMatchInitiatedIds = [...new Set(matchMessages.map(m => m.user_id).filter(Boolean))]
+    // CUMULATIVE: only count those who are in preferenciasSet
+    const matchIniciadoSet = new Set(allMatchInitiatedIds.filter(id => preferenciasSet.has(id)))
+    console.log(`Step 5 - Match Iniciado: ${matchIniciadoSet.size} (of ${allMatchInitiatedIds.length} total who initiated match)`)
 
-    // Step 4.5: Users who completed match (workflow_data is not empty {}) - with pagination
-    const matchCompletedProfiles = await fetchAllWithPagination<{ user_id: string; workflow_data: any }>(
-      supabase,
-      'user_preferences',
-      'user_id, workflow_data'
-    )
+    // ============================================
+    // STEP 6: Match Realizado - match iniciado QUE receberam resultado
+    // ============================================
     // Filter users where workflow_data is not null and not an empty object
-    const matchCompletedUserIds = [...new Set(
-      matchCompletedProfiles
+    const allMatchCompletedIds = [...new Set(
+      preferencesProfiles
         .filter(p => {
           if (!p.workflow_data) return false
-          // Check if it's an empty object
           if (typeof p.workflow_data === 'object' && Object.keys(p.workflow_data).length === 0) return false
           return true
         })
         .map(p => p.user_id)
         .filter(Boolean)
     )]
-    const uniqueMatchCompletedUsers = matchCompletedUserIds.length
-    console.log(`Step 4.5 - Match Realizado: ${uniqueMatchCompletedUsers}`)
+    // CUMULATIVE: only count those who are in matchIniciadoSet
+    const matchRealizadoSet = new Set(allMatchCompletedIds.filter(id => matchIniciadoSet.has(id)))
+    console.log(`Step 6 - Match Realizado: ${matchRealizadoSet.size} (of ${allMatchCompletedIds.length} total who completed match)`)
 
-    // Step 5: Users who saved favorites (with pagination)
+    // ============================================
+    // STEP 7: Salvaram Favoritos - match realizado QUE salvaram favoritos
+    // ============================================
     const favoriteRecords = await fetchAllWithPagination<{ user_id: string }>(
       supabase,
       'user_favorites',
       'user_id'
     )
-    const favoriteUserIds = [...new Set(favoriteRecords.map(f => f.user_id).filter(Boolean))]
-    const uniqueFavoriteUsers = favoriteUserIds.length
-    console.log(`Step 5 - Salvaram Favoritos: ${uniqueFavoriteUsers}`)
+    const allFavoriteIds = [...new Set(favoriteRecords.map(f => f.user_id).filter(Boolean))]
+    // CUMULATIVE: only count those who are in matchRealizadoSet
+    const favoritosSet = new Set(allFavoriteIds.filter(id => matchRealizadoSet.has(id)))
+    console.log(`Step 7 - Salvaram Favoritos: ${favoritosSet.size} (of ${allFavoriteIds.length} total who saved favorites)`)
 
-    // Step 6: Users who engaged in specific workflows (sisu/prouni/fies) - with pagination
-    const specificWorkflowMessages = await fetchAllWithPagination<{ user_id: string }>(
-      supabase,
-      'chat_messages',
-      'user_id',
-      [{ column: 'workflow', operator: 'in', value: ['sisu_workflow', 'prouni_workflow', 'fies_workflow'] }]
-    )
-    const specificWorkflowUserIds = [...new Set(specificWorkflowMessages.map(u => u.user_id).filter(Boolean))]
-    const uniqueSpecificWorkflowUsers = specificWorkflowUserIds.length
-    console.log(`Step 6 - Fluxo Específico: ${uniqueSpecificWorkflowUsers}`)
-
-    // If details are requested, fetch complete user data including phone from auth.users
+    // ============================================
+    // Build user data map for drill-down (if requested)
+    // ============================================
     let usersDataMap: Map<string, UserData> = new Map()
     
     if (includeDetails) {
-      // Get all unique user IDs across all steps
-      const allUserIds = [...new Set([
-        ...allProfileIds,
-        ...activatedUserIds,
-        ...onboardingUserIds,
-        ...preferencesUserIds,
-        ...matchUserIds,
-        ...matchCompletedUserIds,
-        ...favoriteUserIds,
-        ...specificWorkflowUserIds
-      ])]
-      
+      const allUserIds = [...cadastradosSet]
       console.log(`Fetching details for ${allUserIds.length} users`)
       
-      // Fetch user profiles with pagination (already fetched above, reuse)
-      const profilesData = allProfiles
-      
-      // Fetch user preferences (for course_interest) with pagination
-      const preferencesData = await fetchAllWithPagination<{ user_id: string; course_interest: string[] | null }>(
-        supabase,
-        'user_preferences',
-        'user_id, course_interest'
-      )
-      
-      // Create a map of user_id -> course_interest
+      // Create a map of user_id -> course_interest from preferences
       const courseMap = new Map<string, string[]>()
-      for (const pref of preferencesData) {
+      for (const pref of preferencesProfiles) {
         if (pref.course_interest) {
           courseMap.set(pref.user_id, pref.course_interest)
         }
       }
       
-      // Fetch phone numbers from auth.users using admin API with pagination
+      // Fetch phone numbers from auth.users
       const phoneMap = new Map<string, string>()
       let page = 1
       const perPage = 1000
@@ -255,7 +239,7 @@ Deno.serve(async (req) => {
       }
       
       // Build complete user data map
-      for (const profile of profilesData) {
+      for (const profile of allProfiles) {
         usersDataMap.set(profile.id, {
           id: profile.id,
           full_name: profile.full_name,
@@ -276,83 +260,102 @@ Deno.serve(async (req) => {
         .filter((u): u is UserData => u !== undefined)
     }
 
-    // Build funnel with optional users data for drill-down
+    // Convert Sets to arrays for response
+    const cadastradosArr = [...cadastradosSet]
+    const ativacaoArr = [...ativacaoSet]
+    const onboardingArr = [...onboardingSet]
+    const preferenciasArr = [...preferenciasSet]
+    const matchIniciadoArr = [...matchIniciadoSet]
+    const matchRealizadoArr = [...matchRealizadoSet]
+    const favoritosArr = [...favoritosSet]
+
+    // Build CUMULATIVE funnel with conversion rates
     const funnel = [
       { 
         etapa: 'Cadastrados', 
-        valor: totalUsers,
+        valor: cadastradosSet.size,
+        taxa_conversao: '100.0',
+        taxa_conversao_anterior: null,
         description: funnelDescriptions['Cadastrados'],
         ...(includeDetails && { 
-          user_ids: allProfileIds,
-          users: getUsersData(allProfileIds)
+          user_ids: cadastradosArr,
+          users: getUsersData(cadastradosArr)
         })
       },
       { 
         etapa: 'Ativação', 
-        valor: uniqueActivatedUsers,
+        valor: ativacaoSet.size,
+        taxa_conversao: calcConversionRate(ativacaoSet.size, cadastradosSet.size),
+        taxa_conversao_anterior: calcConversionRate(ativacaoSet.size, cadastradosSet.size),
         description: funnelDescriptions['Ativação'],
         ...(includeDetails && { 
-          user_ids: activatedUserIds,
-          users: getUsersData(activatedUserIds as string[])
+          user_ids: ativacaoArr,
+          users: getUsersData(ativacaoArr)
         })
       },
       { 
         etapa: 'Onboarding Completo', 
-        valor: onboardingCompleted,
+        valor: onboardingSet.size,
+        taxa_conversao: calcConversionRate(onboardingSet.size, cadastradosSet.size),
+        taxa_conversao_anterior: calcConversionRate(onboardingSet.size, ativacaoSet.size),
         description: funnelDescriptions['Onboarding Completo'],
         ...(includeDetails && { 
-          user_ids: onboardingUserIds,
-          users: getUsersData(onboardingUserIds)
+          user_ids: onboardingArr,
+          users: getUsersData(onboardingArr)
         })
       },
       { 
         etapa: 'Preferências Definidas', 
-        valor: preferencesSet,
+        valor: preferenciasSet.size,
+        taxa_conversao: calcConversionRate(preferenciasSet.size, cadastradosSet.size),
+        taxa_conversao_anterior: calcConversionRate(preferenciasSet.size, onboardingSet.size),
         description: funnelDescriptions['Preferências Definidas'],
         ...(includeDetails && { 
-          user_ids: preferencesUserIds,
-          users: getUsersData(preferencesUserIds)
+          user_ids: preferenciasArr,
+          users: getUsersData(preferenciasArr)
         })
       },
       { 
         etapa: 'Match Iniciado', 
-        valor: uniqueMatchUsers,
+        valor: matchIniciadoSet.size,
+        taxa_conversao: calcConversionRate(matchIniciadoSet.size, cadastradosSet.size),
+        taxa_conversao_anterior: calcConversionRate(matchIniciadoSet.size, preferenciasSet.size),
         description: funnelDescriptions['Match Iniciado'],
         ...(includeDetails && { 
-          user_ids: matchUserIds,
-          users: getUsersData(matchUserIds as string[])
+          user_ids: matchIniciadoArr,
+          users: getUsersData(matchIniciadoArr)
         })
       },
       { 
         etapa: 'Match Realizado', 
-        valor: uniqueMatchCompletedUsers,
+        valor: matchRealizadoSet.size,
+        taxa_conversao: calcConversionRate(matchRealizadoSet.size, cadastradosSet.size),
+        taxa_conversao_anterior: calcConversionRate(matchRealizadoSet.size, matchIniciadoSet.size),
         description: funnelDescriptions['Match Realizado'],
         ...(includeDetails && { 
-          user_ids: matchCompletedUserIds,
-          users: getUsersData(matchCompletedUserIds as string[])
+          user_ids: matchRealizadoArr,
+          users: getUsersData(matchRealizadoArr)
         })
       },
       { 
         etapa: 'Salvaram Favoritos', 
-        valor: uniqueFavoriteUsers,
+        valor: favoritosSet.size,
+        taxa_conversao: calcConversionRate(favoritosSet.size, cadastradosSet.size),
+        taxa_conversao_anterior: calcConversionRate(favoritosSet.size, matchRealizadoSet.size),
         description: funnelDescriptions['Salvaram Favoritos'],
         ...(includeDetails && { 
-          user_ids: favoriteUserIds,
-          users: getUsersData(favoriteUserIds as string[])
-        })
-      },
-      { 
-        etapa: 'Fluxo Específico', 
-        valor: uniqueSpecificWorkflowUsers,
-        description: funnelDescriptions['Fluxo Específico'],
-        ...(includeDetails && { 
-          user_ids: specificWorkflowUserIds,
-          users: getUsersData(specificWorkflowUserIds as string[])
+          user_ids: favoritosArr,
+          users: getUsersData(favoritosArr)
         })
       },
     ]
 
-    console.log('Analytics funnel response:', funnel.map(f => ({ etapa: f.etapa, valor: f.valor, usersCount: f.users?.length })))
+    console.log('CUMULATIVE funnel response:', funnel.map(f => ({ 
+      etapa: f.etapa, 
+      valor: f.valor, 
+      taxa_anterior: f.taxa_conversao_anterior,
+      usersCount: f.users?.length 
+    })))
 
     return new Response(JSON.stringify(funnel), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
