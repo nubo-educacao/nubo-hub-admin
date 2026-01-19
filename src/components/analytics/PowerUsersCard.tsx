@@ -140,35 +140,35 @@ export function PowerUsersCard({ count, change, powerUsersList }: PowerUsersCard
             {powerUsersList.map((user, index) => (
               <div
                 key={user.userId}
-                className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
               >
-                <div className="flex items-center gap-3">
-                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-chart-3/20 text-chart-3 text-xs font-bold">
-                    {index + 1}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate" title={user.userId}>
-                      {user.userName}
-                    </p>
-                    {user.userPhone && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          copyToClipboard(user.userPhone, user.userId);
-                        }}
-                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors group"
-                      >
-                        <span>{formatPhone(user.userPhone)}</span>
-                        {copiedId === user.userId ? (
-                          <Check className="h-3 w-3 text-success" />
-                        ) : (
-                          <Copy className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        )}
-                      </button>
-                    )}
-                  </div>
+                <span className="flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full bg-chart-3/20 text-chart-3 text-xs font-bold">
+                  {index + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate" title={user.userName}>
+                    {user.userName}
+                  </p>
+                  {user.userPhone ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        copyToClipboard(user.userPhone, user.userId);
+                      }}
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors group"
+                    >
+                      <span>{formatPhone(user.userPhone)}</span>
+                      {copiedId === user.userId ? (
+                        <Check className="h-3 w-3 text-success" />
+                      ) : (
+                        <Copy className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      )}
+                    </button>
+                  ) : (
+                    <span className="text-xs text-muted-foreground/60">Telefone não disponível</span>
+                  )}
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex-shrink-0 flex flex-col items-end">
                   <span className="text-lg font-bold text-chart-3">
                     {user.accessCount}
                   </span>

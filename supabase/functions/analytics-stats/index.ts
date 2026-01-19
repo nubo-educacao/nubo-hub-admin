@@ -180,14 +180,38 @@ Deno.serve(async (req) => {
       profileMap.set(p.id, p.full_name || 'Usuário Anônimo')
     })
 
-    // Get phone numbers from auth.users
-    const { data: authUsers } = await supabase.auth.admin.listUsers()
+    // Get phone numbers from auth.users using SQL for reliable access
     const phoneMap = new Map<string, string>()
-    authUsers?.users?.forEach(u => {
-      if (u.phone) {
-        phoneMap.set(u.id, u.phone)
-      }
+    const userIdsToFetch = Array.from(userSessionCounts.keys()).filter(uid => {
+      const sessions = userSessionCounts.get(uid)
+      return sessions && sessions >= 2
     })
+    
+    if (userIdsToFetch.length > 0) {
+      const { data: authPhones } = await supabase
+        .rpc('get_user_phones_by_ids', { user_ids: userIdsToFetch })
+        .single()
+      
+      // Fallback: try fetching from auth.users directly via admin API with pagination
+      if (!authPhones) {
+        let page = 1
+        const perPage = 1000
+        while (true) {
+          const { data: authBatch } = await supabase.auth.admin.listUsers({
+            page,
+            perPage
+          })
+          if (!authBatch?.users || authBatch.users.length === 0) break
+          authBatch.users.forEach(u => {
+            if (u.phone && userIdsToFetch.includes(u.id)) {
+              phoneMap.set(u.id, u.phone)
+            }
+          })
+          if (authBatch.users.length < perPage) break
+          page++
+        }
+      }
+    }
 
     // Power users are those with 2+ sessions (indicating repeated access)
     const powerUsersList: { userId: string; userName: string; userPhone: string; accessCount: number }[] = []
