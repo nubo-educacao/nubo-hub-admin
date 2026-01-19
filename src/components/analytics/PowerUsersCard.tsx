@@ -19,6 +19,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface PowerUser {
   userId: string;
+  userName: string;
   accessCount: number;
 }
 
@@ -58,7 +59,7 @@ export function PowerUsersCard({ count, change, powerUsersList }: PowerUsersCard
                       <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent side="bottom" className="max-w-xs">
-                      <p className="text-xs">Usuários recorrentes com 2 ou mais interações nos últimos 7 dias. Clique para ver a lista.</p>
+                      <p className="text-xs">Usuários recorrentes com 2 ou mais acessos nos últimos 7 dias. Clique para ver a lista.</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -106,7 +107,7 @@ export function PowerUsersCard({ count, change, powerUsersList }: PowerUsersCard
         
         <div className="text-sm text-muted-foreground mb-4">
           {powerUsersList.length > 0 ? (
-            <p>Top {powerUsersList.length} usuários com mais interações nos últimos 7 dias</p>
+            <p>Top {powerUsersList.length} usuários com mais acessos nos últimos 7 dias</p>
           ) : (
             <p>Nenhum usuário recorrente encontrado</p>
           )}
@@ -124,8 +125,8 @@ export function PowerUsersCard({ count, change, powerUsersList }: PowerUsersCard
                     {index + 1}
                   </span>
                   <div>
-                    <p className="font-mono text-sm" title={user.userId}>
-                      {formatUserId(user.userId)}
+                    <p className="text-sm font-medium" title={user.userId}>
+                      {user.userName}
                     </p>
                   </div>
                 </div>
@@ -133,7 +134,7 @@ export function PowerUsersCard({ count, change, powerUsersList }: PowerUsersCard
                   <span className="text-lg font-bold text-chart-3">
                     {user.accessCount}
                   </span>
-                  <span className="text-xs text-muted-foreground">msgs</span>
+                  <span className="text-xs text-muted-foreground">acessos</span>
                 </div>
               </div>
             ))}
