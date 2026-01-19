@@ -11,6 +11,7 @@ const funnelDescriptions: Record<string, string> = {
   'Onboarding Completo': 'Usuários com onboarding_completed = true na tabela user_profiles',
   'Preferências Definidas': 'Usuários únicos com registro em user_preferences',
   'Match Iniciado': 'Usuários únicos que iniciaram o workflow de match (workflow = match_workflow em chat_messages)',
+  'Match Realizado': 'Usuários que receberam resultado do match (workflow_data diferente de {} em user_preferences)',
   'Salvaram Favoritos': 'Usuários únicos que salvaram ao menos 1 favorito na tabela user_favorites',
   'Fluxo Específico': 'Usuários que entraram em SISU, ProUni ou FIES workflow (workflow in sisu_workflow, prouni_workflow, fies_workflow)',
 }
@@ -78,6 +79,25 @@ Deno.serve(async (req) => {
     const matchUserIds = [...new Set(matchMessages?.map(m => m.user_id).filter(Boolean) || [])]
     const uniqueMatchUsers = matchUserIds.length
 
+    // Step 4.5: Users who completed match (workflow_data is not empty {})
+    const { data: matchCompletedProfiles } = await supabase
+      .from('user_preferences')
+      .select('user_id, workflow_data')
+    
+    // Filter users where workflow_data is not null and not an empty object
+    const matchCompletedUserIds = [...new Set(
+      matchCompletedProfiles
+        ?.filter(p => {
+          if (!p.workflow_data) return false
+          // Check if it's an empty object
+          if (typeof p.workflow_data === 'object' && Object.keys(p.workflow_data).length === 0) return false
+          return true
+        })
+        .map(p => p.user_id)
+        .filter(Boolean) || []
+    )]
+    const uniqueMatchCompletedUsers = matchCompletedUserIds.length
+
     // Step 5: Users who saved favorites
     const { data: favoriteRecords } = await supabase
       .from('user_favorites')
@@ -105,6 +125,7 @@ Deno.serve(async (req) => {
         ...onboardingUserIds,
         ...preferencesUserIds,
         ...matchUserIds,
+        ...matchCompletedUserIds,
         ...favoriteUserIds,
         ...specificWorkflowUserIds
       ])]
@@ -212,6 +233,15 @@ Deno.serve(async (req) => {
         ...(includeDetails && { 
           user_ids: matchUserIds,
           users: getUsersData(matchUserIds as string[])
+        })
+      },
+      { 
+        etapa: 'Match Realizado', 
+        valor: uniqueMatchCompletedUsers,
+        description: funnelDescriptions['Match Realizado'],
+        ...(includeDetails && { 
+          user_ids: matchCompletedUserIds,
+          users: getUsersData(matchCompletedUserIds as string[])
         })
       },
       { 
