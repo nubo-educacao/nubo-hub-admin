@@ -7,7 +7,7 @@ const corsHeaders = {
 
 // Descriptions for each funnel step (INDEPENDENT - each step counted separately)
 const funnelDescriptions: Record<string, string> = {
-  'Cadastrados': 'Total de usuários na tabela user_profiles',
+  'Cadastrados': 'Total de usuários autenticados (auth.users)',
   'Ativação': 'Usuários que enviaram ao menos 1 mensagem',
   'Onboarding Completo': 'Usuários que passaram pelo workflow de onboarding',
   'Preferências Definidas': 'Usuários que preencheram preferências',
@@ -96,15 +96,29 @@ Deno.serve(async (req) => {
     console.log('Starting INDEPENDENT funnel analysis...')
 
     // ============================================
-    // STEP 1: Cadastrados - todos os user_profiles
+    // STEP 1: Cadastrados - todos os auth.users (usuários autenticados)
     // ============================================
+    const cadastradosIds: string[] = []
+    let authPage = 1
+    const authPerPage = 1000
+    while (true) {
+      const { data: authBatch } = await supabase.auth.admin.listUsers({
+        page: authPage,
+        perPage: authPerPage
+      })
+      if (!authBatch?.users || authBatch.users.length === 0) break
+      cadastradosIds.push(...authBatch.users.map(u => u.id))
+      if (authBatch.users.length < authPerPage) break
+      authPage++
+    }
+    console.log(`Step 1 - Cadastrados (auth.users): ${cadastradosIds.length}`)
+
+    // Fetch user_profiles for additional data
     const allProfiles = await fetchAllWithPagination<{ id: string; full_name: string | null; city: string | null; created_at: string | null; onboarding_completed: boolean | null }>(
       supabase,
       'user_profiles',
       'id, full_name, city, created_at, onboarding_completed'
     )
-    const cadastradosIds = allProfiles.map(p => p.id)
-    console.log(`Step 1 - Cadastrados: ${cadastradosIds.length}`)
 
     // ============================================
     // STEP 2: Ativação - usuários que enviaram mensagem (INDEPENDENTE)
@@ -194,8 +208,19 @@ Deno.serve(async (req) => {
         }
       }
       
-      // Fetch phone numbers from auth.users
+      // Create a map of profile data
+      const profileDataMap = new Map<string, { full_name: string | null; city: string | null; created_at: string | null }>()
+      for (const profile of allProfiles) {
+        profileDataMap.set(profile.id, {
+          full_name: profile.full_name,
+          city: profile.city,
+          created_at: profile.created_at
+        })
+      }
+      
+      // Fetch phone numbers and created_at from auth.users
       const phoneMap = new Map<string, string>()
+      const authCreatedMap = new Map<string, string>()
       let page = 1
       const perPage = 1000
       
@@ -216,21 +241,25 @@ Deno.serve(async (req) => {
           if (user.phone) {
             phoneMap.set(user.id, user.phone)
           }
+          if (user.created_at) {
+            authCreatedMap.set(user.id, user.created_at)
+          }
         }
         
         if (authUsers.users.length < perPage) break
         page++
       }
       
-      // Build complete user data map
-      for (const profile of allProfiles) {
-        usersDataMap.set(profile.id, {
-          id: profile.id,
-          full_name: profile.full_name,
-          phone: phoneMap.get(profile.id) || null,
-          city: profile.city,
-          created_at: profile.created_at,
-          course_interest: courseMap.get(profile.id) || null
+      // Build complete user data map for all auth.users
+      for (const userId of cadastradosIds) {
+        const profileData = profileDataMap.get(userId)
+        usersDataMap.set(userId, {
+          id: userId,
+          full_name: profileData?.full_name || null,
+          phone: phoneMap.get(userId) || null,
+          city: profileData?.city || null,
+          created_at: profileData?.created_at || authCreatedMap.get(userId) || null,
+          course_interest: courseMap.get(userId) || null
         })
       }
       

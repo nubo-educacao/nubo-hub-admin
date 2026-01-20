@@ -1453,6 +1453,45 @@ export type Database = {
         }
         Relationships: []
       }
+      user_enem_scores: {
+        Row: {
+          created_at: string | null
+          id: string
+          nota_ciencias_humanas: number | null
+          nota_ciencias_natureza: number | null
+          nota_linguagens: number | null
+          nota_matematica: number | null
+          nota_redacao: number | null
+          updated_at: string | null
+          user_id: string
+          year: number
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          nota_ciencias_humanas?: number | null
+          nota_ciencias_natureza?: number | null
+          nota_linguagens?: number | null
+          nota_matematica?: number | null
+          nota_redacao?: number | null
+          updated_at?: string | null
+          user_id: string
+          year: number
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          nota_ciencias_humanas?: number | null
+          nota_ciencias_natureza?: number | null
+          nota_linguagens?: number | null
+          nota_matematica?: number | null
+          nota_redacao?: number | null
+          updated_at?: string | null
+          user_id?: string
+          year?: number
+        }
+        Relationships: []
+      }
       user_favorites: {
         Row: {
           course_id: string | null
