@@ -259,6 +259,21 @@ export type Database = {
         }
         Relationships: []
       }
+      concurrency_tag_rules: {
+        Row: {
+          tags: Json | null
+          type_name: string
+        }
+        Insert: {
+          tags?: Json | null
+          type_name: string
+        }
+        Update: {
+          tags?: Json | null
+          type_name?: string
+        }
+        Relationships: []
+      }
       courses: {
         Row: {
           campus_id: string | null
@@ -639,6 +654,13 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "mv_course_catalog"
+            referencedColumns: ["course_id"]
+          },
+          {
+            foreignKeyName: "opportunities_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "vw_favorite_courses_ranking"
             referencedColumns: ["course_id"]
           },
         ]
@@ -1469,6 +1491,13 @@ export type Database = {
             referencedColumns: ["course_id"]
           },
           {
+            foreignKeyName: "user_favorites_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "vw_favorite_courses_ranking"
+            referencedColumns: ["course_id"]
+          },
+          {
             foreignKeyName: "user_favorites_partner_id_fkey"
             columns: ["partner_id"]
             isOneToOne: false
@@ -1593,6 +1622,16 @@ export type Database = {
           search_vector: unknown
           state: string | null
           vacancies_json: Json | null
+        }
+        Relationships: []
+      }
+      vw_favorite_courses_ranking: {
+        Row: {
+          campus_name: string | null
+          course_id: string | null
+          course_name: string | null
+          institution_name: string | null
+          sum_user: number | null
         }
         Relationships: []
       }
