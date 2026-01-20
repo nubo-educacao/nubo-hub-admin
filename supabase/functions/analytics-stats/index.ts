@@ -5,6 +5,45 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Helper to fetch all rows with pagination
+// deno-lint-ignore no-explicit-any
+async function fetchAllRows<T>(
+  supabase: any,
+  table: string,
+  select: string,
+  filters?: { column: string; operator: string; value: string | boolean }[]
+): Promise<T[]> {
+  const allRows: T[] = []
+  const pageSize = 1000
+  let from = 0
+  let hasMore = true
+
+  while (hasMore) {
+    let query = supabase.from(table).select(select).range(from, from + pageSize - 1)
+    
+    if (filters) {
+      for (const f of filters) {
+        if (f.operator === 'gte') query = query.gte(f.column, f.value)
+        else if (f.operator === 'lt') query = query.lt(f.column, f.value)
+        else if (f.operator === 'eq') query = query.eq(f.column, f.value)
+      }
+    }
+
+    const { data, error } = await query
+    if (error) throw error
+
+    if (data && data.length > 0) {
+      allRows.push(...(data as T[]))
+      from += pageSize
+      hasMore = data.length === pageSize
+    } else {
+      hasMore = false
+    }
+  }
+
+  return allRows
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -23,11 +62,12 @@ Deno.serve(async (req) => {
     today.setHours(0, 0, 0, 0)
     const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000)
 
+    console.log('Fetching analytics data with full pagination...')
+
     // ========== PARALLEL QUERIES ==========
     const [
       authUsersResult,
-      messagesCurrentResult,
-      messagesPrevResult,
+      allMessagesResult,
       favoritesCurrentResult,
       favoritesPrevResult,
       preferencesCurrentResult,
@@ -42,160 +82,157 @@ Deno.serve(async (req) => {
       errorsYesterdayResult,
       profilesResult,
     ] = await Promise.all([
-      // 1. Total registered users (auth.users)
+      // 1. Total registered users
       supabase.auth.admin.listUsers({ page: 1, perPage: 1 }),
       
-      // 2. Messages current period (7d) - users who sent messages
-      supabase
-        .from('chat_messages')
-        .select('user_id')
-        .gte('created_at', sevenDaysAgo.toISOString())
-        .limit(50000),
+      // 2. ALL messages with pagination for session calculation
+      fetchAllRows<{ user_id: string; created_at: string }>(
+        supabase, 'chat_messages', 'user_id, created_at'
+      ),
       
-      // 3. Messages previous period (7-14d)
-      supabase
-        .from('chat_messages')
-        .select('user_id')
-        .gte('created_at', fourteenDaysAgo.toISOString())
-        .lt('created_at', sevenDaysAgo.toISOString())
-        .limit(50000),
+      // 3. Favorites current period (7d)
+      fetchAllRows<{ user_id: string }>(
+        supabase, 'user_favorites', 'user_id',
+        [{ column: 'created_at', operator: 'gte', value: sevenDaysAgo.toISOString() }]
+      ),
       
-      // 4. Favorites current period (7d)
-      supabase
-        .from('user_favorites')
-        .select('user_id')
-        .gte('created_at', sevenDaysAgo.toISOString())
-        .limit(10000),
+      // 4. Favorites previous period
+      fetchAllRows<{ user_id: string }>(
+        supabase, 'user_favorites', 'user_id',
+        [
+          { column: 'created_at', operator: 'gte', value: fourteenDaysAgo.toISOString() },
+          { column: 'created_at', operator: 'lt', value: sevenDaysAgo.toISOString() }
+        ]
+      ),
       
-      // 5. Favorites previous period (7-14d)
-      supabase
-        .from('user_favorites')
-        .select('user_id')
-        .gte('created_at', fourteenDaysAgo.toISOString())
-        .lt('created_at', sevenDaysAgo.toISOString())
-        .limit(10000),
+      // 5. Preferences current period
+      fetchAllRows<{ user_id: string }>(
+        supabase, 'user_preferences', 'user_id',
+        [{ column: 'updated_at', operator: 'gte', value: sevenDaysAgo.toISOString() }]
+      ),
       
-      // 6. Preferences current period (7d)
-      supabase
-        .from('user_preferences')
-        .select('user_id')
-        .gte('updated_at', sevenDaysAgo.toISOString())
-        .limit(10000),
+      // 6. Preferences previous period
+      fetchAllRows<{ user_id: string }>(
+        supabase, 'user_preferences', 'user_id',
+        [
+          { column: 'updated_at', operator: 'gte', value: fourteenDaysAgo.toISOString() },
+          { column: 'updated_at', operator: 'lt', value: sevenDaysAgo.toISOString() }
+        ]
+      ),
       
-      // 7. Preferences previous period (7-14d)
-      supabase
-        .from('user_preferences')
-        .select('user_id')
-        .gte('updated_at', fourteenDaysAgo.toISOString())
-        .lt('updated_at', sevenDaysAgo.toISOString())
-        .limit(10000),
-      
-      // 8. Total messages count
-      supabase
-        .from('chat_messages')
-        .select('*', { count: 'exact', head: true }),
-      
-      // 9. Messages this week count
-      supabase
-        .from('chat_messages')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', sevenDaysAgo.toISOString()),
-      
-      // 10. Messages prev week count
-      supabase
-        .from('chat_messages')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', fourteenDaysAgo.toISOString())
-        .lt('created_at', sevenDaysAgo.toISOString()),
-      
-      // 11. Total favorites count
-      supabase
-        .from('user_favorites')
-        .select('*', { count: 'exact', head: true }),
-      
-      // 12. Favorites this week count
-      supabase
-        .from('user_favorites')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', sevenDaysAgo.toISOString()),
-      
-      // 13. Favorites prev week count
-      supabase
-        .from('user_favorites')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', fourteenDaysAgo.toISOString())
-        .lt('created_at', sevenDaysAgo.toISOString()),
-      
-      // 14. Errors today count
-      supabase
-        .from('agent_errors')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', today.toISOString())
-        .eq('resolved', false),
-      
-      // 15. Errors yesterday count
-      supabase
-        .from('agent_errors')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', yesterday.toISOString())
-        .lt('created_at', today.toISOString())
-        .eq('resolved', false),
-      
-      // 16. User profiles for names
-      supabase
-        .from('user_profiles')
-        .select('id, full_name'),
+      // Counts
+      supabase.from('chat_messages').select('*', { count: 'exact', head: true }),
+      supabase.from('chat_messages').select('*', { count: 'exact', head: true }).gte('created_at', sevenDaysAgo.toISOString()),
+      supabase.from('chat_messages').select('*', { count: 'exact', head: true }).gte('created_at', fourteenDaysAgo.toISOString()).lt('created_at', sevenDaysAgo.toISOString()),
+      supabase.from('user_favorites').select('*', { count: 'exact', head: true }),
+      supabase.from('user_favorites').select('*', { count: 'exact', head: true }).gte('created_at', sevenDaysAgo.toISOString()),
+      supabase.from('user_favorites').select('*', { count: 'exact', head: true }).gte('created_at', fourteenDaysAgo.toISOString()).lt('created_at', sevenDaysAgo.toISOString()),
+      supabase.from('agent_errors').select('*', { count: 'exact', head: true }).gte('created_at', today.toISOString()).eq('resolved', false),
+      supabase.from('agent_errors').select('*', { count: 'exact', head: true }).gte('created_at', yesterday.toISOString()).lt('created_at', today.toISOString()).eq('resolved', false),
+      supabase.from('user_profiles').select('id, full_name'),
     ])
 
-    // Get total registered from auth metadata
-    const totalRegisteredUsers = authUsersResult.data?.users ? 
-      (authUsersResult as any).data?.total || authUsersResult.data.users.length : 0
+    const totalRegisteredUsers = (authUsersResult as any).data?.total || 
+      authUsersResult.data?.users?.length || 0
 
-    // ACTIVE USERS = users who sent messages OR used catalog (favorites/preferences) in last 7 days
-    // 1. Users with messages (7d)
-    const messageUserIds = new Set<string>()
-    for (const row of messagesCurrentResult.data || []) {
-      if (row.user_id) {
-        messageUserIds.add(row.user_id)
+    console.log('Total messages fetched:', allMessagesResult.length)
+
+    // ========== POWER USERS: Calculate sessions with 30-min gap ==========
+    const userMessages = new Map<string, Date[]>()
+    const recentMessageUserIds = new Set<string>()
+    
+    for (const msg of allMessagesResult) {
+      if (!msg.user_id) continue
+      
+      const msgDate = new Date(msg.created_at)
+      
+      // Track all messages per user for session calculation
+      if (!userMessages.has(msg.user_id)) {
+        userMessages.set(msg.user_id, [])
+      }
+      userMessages.get(msg.user_id)!.push(msgDate)
+      
+      // Track recent (7d) users
+      if (msgDate >= sevenDaysAgo) {
+        recentMessageUserIds.add(msg.user_id)
       }
     }
-    const activeUsersWithMessages = messageUserIds.size
 
-    // 2. Catalog users = users who used favorites OR preferences (but NO messages) in last 7 days
+    // Calculate sessions per user (30-min gap = new session)
+    const userSessionCounts = new Map<string, number>()
+    for (const [userId, timestamps] of userMessages) {
+      // Sort timestamps
+      timestamps.sort((a, b) => a.getTime() - b.getTime())
+      
+      let sessions = 1 // At least 1 session
+      for (let i = 1; i < timestamps.length; i++) {
+        const gap = (timestamps[i].getTime() - timestamps[i-1].getTime()) / (1000 * 60) // in minutes
+        if (gap > 30) {
+          sessions++
+        }
+      }
+      userSessionCounts.set(userId, sessions)
+    }
+
+    // Power users = 2+ sessions
+    const powerUsersList: { userId: string; userName: string; userPhone: string; accessCount: number }[] = []
+    const profileMap = new Map<string, string>()
+    profilesResult.data?.forEach(p => {
+      profileMap.set(p.id, p.full_name || 'Usuário Anônimo')
+    })
+
+    for (const [userId, sessionCount] of userSessionCounts) {
+      if (sessionCount >= 2) {
+        powerUsersList.push({
+          userId,
+          userName: profileMap.get(userId) || 'Usuário Anônimo',
+          userPhone: '',
+          accessCount: sessionCount
+        })
+      }
+    }
+
+    // Sort by session count desc
+    powerUsersList.sort((a, b) => b.accessCount - a.accessCount)
+    const powerUsersCount = powerUsersList.length
+
+    console.log('Power users (2+ sessions):', powerUsersCount)
+
+    // ========== ACTIVE USERS (7d) ==========
+    const activeUsersWithMessages = recentMessageUserIds.size
+
+    // Catalog users = favorites/preferences but no messages in last 7d
     const catalogUserIds = new Set<string>()
-    for (const row of favoritesCurrentResult.data || []) {
-      if (row.user_id && !messageUserIds.has(row.user_id)) {
+    for (const row of favoritesCurrentResult) {
+      if (row.user_id && !recentMessageUserIds.has(row.user_id)) {
         catalogUserIds.add(row.user_id)
       }
     }
-    for (const row of preferencesCurrentResult.data || []) {
-      if (row.user_id && !messageUserIds.has(row.user_id)) {
+    for (const row of preferencesCurrentResult) {
+      if (row.user_id && !recentMessageUserIds.has(row.user_id)) {
         catalogUserIds.add(row.user_id)
       }
     }
     const catalogUsersCount = catalogUserIds.size
-
-    // Total active = with messages + catalog only
     const totalActiveUsers = activeUsersWithMessages + catalogUsersCount
 
-    // INACTIVE USERS = registered but no activity in last 7 days
-    // (calculated on frontend as: totalRegistered - totalActiveUsers)
-
-    // Previous period calculations for change %
+    // Previous period
     const prevMessageUserIds = new Set<string>()
-    for (const row of messagesPrevResult.data || []) {
-      if (row.user_id) {
-        prevMessageUserIds.add(row.user_id)
+    for (const msg of allMessagesResult) {
+      if (!msg.user_id) continue
+      const msgDate = new Date(msg.created_at)
+      if (msgDate >= fourteenDaysAgo && msgDate < sevenDaysAgo) {
+        prevMessageUserIds.add(msg.user_id)
       }
     }
     
     const prevCatalogUserIds = new Set<string>()
-    for (const row of favoritesPrevResult.data || []) {
+    for (const row of favoritesPrevResult) {
       if (row.user_id && !prevMessageUserIds.has(row.user_id)) {
         prevCatalogUserIds.add(row.user_id)
       }
     }
-    for (const row of preferencesPrevResult.data || []) {
+    for (const row of preferencesPrevResult) {
       if (row.user_id && !prevMessageUserIds.has(row.user_id)) {
         prevCatalogUserIds.add(row.user_id)
       }
@@ -205,26 +242,9 @@ Deno.serve(async (req) => {
     const activeUsersPrev = prevMessageUserIds.size
     const totalActiveUsersPrev = activeUsersPrev + catalogUsersPrev
 
-    // Power Users calculation
-    const profileMap = new Map<string, string>()
-    profilesResult.data?.forEach(p => {
-      profileMap.set(p.id, p.full_name || 'Usuário Anônimo')
-    })
+    // Previous power users count (approximate based on ratio)
+    const powerUsersPrevCount = Math.round(powerUsersCount * (activeUsersPrev / Math.max(activeUsersWithMessages, 1)))
 
-    const powerUsersCount = Math.floor(activeUsersWithMessages * 0.13)
-    const powerUsersPrevCount = Math.floor(activeUsersPrev * 0.13)
-    
-    const powerUsersList: { userId: string; userName: string; userPhone: string; accessCount: number }[] = 
-      Array.from(messageUserIds)
-        .slice(0, 50)
-        .map(userId => ({
-          userId,
-          userName: profileMap.get(userId) || 'Usuário Anônimo',
-          userPhone: '',
-          accessCount: 2
-        }))
-
-    // Calculate percentage changes
     const calcChange = (current: number, previous: number) => {
       if (previous === 0) return current > 0 ? 100 : 0
       return Math.round(((current - previous) / previous) * 100)
@@ -253,7 +273,8 @@ Deno.serve(async (req) => {
       totalActive: totalActiveUsers,
       withMessages: activeUsersWithMessages,
       catalogOnly: catalogUsersCount,
-      powerUsers: powerUsersCount
+      powerUsers: powerUsersCount,
+      totalMessagesFetched: allMessagesResult.length
     })
 
     return new Response(JSON.stringify(response), {
