@@ -13,6 +13,7 @@ export interface PowerUser {
 }
 
 export interface DashboardStats {
+  totalRegistered: number;
   activeUsers: number;
   activeUsersWithMessages: number;
   catalogUsers: number;

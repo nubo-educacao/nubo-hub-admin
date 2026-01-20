@@ -32,6 +32,21 @@ Deno.serve(async (req) => {
     // Session gap definition (30 minutes = new session)
     const SESSION_GAP_MS = 30 * 60 * 1000
 
+    // Fetch total registered users from auth.users
+    let totalRegisteredUsers = 0
+    let authPage = 1
+    const authPerPage = 1000
+    while (true) {
+      const { data: authBatch } = await supabase.auth.admin.listUsers({
+        page: authPage,
+        perPage: authPerPage
+      })
+      if (!authBatch?.users || authBatch.users.length === 0) break
+      totalRegisteredUsers += authBatch.users.length
+      if (authBatch.users.length < authPerPage) break
+      authPage++
+    }
+
     // Active users (DISTINCT users who sent messages in last 7 days)
     // Using pagination to overcome 1000-row limit
     const batchSize = 1000
@@ -343,6 +358,7 @@ Deno.serve(async (req) => {
     }
 
     const response = {
+      totalRegistered: totalRegisteredUsers,
       activeUsers: totalActiveUsers, // Now includes catalog users
       activeUsersWithMessages: activeUsersWithMessages,
       catalogUsers: catalogUsersCount,
@@ -360,6 +376,7 @@ Deno.serve(async (req) => {
     }
 
     console.log('Analytics stats response:', {
+      totalRegistered: totalRegisteredUsers,
       totalActive: totalActiveUsers,
       withMessages: activeUsersWithMessages,
       catalogOnly: catalogUsersCount,
