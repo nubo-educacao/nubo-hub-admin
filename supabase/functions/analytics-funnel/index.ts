@@ -7,8 +7,6 @@ const corsHeaders = {
 
 const funnelDescriptions: Record<string, string> = {
   'Cadastrados': 'Total de usuários autenticados (auth.users)',
-  'Ativos (7d)': 'Usuários que enviaram mensagem ou usaram catálogo nos últimos 7 dias',
-  'Inativos (7d)': 'Usuários que só cadastraram, mas não interagiram nos últimos 7 dias',
   'Ativação': 'Usuários que enviaram ao menos 1 mensagem',
   'Onboarding Completo': 'Usuários que passaram pelo workflow de onboarding',
   'Preferências Definidas': 'Usuários que preencheram preferências',
@@ -24,6 +22,45 @@ interface UserData {
   city: string | null;
   created_at: string | null;
   course_interest: string[] | null;
+}
+
+// Helper to fetch all rows with pagination
+// deno-lint-ignore no-explicit-any
+async function fetchAllRows<T>(
+  supabase: any,
+  table: string,
+  select: string,
+  filters?: { column: string; operator: string; value: string | boolean }[]
+): Promise<T[]> {
+  const allRows: T[] = []
+  const pageSize = 1000
+  let from = 0
+  let hasMore = true
+
+  while (hasMore) {
+    let query = supabase.from(table).select(select).range(from, from + pageSize - 1)
+    
+    if (filters) {
+      for (const f of filters) {
+        if (f.operator === 'gte') query = query.gte(f.column, f.value)
+        else if (f.operator === 'lt') query = query.lt(f.column, f.value)
+        else if (f.operator === 'eq') query = query.eq(f.column, f.value)
+      }
+    }
+
+    const { data, error } = await query
+    if (error) throw error
+
+    if (data && data.length > 0) {
+      allRows.push(...(data as T[]))
+      from += pageSize
+      hasMore = data.length === pageSize
+    } else {
+      hasMore = false
+    }
+  }
+
+  return allRows
 }
 
 Deno.serve(async (req) => {
@@ -46,20 +83,12 @@ Deno.serve(async (req) => {
       includeDetails = url.searchParams.get('details') === 'true'
     }
 
-    console.log('Starting funnel analysis...')
+    console.log('Starting funnel analysis with full pagination...')
 
-    const now = new Date()
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-
-    // ========== PARALLEL QUERIES ==========
+    // ========== PARALLEL QUERIES WITH FULL PAGINATION ==========
     const [
       authUsersResult,
       allMessagesResult,
-      recentMessagesResult,
-      recentFavoritesResult,
-      recentPreferencesResult,
-      onboardingMessagesResult,
-      matchMessagesResult,
       preferencesResult,
       favoritesResult,
       profilesResult,
@@ -67,129 +96,79 @@ Deno.serve(async (req) => {
       // 1. Auth users count
       supabase.auth.admin.listUsers({ page: 1, perPage: 1 }),
       
-      // 2. All messages (for activation - users who ever sent a message)
-      supabase
-        .from('chat_messages')
-        .select('user_id')
-        .limit(100000),
+      // 2. ALL messages with pagination
+      fetchAllRows<{ user_id: string; workflow: string | null }>(
+        supabase, 'chat_messages', 'user_id, workflow'
+      ),
       
-      // 3. Recent messages (7d) for active users
-      supabase
-        .from('chat_messages')
-        .select('user_id')
-        .gte('created_at', sevenDaysAgo.toISOString())
-        .limit(50000),
+      // 3. ALL preferences with pagination
+      fetchAllRows<{ user_id: string; workflow_data: unknown; course_interest: string[] | null }>(
+        supabase, 'user_preferences', 'user_id, workflow_data, course_interest'
+      ),
       
-      // 4. Recent favorites (7d) for active users
-      supabase
-        .from('user_favorites')
-        .select('user_id')
-        .gte('created_at', sevenDaysAgo.toISOString())
-        .limit(10000),
+      // 4. ALL favorites with pagination
+      fetchAllRows<{ user_id: string }>(
+        supabase, 'user_favorites', 'user_id'
+      ),
       
-      // 5. Recent preferences (7d) for active users
-      supabase
-        .from('user_preferences')
-        .select('user_id')
-        .gte('updated_at', sevenDaysAgo.toISOString())
-        .limit(10000),
-      
-      // 6. Onboarding workflow messages
-      supabase
-        .from('chat_messages')
-        .select('user_id')
-        .eq('workflow', 'onboarding_workflow')
-        .limit(50000),
-      
-      // 7. Match workflow messages
-      supabase
-        .from('chat_messages')
-        .select('user_id')
-        .eq('workflow', 'match_workflow')
-        .limit(50000),
-      
-      // 8. User preferences (for preferences defined + match realized)
-      supabase
-        .from('user_preferences')
-        .select('user_id, workflow_data, course_interest')
-        .limit(10000),
-      
-      // 9. Favorites (all time)
-      supabase
-        .from('user_favorites')
-        .select('user_id')
-        .limit(10000),
-      
-      // 10. Profiles (for details)
-      includeDetails ? supabase
-        .from('user_profiles')
-        .select('id, full_name, city, created_at') : Promise.resolve({ data: [] }),
+      // 5. Profiles (for details)
+      includeDetails ? fetchAllRows<{ id: string; full_name: string | null; city: string | null; created_at: string | null }>(
+        supabase, 'user_profiles', 'id, full_name, city, created_at'
+      ) : Promise.resolve([]),
     ])
 
     // Get total from auth metadata
     const totalRegistered = (authUsersResult as any).data?.total || 
       authUsersResult.data?.users?.length || 0
 
-    // Calculate ACTIVE users (7d): users who sent messages OR used catalog
-    const recentMessageUserIds = new Set<string>()
-    for (const row of recentMessagesResult.data || []) {
-      if (row.user_id) recentMessageUserIds.add(row.user_id)
-    }
-    
-    const recentCatalogUserIds = new Set<string>()
-    for (const row of recentFavoritesResult.data || []) {
-      if (row.user_id && !recentMessageUserIds.has(row.user_id)) {
-        recentCatalogUserIds.add(row.user_id)
-      }
-    }
-    for (const row of recentPreferencesResult.data || []) {
-      if (row.user_id && !recentMessageUserIds.has(row.user_id)) {
-        recentCatalogUserIds.add(row.user_id)
-      }
-    }
-    
-    const activeUserIds = [...recentMessageUserIds, ...recentCatalogUserIds]
-    const inactiveCount = totalRegistered - activeUserIds.length
+    console.log('Total messages fetched:', allMessagesResult.length)
+    console.log('Total preferences fetched:', preferencesResult.length)
+    console.log('Total favorites fetched:', favoritesResult.length)
 
-    // Ativação: users who EVER sent a message
-    const ativacaoIds = [...new Set((allMessagesResult.data || [])
-      .map(m => m.user_id)
-      .filter(Boolean))]
-    
-    // Onboarding
-    const onboardingCompletedIds = [...new Set((onboardingMessagesResult.data || [])
-      .map(m => m.user_id)
-      .filter(Boolean))]
+    // Process messages for funnel stages
+    const ativacaoSet = new Set<string>()
+    const onboardingSet = new Set<string>()
+    const matchIniciadoSet = new Set<string>()
+
+    for (const msg of allMessagesResult) {
+      if (!msg.user_id) continue
+      
+      // Ativação = any message
+      ativacaoSet.add(msg.user_id)
+      
+      // Onboarding = onboarding_workflow
+      if (msg.workflow === 'onboarding_workflow') {
+        onboardingSet.add(msg.user_id)
+      }
+      
+      // Match iniciado = match_workflow
+      if (msg.workflow === 'match_workflow') {
+        matchIniciadoSet.add(msg.user_id)
+      }
+    }
+
+    const ativacaoIds = [...ativacaoSet]
+    const onboardingCompletedIds = [...onboardingSet]
+    const matchIniciadoIds = [...matchIniciadoSet]
     
     // Preferências Definidas
-    const preferenciasIds = [...new Set((preferencesResult.data || [])
-      .map(p => p.user_id)
-      .filter(Boolean))]
-    
-    // Match Iniciado
-    const matchIniciadoIds = [...new Set((matchMessagesResult.data || [])
-      .map(m => m.user_id)
-      .filter(Boolean))]
+    const preferenciasIds = [...new Set(preferencesResult.map(p => p.user_id).filter(Boolean))]
     
     // Match Realizado
-    const matchRealizadoIds = [...new Set((preferencesResult.data || [])
+    const matchRealizadoIds = [...new Set(preferencesResult
       .filter(p => {
         if (!p.workflow_data) return false
-        if (typeof p.workflow_data === 'object' && Object.keys(p.workflow_data).length === 0) return false
+        if (typeof p.workflow_data === 'object' && Object.keys(p.workflow_data as object).length === 0) return false
         return true
       })
       .map(p => p.user_id)
       .filter(Boolean))]
     
     // Favoritos
-    const favoritosIds = [...new Set((favoritesResult.data || [])
-      .map(f => f.user_id)
-      .filter(Boolean))]
+    const favoritosIds = [...new Set(favoritesResult.map(f => f.user_id).filter(Boolean))]
 
     console.log('Funnel counts:', {
       cadastrados: totalRegistered,
-      ativos7d: activeUserIds.length,
-      inativos7d: inactiveCount,
       ativacao: ativacaoIds.length,
       onboarding: onboardingCompletedIds.length,
       preferencias: preferenciasIds.length,
@@ -203,14 +182,14 @@ Deno.serve(async (req) => {
     
     if (includeDetails) {
       const courseMap = new Map<string, string[]>()
-      for (const pref of preferencesResult.data || []) {
+      for (const pref of preferencesResult) {
         if (pref.course_interest) {
           courseMap.set(pref.user_id, pref.course_interest)
         }
       }
       
       const profileDataMap = new Map<string, { full_name: string | null; city: string | null; created_at: string | null }>()
-      for (const profile of profilesResult.data || []) {
+      for (const profile of profilesResult) {
         profileDataMap.set(profile.id, {
           full_name: profile.full_name,
           city: profile.city,
@@ -218,7 +197,7 @@ Deno.serve(async (req) => {
         })
       }
       
-      for (const userId of [...ativacaoIds, ...preferenciasIds, ...favoritosIds, ...activeUserIds]) {
+      for (const userId of [...ativacaoIds, ...preferenciasIds, ...favoritosIds]) {
         if (!usersDataMap.has(userId)) {
           const profileData = profileDataMap.get(userId)
           usersDataMap.set(userId, {
@@ -239,26 +218,12 @@ Deno.serve(async (req) => {
         .filter((u): u is UserData => u !== undefined)
     }
 
-    // Build funnel response - NOW INCLUDING ACTIVE/INACTIVE
+    // Build funnel response (NO inativos)
     const funnel = [
       { 
         etapa: 'Cadastrados', 
         valor: totalRegistered,
         description: funnelDescriptions['Cadastrados'],
-      },
-      { 
-        etapa: 'Ativos (7d)', 
-        valor: activeUserIds.length,
-        description: funnelDescriptions['Ativos (7d)'],
-        ...(includeDetails && { 
-          user_ids: activeUserIds,
-          users: getUsersData(activeUserIds)
-        })
-      },
-      { 
-        etapa: 'Inativos (7d)', 
-        valor: inactiveCount,
-        description: funnelDescriptions['Inativos (7d)'],
       },
       { 
         etapa: 'Ativação', 
