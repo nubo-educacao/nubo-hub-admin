@@ -2,6 +2,7 @@ import { Users, MessageSquare, Heart, TrendingUp, Clock, MapPin } from "lucide-r
 import { DashboardHeader } from "@/components/analytics/DashboardHeader";
 import { StatCard } from "@/components/analytics/StatCard";
 import { PowerUsersCard } from "@/components/analytics/PowerUsersCard";
+import { CatalogUsersCard } from "@/components/analytics/CatalogUsersCard";
 import { ActivityChart } from "@/components/analytics/ActivityChart";
 import { TopCoursesChart } from "@/components/analytics/TopCoursesChart";
 import { OpportunityTypesChart } from "@/components/analytics/OpportunityTypesChart";
@@ -21,10 +22,10 @@ const Index = () => {
 
       <main className="container py-6 space-y-6">
         {/* Stats Overview */}
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           {statsLoading ? (
             <>
-              {[...Array(4)].map((_, i) => (
+              {[...Array(5)].map((_, i) => (
                 <Skeleton key={i} className="h-32 w-full" />
               ))}
             </>
@@ -36,7 +37,13 @@ const Index = () => {
                 change={stats?.activeUsersChange}
                 icon={Users}
                 variant="default"
-                tooltip="Número de usuários únicos que enviaram pelo menos uma mensagem nos últimos 7 dias."
+                tooltip="Total de usuários únicos ativos nos últimos 7 dias (inclui usuários com mensagens + usuários só catálogo)."
+              />
+              <CatalogUsersCard
+                count={stats?.catalogUsers || 0}
+                change={stats?.catalogUsersChange}
+                activeWithMessages={stats?.activeUsersWithMessages || 0}
+                totalActive={stats?.activeUsers || 0}
               />
               <PowerUsersCard
                 count={stats?.powerUsers || 0}

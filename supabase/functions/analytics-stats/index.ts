@@ -65,7 +65,108 @@ Deno.serve(async (req) => {
       offset += batchSize
       if (batch.length < batchSize) break
     }
-    const activeUsers = new Set(activeUserIds.filter(Boolean)).size
+    const messageUserIds = new Set(activeUserIds.filter(Boolean))
+    const activeUsersWithMessages = messageUserIds.size
+
+    // ============================================
+    // CATALOG USERS: users with favorites or preferences but NO messages
+    // ============================================
+    
+    // Get users who favorited something in last 7 days
+    const catalogUserIds = new Set<string>()
+    offset = 0
+    while (true) {
+      const { data: batch } = await supabase
+        .from('user_favorites')
+        .select('user_id')
+        .gte('created_at', sevenDaysAgo.toISOString())
+        .range(offset, offset + batchSize - 1)
+      
+      if (!batch || batch.length === 0) break
+      
+      for (const row of batch) {
+        if (row.user_id && !messageUserIds.has(row.user_id)) {
+          catalogUserIds.add(row.user_id)
+        }
+      }
+      
+      offset += batchSize
+      if (batch.length < batchSize) break
+    }
+    
+    // Get users who updated preferences in last 7 days
+    offset = 0
+    while (true) {
+      const { data: batch } = await supabase
+        .from('user_preferences')
+        .select('user_id, updated_at')
+        .gte('updated_at', sevenDaysAgo.toISOString())
+        .range(offset, offset + batchSize - 1)
+      
+      if (!batch || batch.length === 0) break
+      
+      for (const row of batch) {
+        if (row.user_id && !messageUserIds.has(row.user_id)) {
+          catalogUserIds.add(row.user_id)
+        }
+      }
+      
+      offset += batchSize
+      if (batch.length < batchSize) break
+    }
+    
+    const catalogUsersCount = catalogUserIds.size
+    const totalActiveUsers = activeUsersWithMessages + catalogUsersCount
+
+    // Previous period catalog users for comparison
+    const prevCatalogUserIds = new Set<string>()
+    const prevMessageUserIds = new Set<string>()
+    
+    // Previous period message users
+    offset = 0
+    while (true) {
+      const { data: batch } = await supabase
+        .from('chat_messages')
+        .select('user_id')
+        .gte('created_at', fourteenDaysAgo.toISOString())
+        .lt('created_at', sevenDaysAgo.toISOString())
+        .range(offset, offset + batchSize - 1)
+      
+      if (!batch || batch.length === 0) break
+      
+      for (const row of batch) {
+        if (row.user_id) prevMessageUserIds.add(row.user_id)
+      }
+      
+      offset += batchSize
+      if (batch.length < batchSize) break
+    }
+    
+    // Previous period favorites
+    offset = 0
+    while (true) {
+      const { data: batch } = await supabase
+        .from('user_favorites')
+        .select('user_id')
+        .gte('created_at', fourteenDaysAgo.toISOString())
+        .lt('created_at', sevenDaysAgo.toISOString())
+        .range(offset, offset + batchSize - 1)
+      
+      if (!batch || batch.length === 0) break
+      
+      for (const row of batch) {
+        if (row.user_id && !prevMessageUserIds.has(row.user_id)) {
+          prevCatalogUserIds.add(row.user_id)
+        }
+      }
+      
+      offset += batchSize
+      if (batch.length < batchSize) break
+    }
+    
+    const catalogUsersPrev = prevCatalogUserIds.size
+    const activeUsersPrev = prevMessageUserIds.size
+    const totalActiveUsersPrev = activeUsersPrev + catalogUsersPrev
 
     // Active users previous period (DISTINCT, for comparison)
     const userMessagesPrevPeriod = new Map<string, Date[]>()
@@ -93,7 +194,6 @@ Deno.serve(async (req) => {
       offset += batchSize
       if (batch.length < batchSize) break
     }
-    const activeUsersPrev = userMessagesPrevPeriod.size
 
     // Helper function to calculate sessions from timestamps
     const calculateSessions = (timestamps: Date[]): number => {
@@ -243,8 +343,11 @@ Deno.serve(async (req) => {
     }
 
     const response = {
-      activeUsers: activeUsers,
-      activeUsersChange: calcChange(activeUsers, activeUsersPrev),
+      activeUsers: totalActiveUsers, // Now includes catalog users
+      activeUsersWithMessages: activeUsersWithMessages,
+      catalogUsers: catalogUsersCount,
+      activeUsersChange: calcChange(totalActiveUsers, totalActiveUsersPrev),
+      catalogUsersChange: calcChange(catalogUsersCount, catalogUsersPrev),
       totalMessages: totalMessages || 0,
       messagesChange: calcChange(messagesThisWeek || 0, messagesPrevWeek || 0),
       totalFavorites: totalFavorites || 0,
@@ -256,7 +359,12 @@ Deno.serve(async (req) => {
       powerUsersList: powerUsersList.slice(0, 50), // Top 50 for the modal
     }
 
-    console.log('Analytics stats response:', response)
+    console.log('Analytics stats response:', {
+      totalActive: totalActiveUsers,
+      withMessages: activeUsersWithMessages,
+      catalogOnly: catalogUsersCount,
+      powerUsers: powerUsersCount
+    })
 
     return new Response(JSON.stringify(response), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
