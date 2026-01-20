@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Calendar, ChevronDown, Clock } from "lucide-react";
+import { Calendar, ChevronDown, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,7 +19,15 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-const dateRanges = [
+export type DateRangeValue = "today" | "7d" | "14d" | "30d" | "90d" | "year" | "custom";
+
+export interface DateRangeOption {
+  label: string;
+  value: DateRangeValue;
+}
+
+const dateRanges: DateRangeOption[] = [
+  { label: "Hoje", value: "today" },
   { label: "Últimos 7 dias", value: "7d" },
   { label: "Últimos 14 dias", value: "14d" },
   { label: "Últimos 30 dias", value: "30d" },
@@ -27,42 +35,30 @@ const dateRanges = [
   { label: "Este ano", value: "year" },
 ];
 
-const timeRanges = [
-  { label: "Dia inteiro", value: "all" },
-  { label: "Manhã (6h-12h)", value: "morning" },
-  { label: "Tarde (12h-18h)", value: "afternoon" },
-  { label: "Noite (18h-24h)", value: "evening" },
-  { label: "Madrugada (0h-6h)", value: "night" },
-];
-
 interface DateRangeFilterProps {
-  onDateChange?: (range: string) => void;
-  onTimeChange?: (time: string) => void;
+  selectedRange?: DateRangeValue;
+  onDateChange?: (range: DateRangeValue) => void;
   onCustomDateChange?: (date: Date | undefined) => void;
-  showTimeFilter?: boolean;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 export function DateRangeFilter({ 
+  selectedRange = "7d",
   onDateChange, 
-  onTimeChange, 
   onCustomDateChange,
-  showTimeFilter = true 
+  onRefresh,
+  isRefreshing = false,
 }: DateRangeFilterProps) {
-  const [selectedRange, setSelectedRange] = useState(dateRanges[0]);
-  const [selectedTime, setSelectedTime] = useState(timeRanges[0]);
   const [customDate, setCustomDate] = useState<Date | undefined>(undefined);
   const [showCustom, setShowCustom] = useState(false);
 
-  const handleRangeSelect = (range: typeof dateRanges[0]) => {
-    setSelectedRange(range);
+  const currentRange = dateRanges.find(r => r.value === selectedRange) || dateRanges[1];
+
+  const handleRangeSelect = (range: DateRangeOption) => {
     setShowCustom(false);
     setCustomDate(undefined);
     onDateChange?.(range.value);
-  };
-
-  const handleTimeSelect = (time: typeof timeRanges[0]) => {
-    setSelectedTime(time);
-    onTimeChange?.(time.value);
   };
 
   const handleCustomDateSelect = (date: Date | undefined) => {
@@ -70,6 +66,7 @@ export function DateRangeFilter({
     if (date) {
       setShowCustom(true);
       onCustomDateChange?.(date);
+      onDateChange?.("custom");
     }
   };
 
@@ -80,10 +77,18 @@ export function DateRangeFilter({
         <DropdownMenuTrigger asChild>
           <Button variant="outline" className="gap-2 font-medium">
             <Calendar className="h-4 w-4" />
-            {showCustom && customDate 
-              ? format(customDate, "dd/MM/yyyy", { locale: ptBR })
-              : selectedRange.label
-            }
+            <span className="hidden sm:inline">
+              {showCustom && customDate 
+                ? format(customDate, "dd/MM/yyyy", { locale: ptBR })
+                : currentRange.label
+              }
+            </span>
+            <span className="sm:hidden">
+              {showCustom && customDate 
+                ? format(customDate, "dd/MM", { locale: ptBR })
+                : currentRange.value === "today" ? "Hoje" : currentRange.value
+              }
+            </span>
             <ChevronDown className="h-4 w-4 opacity-50" />
           </Button>
         </DropdownMenuTrigger>
@@ -95,7 +100,7 @@ export function DateRangeFilter({
               onClick={() => handleRangeSelect(range)}
               className={cn(
                 "cursor-pointer",
-                selectedRange.value === range.value && !showCustom && "bg-accent"
+                selectedRange === range.value && !showCustom && "bg-accent"
               )}
             >
               {range.label}
@@ -129,34 +134,16 @@ export function DateRangeFilter({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Time Filter */}
-      {showTimeFilter && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2">
-              <Clock className="h-4 w-4" />
-              {selectedTime.label}
-              <ChevronDown className="h-4 w-4 opacity-50" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuLabel>Filtrar por horário</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {timeRanges.map((time) => (
-              <DropdownMenuItem
-                key={time.value}
-                onClick={() => handleTimeSelect(time)}
-                className={cn(
-                  "cursor-pointer",
-                  selectedTime.value === time.value && "bg-accent"
-                )}
-              >
-                {time.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+      {/* Refresh Button */}
+      <Button 
+        variant="outline" 
+        size="icon" 
+        className="shrink-0"
+        onClick={onRefresh}
+        disabled={isRefreshing}
+      >
+        <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+      </Button>
     </div>
   );
 }
