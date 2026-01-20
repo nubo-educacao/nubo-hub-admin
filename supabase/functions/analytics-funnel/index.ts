@@ -5,7 +5,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Descriptions for each funnel step (INDEPENDENT - each step counted separately)
 const funnelDescriptions: Record<string, string> = {
   'Cadastrados': 'Total de usuários autenticados (auth.users)',
   'Ativação': 'Usuários que enviaram ao menos 1 mensagem',
@@ -25,53 +24,6 @@ interface UserData {
   course_interest: string[] | null;
 }
 
-// Helper to fetch all records with pagination (overcomes 1000 row limit)
-async function fetchAllWithPagination<T>(
-  supabase: any,
-  table: string,
-  selectColumns: string,
-  filters?: { column: string; operator: string; value: any }[]
-): Promise<T[]> {
-  const allRecords: T[] = []
-  let offset = 0
-  const batchSize = 1000
-
-  while (true) {
-    let query = supabase.from(table).select(selectColumns)
-    
-    // Apply filters
-    if (filters) {
-      for (const filter of filters) {
-        if (filter.operator === 'eq') {
-          query = query.eq(filter.column, filter.value)
-        } else if (filter.operator === 'in') {
-          query = query.in(filter.column, filter.value)
-        } else if (filter.operator === 'neq') {
-          query = query.neq(filter.column, filter.value)
-        } else if (filter.operator === 'not.is') {
-          query = query.not(filter.column, 'is', filter.value)
-        }
-      }
-    }
-    
-    const { data: batch, error } = await query.range(offset, offset + batchSize - 1)
-    
-    if (error) {
-      console.error(`Error fetching from ${table}:`, error)
-      break
-    }
-    
-    if (!batch || batch.length === 0) break
-    
-    allRecords.push(...batch)
-    
-    offset += batchSize
-    if (batch.length < batchSize) break // Last page
-  }
-  
-  return allRecords
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -83,7 +35,6 @@ Deno.serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Check if details are requested
     let includeDetails = false
     const url = new URL(req.url)
     try {
@@ -93,124 +44,122 @@ Deno.serve(async (req) => {
       includeDetails = url.searchParams.get('details') === 'true'
     }
 
-    console.log('Starting INDEPENDENT funnel analysis...')
+    console.log('Starting OPTIMIZED funnel analysis...')
 
-    // ============================================
-    // STEP 1: Cadastrados - todos os auth.users (usuários autenticados)
-    // ============================================
-    const cadastradosIds: string[] = []
-    let authPage = 1
-    const authPerPage = 1000
-    while (true) {
-      const { data: authBatch } = await supabase.auth.admin.listUsers({
-        page: authPage,
-        perPage: authPerPage
+    // ========== PARALLEL QUERIES ==========
+    // Run all queries in parallel for maximum speed
+    const [
+      authUsersResult,
+      allMessagesResult,
+      onboardingMessagesResult,
+      matchMessagesResult,
+      preferencesResult,
+      favoritesResult,
+      profilesResult,
+    ] = await Promise.all([
+      // 1. Auth users count (single call)
+      supabase.auth.admin.listUsers({ page: 1, perPage: 1 }),
+      
+      // 2. All messages (for activation) - with high limit
+      supabase
+        .from('chat_messages')
+        .select('user_id')
+        .limit(100000),
+      
+      // 3. Onboarding workflow messages
+      supabase
+        .from('chat_messages')
+        .select('user_id')
+        .eq('workflow', 'onboarding_workflow')
+        .limit(50000),
+      
+      // 4. Match workflow messages
+      supabase
+        .from('chat_messages')
+        .select('user_id')
+        .eq('workflow', 'match_workflow')
+        .limit(50000),
+      
+      // 5. User preferences (for preferences defined + match realized)
+      supabase
+        .from('user_preferences')
+        .select('user_id, workflow_data, course_interest')
+        .limit(10000),
+      
+      // 6. Favorites
+      supabase
+        .from('user_favorites')
+        .select('user_id')
+        .limit(10000),
+      
+      // 7. Profiles (for details)
+      includeDetails ? supabase
+        .from('user_profiles')
+        .select('id, full_name, city, created_at') : Promise.resolve({ data: [] }),
+    ])
+
+    // Get total from auth metadata or count
+    const totalRegistered = (authUsersResult as any).data?.total || 
+      authUsersResult.data?.users?.length || 0
+
+    // Step 2: Ativação
+    const ativacaoIds = [...new Set((allMessagesResult.data || [])
+      .map(m => m.user_id)
+      .filter(Boolean))]
+    
+    // Step 3: Onboarding
+    const onboardingCompletedIds = [...new Set((onboardingMessagesResult.data || [])
+      .map(m => m.user_id)
+      .filter(Boolean))]
+    
+    // Step 4: Preferências Definidas
+    const preferenciasIds = [...new Set((preferencesResult.data || [])
+      .map(p => p.user_id)
+      .filter(Boolean))]
+    
+    // Step 5: Match Iniciado
+    const matchIniciadoIds = [...new Set((matchMessagesResult.data || [])
+      .map(m => m.user_id)
+      .filter(Boolean))]
+    
+    // Step 6: Match Realizado
+    const matchRealizadoIds = [...new Set((preferencesResult.data || [])
+      .filter(p => {
+        if (!p.workflow_data) return false
+        if (typeof p.workflow_data === 'object' && Object.keys(p.workflow_data).length === 0) return false
+        return true
       })
-      if (!authBatch?.users || authBatch.users.length === 0) break
-      cadastradosIds.push(...authBatch.users.map(u => u.id))
-      if (authBatch.users.length < authPerPage) break
-      authPage++
-    }
-    console.log(`Step 1 - Cadastrados (auth.users): ${cadastradosIds.length}`)
+      .map(p => p.user_id)
+      .filter(Boolean))]
+    
+    // Step 7: Favoritos
+    const favoritosIds = [...new Set((favoritesResult.data || [])
+      .map(f => f.user_id)
+      .filter(Boolean))]
 
-    // Fetch user_profiles for additional data
-    const allProfiles = await fetchAllWithPagination<{ id: string; full_name: string | null; city: string | null; created_at: string | null; onboarding_completed: boolean | null }>(
-      supabase,
-      'user_profiles',
-      'id, full_name, city, created_at, onboarding_completed'
-    )
+    console.log('Funnel counts:', {
+      cadastrados: totalRegistered,
+      ativacao: ativacaoIds.length,
+      onboarding: onboardingCompletedIds.length,
+      preferencias: preferenciasIds.length,
+      matchIniciado: matchIniciadoIds.length,
+      matchRealizado: matchRealizadoIds.length,
+      favoritos: favoritosIds.length,
+    })
 
-    // ============================================
-    // STEP 2: Ativação - usuários que enviaram mensagem (INDEPENDENTE)
-    // ============================================
-    const activatedMessages = await fetchAllWithPagination<{ user_id: string }>(
-      supabase,
-      'chat_messages',
-      'user_id'
-    )
-    const ativacaoIds = [...new Set(activatedMessages.map(m => m.user_id).filter(Boolean))]
-    console.log(`Step 2 - Ativação: ${ativacaoIds.length}`)
-
-    // ============================================
-    // STEP 3: Onboarding Completo - usuários que passaram pelo onboarding_workflow (INDEPENDENTE)
-    // ============================================
-    const onboardingMessages = await fetchAllWithPagination<{ user_id: string }>(
-      supabase,
-      'chat_messages',
-      'user_id',
-      [{ column: 'workflow', operator: 'eq', value: 'onboarding_workflow' }]
-    )
-    const onboardingCompletedIds = [...new Set(onboardingMessages.map(m => m.user_id).filter(Boolean))]
-    console.log(`Step 3 - Onboarding Completo: ${onboardingCompletedIds.length}`)
-
-    // ============================================
-    // STEP 4: Preferências Definidas - usuários com preferências (INDEPENDENTE)
-    // ============================================
-    const preferencesProfiles = await fetchAllWithPagination<{ user_id: string; workflow_data: any; course_interest: string[] | null }>(
-      supabase,
-      'user_preferences',
-      'user_id, workflow_data, course_interest'
-    )
-    const preferenciasIds = [...new Set(preferencesProfiles.map(p => p.user_id).filter(Boolean))]
-    console.log(`Step 4 - Preferências Definidas: ${preferenciasIds.length}`)
-
-    // ============================================
-    // STEP 5: Match Iniciado - usuários que iniciaram match workflow (INDEPENDENTE)
-    // ============================================
-    const matchMessages = await fetchAllWithPagination<{ user_id: string }>(
-      supabase,
-      'chat_messages',
-      'user_id',
-      [{ column: 'workflow', operator: 'eq', value: 'match_workflow' }]
-    )
-    const matchIniciadoIds = [...new Set(matchMessages.map(m => m.user_id).filter(Boolean))]
-    console.log(`Step 5 - Match Iniciado: ${matchIniciadoIds.length}`)
-
-    // ============================================
-    // STEP 6: Match Realizado - usuários que receberam resultado (INDEPENDENTE)
-    // ============================================
-    const matchRealizadoIds = [...new Set(
-      preferencesProfiles
-        .filter(p => {
-          if (!p.workflow_data) return false
-          if (typeof p.workflow_data === 'object' && Object.keys(p.workflow_data).length === 0) return false
-          return true
-        })
-        .map(p => p.user_id)
-        .filter(Boolean)
-    )]
-    console.log(`Step 6 - Match Realizado: ${matchRealizadoIds.length}`)
-
-    // ============================================
-    // STEP 7: Salvaram Favoritos - usuários que salvaram favoritos (INDEPENDENTE)
-    // ============================================
-    const favoriteRecords = await fetchAllWithPagination<{ user_id: string }>(
-      supabase,
-      'user_favorites',
-      'user_id'
-    )
-    const favoritosIds = [...new Set(favoriteRecords.map(f => f.user_id).filter(Boolean))]
-    console.log(`Step 7 - Salvaram Favoritos: ${favoritosIds.length}`)
-
-    // ============================================
     // Build user data map for drill-down (if requested)
-    // ============================================
     let usersDataMap: Map<string, UserData> = new Map()
     
     if (includeDetails) {
-      console.log(`Fetching details for ${cadastradosIds.length} users`)
-      
-      // Create a map of user_id -> course_interest from preferences
       const courseMap = new Map<string, string[]>()
-      for (const pref of preferencesProfiles) {
+      for (const pref of preferencesResult.data || []) {
         if (pref.course_interest) {
           courseMap.set(pref.user_id, pref.course_interest)
         }
       }
       
-      // Create a map of profile data
       const profileDataMap = new Map<string, { full_name: string | null; city: string | null; created_at: string | null }>()
-      for (const profile of allProfiles) {
+      for (const profile of profilesResult.data || []) {
         profileDataMap.set(profile.id, {
           full_name: profile.full_name,
           city: profile.city,
@@ -218,71 +167,35 @@ Deno.serve(async (req) => {
         })
       }
       
-      // Fetch phone numbers and created_at from auth.users
-      const phoneMap = new Map<string, string>()
-      const authCreatedMap = new Map<string, string>()
-      let page = 1
-      const perPage = 1000
-      
-      while (true) {
-        const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers({
-          page,
-          perPage
-        })
-        
-        if (authError) {
-          console.error('Error fetching auth users:', authError)
-          break
+      // For cadastrados, we only have the count, not individual IDs
+      // So details will only be available for other steps
+      for (const userId of [...ativacaoIds, ...preferenciasIds, ...favoritosIds]) {
+        if (!usersDataMap.has(userId)) {
+          const profileData = profileDataMap.get(userId)
+          usersDataMap.set(userId, {
+            id: userId,
+            full_name: profileData?.full_name || null,
+            phone: null,
+            city: profileData?.city || null,
+            created_at: profileData?.created_at || null,
+            course_interest: courseMap.get(userId) || null
+          })
         }
-        
-        if (!authUsers?.users || authUsers.users.length === 0) break
-        
-        for (const user of authUsers.users) {
-          if (user.phone) {
-            phoneMap.set(user.id, user.phone)
-          }
-          if (user.created_at) {
-            authCreatedMap.set(user.id, user.created_at)
-          }
-        }
-        
-        if (authUsers.users.length < perPage) break
-        page++
       }
-      
-      // Build complete user data map for all auth.users
-      for (const userId of cadastradosIds) {
-        const profileData = profileDataMap.get(userId)
-        usersDataMap.set(userId, {
-          id: userId,
-          full_name: profileData?.full_name || null,
-          phone: phoneMap.get(userId) || null,
-          city: profileData?.city || null,
-          created_at: profileData?.created_at || authCreatedMap.get(userId) || null,
-          course_interest: courseMap.get(userId) || null
-        })
-      }
-      
-      console.log(`Built user data map with ${usersDataMap.size} users, ${phoneMap.size} have phones, ${courseMap.size} have course interests`)
     }
 
-    // Helper to get user data for a list of IDs
     const getUsersData = (userIds: string[]): UserData[] => {
       return userIds
         .map(id => usersDataMap.get(id))
         .filter((u): u is UserData => u !== undefined)
     }
 
-    // Build INDEPENDENT funnel (no conversion rates - each step counted separately)
+    // Build funnel response
     const funnel = [
       { 
         etapa: 'Cadastrados', 
-        valor: cadastradosIds.length,
+        valor: totalRegistered,
         description: funnelDescriptions['Cadastrados'],
-        ...(includeDetails && { 
-          user_ids: cadastradosIds,
-          users: getUsersData(cadastradosIds)
-        })
       },
       { 
         etapa: 'Ativação', 
@@ -340,11 +253,7 @@ Deno.serve(async (req) => {
       },
     ]
 
-    console.log('INDEPENDENT funnel response:', funnel.map(f => ({ 
-      etapa: f.etapa, 
-      valor: f.valor, 
-      usersCount: f.users?.length 
-    })))
+    console.log('Optimized funnel response ready')
 
     return new Response(JSON.stringify(funnel), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
