@@ -16,7 +16,6 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Read type from body (POST) or query string (GET)
     let type = 'users'
     const url = new URL(req.url)
     
@@ -30,22 +29,30 @@ Deno.serve(async (req) => {
     console.log('Analytics rankings - type:', type)
 
     if (type === 'users') {
-      const SESSION_GAP_MS = 30 * 60 * 1000 // 30 minutos em milissegundos
+      const SESSION_GAP_MS = 30 * 60 * 1000
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
-      // Get messages with timestamps per user
-      const { data: messages } = await supabase
-        .from('chat_messages')
-        .select('user_id, created_at')
-        .order('created_at', { ascending: true })
+      // Run queries in parallel - only fetch last 7 days for performance
+      const [messagesResult, favoritesResult, profilesResult] = await Promise.all([
+        supabase
+          .from('chat_messages')
+          .select('user_id, created_at')
+          .gte('created_at', sevenDaysAgo.toISOString())
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('user_favorites')
+          .select('user_id'),
+        supabase
+          .from('user_profiles')
+          .select('id, full_name'),
+      ])
 
       const messageCounts = new Map<string, number>()
       const userMessages = new Map<string, Date[]>()
       
-      messages?.forEach(m => {
+      for (const m of messagesResult.data || []) {
         if (m.user_id) {
           messageCounts.set(m.user_id, (messageCounts.get(m.user_id) || 0) + 1)
-          
-          // Track timestamps for session calculation
           if (m.created_at) {
             if (!userMessages.has(m.user_id)) {
               userMessages.set(m.user_id, [])
@@ -53,61 +60,46 @@ Deno.serve(async (req) => {
             userMessages.get(m.user_id)!.push(new Date(m.created_at))
           }
         }
-      })
+      }
 
-      // Calculate sessions for each user (gap of 30min = new session)
+      // Calculate sessions
       const sessionCounts = new Map<string, number>()
       userMessages.forEach((timestamps, userId) => {
-        // Sort timestamps just in case
         timestamps.sort((a, b) => a.getTime() - b.getTime())
-        
         let sessions = timestamps.length > 0 ? 1 : 0
         for (let i = 1; i < timestamps.length; i++) {
-          const gap = timestamps[i].getTime() - timestamps[i-1].getTime()
-          if (gap > SESSION_GAP_MS) {
+          if (timestamps[i].getTime() - timestamps[i-1].getTime() > SESSION_GAP_MS) {
             sessions++
           }
         }
         sessionCounts.set(userId, sessions)
       })
 
-      // Get favorite counts per user
-      const { data: favorites } = await supabase
-        .from('user_favorites')
-        .select('user_id')
-
       const favoriteCounts = new Map<string, number>()
-      favorites?.forEach(f => {
+      for (const f of favoritesResult.data || []) {
         if (f.user_id) {
           favoriteCounts.set(f.user_id, (favoriteCounts.get(f.user_id) || 0) + 1)
         }
-      })
+      }
 
-      // Get user profiles
-      const { data: profiles } = await supabase
-        .from('user_profiles')
-        .select('id, full_name')
-
-      // Calculate engagement score and build ranking
-      const userScores = profiles?.map(profile => {
+      const userScores = (profilesResult.data || []).map(profile => {
         const messageCount = messageCounts.get(profile.id) || 0
         const favoriteCount = favoriteCounts.get(profile.id) || 0
         const sessions = sessionCounts.get(profile.id) || 0
-        const engagementScore = messageCount * 1 + favoriteCount * 3
-
         return {
           id: profile.id,
           name: profile.full_name || 'Usuário Anônimo',
           messages: messageCount,
           favorites: favoriteCount,
-          score: engagementScore,
+          score: messageCount * 1 + favoriteCount * 3,
           sessions: sessions,
         }
-      }) || []
+      })
 
-      // Sort by score (return ALL users, not just top 10)
+      // Return top 100 instead of all users
       const topUsers = userScores
         .sort((a, b) => b.score - a.score)
+        .slice(0, 100)
 
       console.log('Analytics rankings (users) response:', topUsers.length, 'users')
 
@@ -117,35 +109,31 @@ Deno.serve(async (req) => {
     }
 
     if (type === 'locations') {
-      // Get locations from user_profiles
-      const { data: profiles } = await supabase
-        .from('user_profiles')
-        .select('city')
-        .not('city', 'is', null)
+      const [profilesResult, preferencesResult] = await Promise.all([
+        supabase
+          .from('user_profiles')
+          .select('city')
+          .not('city', 'is', null),
+        supabase
+          .from('user_preferences')
+          .select('state_preference')
+          .not('state_preference', 'is', null),
+      ])
 
-      // Get locations from user_preferences
-      const { data: preferences } = await supabase
-        .from('user_preferences')
-        .select('state_preference')
-        .not('state_preference', 'is', null)
-
-      // Count locations
       const locationCounts = new Map<string, number>()
       
-      profiles?.forEach(p => {
+      for (const p of profilesResult.data || []) {
         if (p.city) {
           locationCounts.set(p.city, (locationCounts.get(p.city) || 0) + 1)
         }
-      })
+      }
 
-      preferences?.forEach(p => {
+      for (const p of preferencesResult.data || []) {
         if (p.state_preference) {
-          const loc = p.state_preference
-          locationCounts.set(loc, (locationCounts.get(loc) || 0) + 1)
+          locationCounts.set(p.state_preference, (locationCounts.get(p.state_preference) || 0) + 1)
         }
-      })
+      }
 
-      // Convert to array and sort
       const locations = Array.from(locationCounts.entries())
         .map(([name, count]) => ({ name, count }))
         .sort((a, b) => b.count - a.count)
@@ -159,24 +147,21 @@ Deno.serve(async (req) => {
     }
 
     if (type === 'courses') {
-      // Get course interests from user_preferences
       const { data: preferences } = await supabase
         .from('user_preferences')
         .select('course_interest')
         .not('course_interest', 'is', null)
 
-      // Count course occurrences
       const courseCounts = new Map<string, number>()
       
-      preferences?.forEach(p => {
+      for (const p of preferences || []) {
         if (p.course_interest && Array.isArray(p.course_interest)) {
-          p.course_interest.forEach((course: string) => {
+          for (const course of p.course_interest) {
             courseCounts.set(course, (courseCounts.get(course) || 0) + 1)
-          })
+          }
         }
-      })
+      }
 
-      // Convert to array and sort
       const courses = Array.from(courseCounts.entries())
         .map(([name, searches]) => ({ name, searches }))
         .sort((a, b) => b.searches - a.searches)
@@ -190,24 +175,21 @@ Deno.serve(async (req) => {
     }
 
     if (type === 'preferences') {
-      // Get program preferences
       const { data: preferences } = await supabase
         .from('user_preferences')
         .select('program_preference')
         .not('program_preference', 'is', null)
 
-      // Count preferences
       const prefCounts = new Map<string, number>()
       
-      preferences?.forEach(p => {
+      for (const p of preferences || []) {
         if (p.program_preference) {
           prefCounts.set(p.program_preference, (prefCounts.get(p.program_preference) || 0) + 1)
         }
-      })
+      }
 
       const total = preferences?.length || 1
 
-      // Convert to array with percentages
       const prefs = Array.from(prefCounts.entries())
         .map(([name, count]) => ({ 
           name, 
@@ -224,24 +206,20 @@ Deno.serve(async (req) => {
     }
 
     if (type === 'location_preferences') {
-      // Get location preferences from user_preferences
       const { data: preferences } = await supabase
         .from('user_preferences')
         .select('location_preference')
         .not('location_preference', 'is', null)
 
-      // Count location occurrences with normalization
       const locationCounts = new Map<string, number>()
       
-      preferences?.forEach(p => {
+      for (const p of preferences || []) {
         let loc = (p.location_preference || '').trim()
-        if (!loc) return
-        // Normalize: primeira letra maiúscula
+        if (!loc) continue
         loc = loc.charAt(0).toUpperCase() + loc.slice(1)
         locationCounts.set(loc, (locationCounts.get(loc) || 0) + 1)
-      })
+      }
 
-      // Convert to array and sort
       const locations = Array.from(locationCounts.entries())
         .map(([name, count]) => ({ name, count }))
         .sort((a, b) => b.count - a.count)
