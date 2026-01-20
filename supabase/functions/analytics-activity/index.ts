@@ -69,19 +69,42 @@ Deno.serve(async (req) => {
 
     console.log('Mode:', mode, 'ZoomHour:', zoomHour)
 
+    // Helper function to fetch all messages with pagination
+    const fetchAllMessages = async (startDate: Date): Promise<{ created_at: string; user_id: string }[]> => {
+      const allMessages: { created_at: string; user_id: string }[] = []
+      const pageSize = 1000
+      let from = 0
+      let hasMore = true
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('chat_messages')
+          .select('created_at, user_id')
+          .gte('created_at', startDate.toISOString())
+          .order('created_at', { ascending: true })
+          .range(from, from + pageSize - 1)
+
+        if (error) throw error
+
+        if (data && data.length > 0) {
+          allMessages.push(...data)
+          from += pageSize
+          hasMore = data.length === pageSize
+        } else {
+          hasMore = false
+        }
+      }
+
+      return allMessages
+    }
+
     if (mode === 'day') {
       const todayStartUTC = getBrazilTodayStartUTC()
       
-      // Single query - no pagination needed for today's data (usually < 1000)
-      const { data: messages, error } = await supabase
-        .from('chat_messages')
-        .select('created_at, user_id')
-        .gte('created_at', todayStartUTC.toISOString())
-        .order('created_at', { ascending: true })
-
-      if (error) throw error
-
-      console.log('Messages fetched for today:', messages?.length || 0)
+      // Fetch ALL messages for today using pagination
+      const messages = await fetchAllMessages(todayStartUTC)
+      
+      console.log('Total messages fetched for today:', messages.length)
 
       if (zoomHour !== null) {
         const slotMap = new Map<string, { mensagens: number; usuarios: Set<string> }>()
@@ -90,7 +113,7 @@ Deno.serve(async (req) => {
           slotMap.set(key, { mensagens: 0, usuarios: new Set() })
         }
 
-        for (const msg of messages || []) {
+        for (const msg of messages) {
           if (msg.created_at) {
             const brazilHour = getBrazilHour(msg.created_at)
             if (brazilHour === zoomHour) {
@@ -123,7 +146,7 @@ Deno.serve(async (req) => {
         hourlyMap.set(h, { mensagens: 0, usuarios: new Set() })
       }
 
-      for (const msg of messages || []) {
+      for (const msg of messages) {
         if (msg.created_at) {
           const brazilHour = getBrazilHour(msg.created_at)
           const hourData = hourlyMap.get(brazilHour)!
@@ -140,7 +163,8 @@ Deno.serve(async (req) => {
         usuarios: data.usuarios.size,
       }))
 
-      console.log('Activity (day) sample:', activity.slice(0, 3))
+      console.log('Activity (day) complete - hours with data:', 
+        activity.filter(a => a.mensagens > 0).length)
 
       return new Response(JSON.stringify(activity), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -155,16 +179,10 @@ Deno.serve(async (req) => {
         -BRAZIL_OFFSET_HOURS, 0, 0, 0
       ))
 
-      // Single query for week data
-      const { data: messages, error } = await supabase
-        .from('chat_messages')
-        .select('created_at, user_id')
-        .gte('created_at', sevenDaysAgoUTC.toISOString())
-        .order('created_at', { ascending: true })
+      // Fetch ALL messages for week using pagination
+      const messages = await fetchAllMessages(sevenDaysAgoUTC)
 
-      if (error) throw error
-
-      console.log('Messages fetched for week:', messages?.length || 0)
+      console.log('Total messages fetched for week:', messages.length)
 
       const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
       const activityMap = new Map<string, { mensagens: number; usuarios: Set<string>; dayOfWeek: number }>()
@@ -179,7 +197,7 @@ Deno.serve(async (req) => {
         activityMap.set(dayKey, { mensagens: 0, usuarios: new Set(), dayOfWeek: dayDate.getUTCDay() })
       }
 
-      for (const msg of messages || []) {
+      for (const msg of messages) {
         if (msg.created_at) {
           const dayKey = getBrazilDateKey(msg.created_at)
           if (activityMap.has(dayKey)) {

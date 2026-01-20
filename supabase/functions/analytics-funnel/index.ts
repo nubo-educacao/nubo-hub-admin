@@ -7,6 +7,8 @@ const corsHeaders = {
 
 const funnelDescriptions: Record<string, string> = {
   'Cadastrados': 'Total de usuários autenticados (auth.users)',
+  'Ativos (7d)': 'Usuários que enviaram mensagem ou usaram catálogo nos últimos 7 dias',
+  'Inativos (7d)': 'Usuários que só cadastraram, mas não interagiram nos últimos 7 dias',
   'Ativação': 'Usuários que enviaram ao menos 1 mensagem',
   'Onboarding Completo': 'Usuários que passaram pelo workflow de onboarding',
   'Preferências Definidas': 'Usuários que preencheram preferências',
@@ -44,85 +46,132 @@ Deno.serve(async (req) => {
       includeDetails = url.searchParams.get('details') === 'true'
     }
 
-    console.log('Starting OPTIMIZED funnel analysis...')
+    console.log('Starting funnel analysis...')
+
+    const now = new Date()
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
 
     // ========== PARALLEL QUERIES ==========
-    // Run all queries in parallel for maximum speed
     const [
       authUsersResult,
       allMessagesResult,
+      recentMessagesResult,
+      recentFavoritesResult,
+      recentPreferencesResult,
       onboardingMessagesResult,
       matchMessagesResult,
       preferencesResult,
       favoritesResult,
       profilesResult,
     ] = await Promise.all([
-      // 1. Auth users count (single call)
+      // 1. Auth users count
       supabase.auth.admin.listUsers({ page: 1, perPage: 1 }),
       
-      // 2. All messages (for activation) - with high limit
+      // 2. All messages (for activation - users who ever sent a message)
       supabase
         .from('chat_messages')
         .select('user_id')
         .limit(100000),
       
-      // 3. Onboarding workflow messages
+      // 3. Recent messages (7d) for active users
+      supabase
+        .from('chat_messages')
+        .select('user_id')
+        .gte('created_at', sevenDaysAgo.toISOString())
+        .limit(50000),
+      
+      // 4. Recent favorites (7d) for active users
+      supabase
+        .from('user_favorites')
+        .select('user_id')
+        .gte('created_at', sevenDaysAgo.toISOString())
+        .limit(10000),
+      
+      // 5. Recent preferences (7d) for active users
+      supabase
+        .from('user_preferences')
+        .select('user_id')
+        .gte('updated_at', sevenDaysAgo.toISOString())
+        .limit(10000),
+      
+      // 6. Onboarding workflow messages
       supabase
         .from('chat_messages')
         .select('user_id')
         .eq('workflow', 'onboarding_workflow')
         .limit(50000),
       
-      // 4. Match workflow messages
+      // 7. Match workflow messages
       supabase
         .from('chat_messages')
         .select('user_id')
         .eq('workflow', 'match_workflow')
         .limit(50000),
       
-      // 5. User preferences (for preferences defined + match realized)
+      // 8. User preferences (for preferences defined + match realized)
       supabase
         .from('user_preferences')
         .select('user_id, workflow_data, course_interest')
         .limit(10000),
       
-      // 6. Favorites
+      // 9. Favorites (all time)
       supabase
         .from('user_favorites')
         .select('user_id')
         .limit(10000),
       
-      // 7. Profiles (for details)
+      // 10. Profiles (for details)
       includeDetails ? supabase
         .from('user_profiles')
         .select('id, full_name, city, created_at') : Promise.resolve({ data: [] }),
     ])
 
-    // Get total from auth metadata or count
+    // Get total from auth metadata
     const totalRegistered = (authUsersResult as any).data?.total || 
       authUsersResult.data?.users?.length || 0
 
-    // Step 2: Ativação
+    // Calculate ACTIVE users (7d): users who sent messages OR used catalog
+    const recentMessageUserIds = new Set<string>()
+    for (const row of recentMessagesResult.data || []) {
+      if (row.user_id) recentMessageUserIds.add(row.user_id)
+    }
+    
+    const recentCatalogUserIds = new Set<string>()
+    for (const row of recentFavoritesResult.data || []) {
+      if (row.user_id && !recentMessageUserIds.has(row.user_id)) {
+        recentCatalogUserIds.add(row.user_id)
+      }
+    }
+    for (const row of recentPreferencesResult.data || []) {
+      if (row.user_id && !recentMessageUserIds.has(row.user_id)) {
+        recentCatalogUserIds.add(row.user_id)
+      }
+    }
+    
+    const activeUserIds = [...recentMessageUserIds, ...recentCatalogUserIds]
+    const inactiveCount = totalRegistered - activeUserIds.length
+
+    // Ativação: users who EVER sent a message
     const ativacaoIds = [...new Set((allMessagesResult.data || [])
       .map(m => m.user_id)
       .filter(Boolean))]
     
-    // Step 3: Onboarding
+    // Onboarding
     const onboardingCompletedIds = [...new Set((onboardingMessagesResult.data || [])
       .map(m => m.user_id)
       .filter(Boolean))]
     
-    // Step 4: Preferências Definidas
+    // Preferências Definidas
     const preferenciasIds = [...new Set((preferencesResult.data || [])
       .map(p => p.user_id)
       .filter(Boolean))]
     
-    // Step 5: Match Iniciado
+    // Match Iniciado
     const matchIniciadoIds = [...new Set((matchMessagesResult.data || [])
       .map(m => m.user_id)
       .filter(Boolean))]
     
-    // Step 6: Match Realizado
+    // Match Realizado
     const matchRealizadoIds = [...new Set((preferencesResult.data || [])
       .filter(p => {
         if (!p.workflow_data) return false
@@ -132,13 +181,15 @@ Deno.serve(async (req) => {
       .map(p => p.user_id)
       .filter(Boolean))]
     
-    // Step 7: Favoritos
+    // Favoritos
     const favoritosIds = [...new Set((favoritesResult.data || [])
       .map(f => f.user_id)
       .filter(Boolean))]
 
     console.log('Funnel counts:', {
       cadastrados: totalRegistered,
+      ativos7d: activeUserIds.length,
+      inativos7d: inactiveCount,
       ativacao: ativacaoIds.length,
       onboarding: onboardingCompletedIds.length,
       preferencias: preferenciasIds.length,
@@ -147,7 +198,7 @@ Deno.serve(async (req) => {
       favoritos: favoritosIds.length,
     })
 
-    // Build user data map for drill-down (if requested)
+    // Build user data map for drill-down
     let usersDataMap: Map<string, UserData> = new Map()
     
     if (includeDetails) {
@@ -167,9 +218,7 @@ Deno.serve(async (req) => {
         })
       }
       
-      // For cadastrados, we only have the count, not individual IDs
-      // So details will only be available for other steps
-      for (const userId of [...ativacaoIds, ...preferenciasIds, ...favoritosIds]) {
+      for (const userId of [...ativacaoIds, ...preferenciasIds, ...favoritosIds, ...activeUserIds]) {
         if (!usersDataMap.has(userId)) {
           const profileData = profileDataMap.get(userId)
           usersDataMap.set(userId, {
@@ -190,12 +239,26 @@ Deno.serve(async (req) => {
         .filter((u): u is UserData => u !== undefined)
     }
 
-    // Build funnel response
+    // Build funnel response - NOW INCLUDING ACTIVE/INACTIVE
     const funnel = [
       { 
         etapa: 'Cadastrados', 
         valor: totalRegistered,
         description: funnelDescriptions['Cadastrados'],
+      },
+      { 
+        etapa: 'Ativos (7d)', 
+        valor: activeUserIds.length,
+        description: funnelDescriptions['Ativos (7d)'],
+        ...(includeDetails && { 
+          user_ids: activeUserIds,
+          users: getUsersData(activeUserIds)
+        })
+      },
+      { 
+        etapa: 'Inativos (7d)', 
+        valor: inactiveCount,
+        description: funnelDescriptions['Inativos (7d)'],
       },
       { 
         etapa: 'Ativação', 
@@ -253,7 +316,7 @@ Deno.serve(async (req) => {
       },
     ]
 
-    console.log('Optimized funnel response ready')
+    console.log('Funnel response ready')
 
     return new Response(JSON.stringify(funnel), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
