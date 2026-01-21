@@ -63,6 +63,34 @@ async function fetchAllRows<T>(
   return allRows
 }
 
+// Helper to fetch all auth users with pagination
+// deno-lint-ignore no-explicit-any
+async function fetchAllAuthUsers(supabase: any): Promise<{ data: { users: { id: string; phone: string | null; created_at: string }[]; total: number } }> {
+  const allUsers: { id: string; phone: string | null; created_at: string }[] = []
+  const pageSize = 1000
+  let page = 1
+  let hasMore = true
+
+  while (hasMore) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: pageSize })
+    if (error) throw error
+
+    if (data?.users && data.users.length > 0) {
+      allUsers.push(...data.users.map((u: { id: string; phone: string | null; created_at: string }) => ({
+        id: u.id,
+        phone: u.phone,
+        created_at: u.created_at
+      })))
+      page++
+      hasMore = data.users.length === pageSize
+    } else {
+      hasMore = false
+    }
+  }
+
+  return { data: { users: allUsers, total: allUsers.length } }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -93,8 +121,10 @@ Deno.serve(async (req) => {
       favoritesResult,
       profilesResult,
     ] = await Promise.all([
-      // 1. Auth users count
-      supabase.auth.admin.listUsers({ page: 1, perPage: 1 }),
+      // 1. Auth users - fetch ALL to get phone numbers when includeDetails
+      includeDetails 
+        ? fetchAllAuthUsers(supabase)
+        : supabase.auth.admin.listUsers({ page: 1, perPage: 1 }),
       
       // 2. ALL messages with pagination
       fetchAllRows<{ user_id: string; workflow: string | null }>(
@@ -117,9 +147,9 @@ Deno.serve(async (req) => {
       ) : Promise.resolve([]),
     ])
 
-    // Get total from auth metadata
-    const totalRegistered = (authUsersResult as any).data?.total || 
-      authUsersResult.data?.users?.length || 0
+    // Get total from auth metadata - works for both includeDetails and non-includeDetails cases
+    const authData = (authUsersResult as { data?: { users?: unknown[]; total?: number } }).data
+    const totalRegistered = authData?.total || authData?.users?.length || 0
 
     console.log('Total messages fetched:', allMessagesResult.length)
     console.log('Total preferences fetched:', preferencesResult.length)
@@ -181,6 +211,15 @@ Deno.serve(async (req) => {
     let usersDataMap: Map<string, UserData> = new Map()
     
     if (includeDetails) {
+      // Build phone map from auth users
+      const phoneMap = new Map<string, string | null>()
+      const authCreatedMap = new Map<string, string>()
+      const authUsers = (authUsersResult as { data: { users: { id: string; phone: string | null; created_at: string }[] } }).data?.users || []
+      for (const user of authUsers) {
+        phoneMap.set(user.id, user.phone)
+        authCreatedMap.set(user.id, user.created_at)
+      }
+      
       const courseMap = new Map<string, string[]>()
       for (const pref of preferencesResult) {
         if (pref.course_interest) {
@@ -197,18 +236,28 @@ Deno.serve(async (req) => {
         })
       }
       
-      for (const userId of [...ativacaoIds, ...preferenciasIds, ...favoritosIds]) {
-        if (!usersDataMap.has(userId)) {
-          const profileData = profileDataMap.get(userId)
-          usersDataMap.set(userId, {
-            id: userId,
-            full_name: profileData?.full_name || null,
-            phone: null,
-            city: profileData?.city || null,
-            created_at: profileData?.created_at || null,
-            course_interest: courseMap.get(userId) || null
-          })
-        }
+      // Collect all unique user IDs from all funnel stages
+      const allUserIds = new Set([
+        ...ativacaoIds, 
+        ...onboardingCompletedIds,
+        ...preferenciasIds, 
+        ...matchIniciadoIds,
+        ...matchRealizadoIds,
+        ...favoritosIds
+      ])
+      
+      for (const userId of allUserIds) {
+        const profileData = profileDataMap.get(userId)
+        // Use auth.users created_at as primary, fallback to profile
+        const createdAt = authCreatedMap.get(userId) || profileData?.created_at || null
+        usersDataMap.set(userId, {
+          id: userId,
+          full_name: profileData?.full_name || null,
+          phone: phoneMap.get(userId) || null,
+          city: profileData?.city || null,
+          created_at: createdAt,
+          course_interest: courseMap.get(userId) || null
+        })
       }
     }
 
