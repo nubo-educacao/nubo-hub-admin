@@ -236,19 +236,12 @@ Deno.serve(async (req) => {
         })
       }
       
-      // Collect all unique user IDs from all funnel stages
-      const allUserIds = new Set([
-        ...ativacaoIds, 
-        ...onboardingCompletedIds,
-        ...preferenciasIds, 
-        ...matchIniciadoIds,
-        ...matchRealizadoIds,
-        ...favoritosIds
-      ])
+      // Get ALL registered user IDs from auth
+      const allRegisteredIds = authUsers.map(u => u.id)
       
-      for (const userId of allUserIds) {
+      // Build user data for ALL registered users (for "Cadastrados" stage)
+      for (const userId of allRegisteredIds) {
         const profileData = profileDataMap.get(userId)
-        // Use auth.users created_at as primary, fallback to profile
         const createdAt = authCreatedMap.get(userId) || profileData?.created_at || null
         usersDataMap.set(userId, {
           id: userId,
@@ -267,12 +260,21 @@ Deno.serve(async (req) => {
         .filter((u): u is UserData => u !== undefined)
     }
 
+    // Build all registered IDs for "Cadastrados" stage
+    const allRegisteredUserIds = includeDetails 
+      ? (authUsersResult as { data: { users: { id: string }[] } }).data?.users?.map(u => u.id) || []
+      : []
+
     // Build funnel response (NO inativos)
     const funnel = [
       { 
         etapa: 'Cadastrados', 
         valor: totalRegistered,
         description: funnelDescriptions['Cadastrados'],
+        ...(includeDetails && { 
+          user_ids: allRegisteredUserIds,
+          users: getUsersData(allRegisteredUserIds)
+        })
       },
       { 
         etapa: 'Ativação', 
