@@ -9,6 +9,7 @@ import {
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import SegmentedExportButton from "./SegmentedExportButton";
 
 interface DashboardHeaderProps {
   selectedRange: DateRangeValue;
@@ -77,6 +78,7 @@ export function DashboardHeader({
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-2">
             <NavLinks />
+            <SegmentedExportButton />
             <DateRangeFilter
               selectedRange={selectedRange}
               onDateChange={onRangeChange}

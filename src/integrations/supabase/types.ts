@@ -363,6 +363,33 @@ export type Database = {
         }
         Relationships: []
       }
+      influencers: {
+        Row: {
+          active: boolean | null
+          code: string
+          created_at: string | null
+          id: string
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          code: string
+          created_at?: string | null
+          id?: string
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          code?: string
+          created_at?: string | null
+          id?: string
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       institutions: {
         Row: {
           created_at: string | null
@@ -1612,6 +1639,7 @@ export type Database = {
           full_name: string | null
           id: string
           onboarding_completed: boolean | null
+          referral_source: string | null
           updated_at: string | null
         }
         Insert: {
@@ -1623,6 +1651,7 @@ export type Database = {
           full_name?: string | null
           id: string
           onboarding_completed?: boolean | null
+          referral_source?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -1634,6 +1663,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           onboarding_completed?: boolean | null
+          referral_source?: string | null
           updated_at?: string | null
         }
         Relationships: []

@@ -46,3 +46,6 @@ verify_jwt = false
 
 [functions.analytics-opportunities]
 verify_jwt = false
+
+[functions.analytics-segmented-export]
+verify_jwt = false
