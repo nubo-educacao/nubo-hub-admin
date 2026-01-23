@@ -226,11 +226,23 @@ Deno.serve(async (req) => {
 
       const courseCounts = new Map<string, number>()
       
+      // Normalize course names to handle case differences
+      const normalizeCourse = (course: string): string => {
+        if (!course) return ''
+        // Capitalize first letter of each word
+        return course.trim().split(' ').map(word => 
+          word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+        ).join(' ')
+      }
+      
       for (const p of preferences) {
         if (p.course_interest && Array.isArray(p.course_interest)) {
           for (const course of p.course_interest) {
             if (course && course.trim()) {
-              courseCounts.set(course.trim(), (courseCounts.get(course.trim()) || 0) + 1)
+              const normalized = normalizeCourse(course)
+              if (normalized) {
+                courseCounts.set(normalized, (courseCounts.get(normalized) || 0) + 1)
+              }
             }
           }
         }
@@ -239,7 +251,7 @@ Deno.serve(async (req) => {
       const courses = Array.from(courseCounts.entries())
         .map(([name, searches]) => ({ name, searches }))
         .sort((a, b) => b.searches - a.searches)
-        .slice(0, 6)
+        .slice(0, 10)
 
       console.log('Analytics rankings (courses) response:', courses.length, 'courses')
 
