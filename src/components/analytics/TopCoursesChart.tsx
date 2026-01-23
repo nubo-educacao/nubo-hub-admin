@@ -30,10 +30,10 @@ export function TopCoursesChart() {
         <div className="mb-6 flex flex-col gap-1">
           <h3 className="text-lg font-semibold font-display">Cursos Mais Buscados</h3>
           <p className="text-sm text-muted-foreground">
-            Top 6 cursos com maior interesse
+            Top 10 cursos com maior interesse
           </p>
         </div>
-        <Skeleton className="h-[300px] w-full" />
+        <Skeleton className="h-[400px] w-full" />
       </div>
     );
   }
@@ -52,10 +52,10 @@ export function TopCoursesChart() {
         <div className="mb-6 flex flex-col gap-1">
           <h3 className="text-lg font-semibold font-display">Cursos Mais Buscados</h3>
           <p className="text-sm text-muted-foreground">
-            Top 6 cursos com maior interesse
+            Top 10 cursos com maior interesse
           </p>
         </div>
-        <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground">
+        <div className="flex flex-col items-center justify-center h-[400px] text-muted-foreground">
           <GraduationCap className="h-12 w-12 mb-4 opacity-50" />
           <p>Nenhum interesse de curso registrado</p>
         </div>
@@ -72,7 +72,7 @@ export function TopCoursesChart() {
         </p>
       </div>
       
-      <div className="h-[300px] w-full">
+      <div className="h-[400px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={normalizedData}
