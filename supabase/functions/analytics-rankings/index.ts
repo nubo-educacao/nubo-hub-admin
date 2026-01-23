@@ -5,6 +5,73 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Helper function to fetch all records with pagination
+async function fetchAllRecords<T>(
+  supabase: any,
+  table: string,
+  selectFields: string,
+  filters?: { column: string; operator: string; value: string }[],
+  orderBy?: { column: string; ascending: boolean }
+): Promise<T[]> {
+  const PAGE_SIZE = 1000
+  let allData: T[] = []
+  let offset = 0
+  let hasMore = true
+
+  while (hasMore) {
+    let query = supabase
+      .from(table)
+      .select(selectFields)
+      .range(offset, offset + PAGE_SIZE - 1)
+
+    if (filters) {
+      for (const filter of filters) {
+        if (filter.operator === 'gte') {
+          query = query.gte(filter.column, filter.value)
+        } else if (filter.operator === 'not.is') {
+          query = query.not(filter.column, 'is', null)
+        }
+      }
+    }
+
+    if (orderBy) {
+      query = query.order(orderBy.column, { ascending: orderBy.ascending })
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error(`Error fetching ${table}:`, error)
+      break
+    }
+
+    if (data && data.length > 0) {
+      allData = allData.concat(data as T[])
+      offset += PAGE_SIZE
+      hasMore = data.length === PAGE_SIZE
+    } else {
+      hasMore = false
+    }
+  }
+
+  return allData
+}
+
+// Normalize city names to remove duplicates like "São Paulo" vs "São Paulo - SP"
+function normalizeCity(city: string): string {
+  if (!city) return ''
+  
+  // Remove state suffix patterns like " - SP", " - RJ", etc.
+  let normalized = city.trim()
+  const statePattern = /\s*-\s*[A-Z]{2}$/i
+  normalized = normalized.replace(statePattern, '')
+  
+  // Capitalize first letter of each word
+  return normalized.split(' ').map(word => 
+    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+  ).join(' ')
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
@@ -32,25 +99,29 @@ Deno.serve(async (req) => {
       const SESSION_GAP_MS = 30 * 60 * 1000
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
-      // Run queries in parallel - only fetch last 7 days for performance
-      const [messagesResult, favoritesResult, profilesResult] = await Promise.all([
-        supabase
-          .from('chat_messages')
-          .select('user_id, created_at')
-          .gte('created_at', sevenDaysAgo.toISOString())
-          .order('created_at', { ascending: true }),
-        supabase
-          .from('user_favorites')
-          .select('user_id'),
-        supabase
-          .from('user_profiles')
-          .select('id, full_name'),
+      // Fetch all messages with pagination
+      interface Message { user_id: string | null; created_at: string | null }
+      interface Favorite { user_id: string | null }
+      interface Profile { id: string; full_name: string | null }
+
+      const [messages, favorites, profiles] = await Promise.all([
+        fetchAllRecords<Message>(
+          supabase,
+          'chat_messages',
+          'user_id, created_at',
+          [{ column: 'created_at', operator: 'gte', value: sevenDaysAgo.toISOString() }],
+          { column: 'created_at', ascending: true }
+        ),
+        fetchAllRecords<Favorite>(supabase, 'user_favorites', 'user_id'),
+        fetchAllRecords<Profile>(supabase, 'user_profiles', 'id, full_name'),
       ])
+
+      console.log(`Fetched ${messages.length} messages, ${favorites.length} favorites, ${profiles.length} profiles`)
 
       const messageCounts = new Map<string, number>()
       const userMessages = new Map<string, Date[]>()
       
-      for (const m of messagesResult.data || []) {
+      for (const m of messages) {
         if (m.user_id) {
           messageCounts.set(m.user_id, (messageCounts.get(m.user_id) || 0) + 1)
           if (m.created_at) {
@@ -76,13 +147,13 @@ Deno.serve(async (req) => {
       })
 
       const favoriteCounts = new Map<string, number>()
-      for (const f of favoritesResult.data || []) {
+      for (const f of favorites) {
         if (f.user_id) {
           favoriteCounts.set(f.user_id, (favoriteCounts.get(f.user_id) || 0) + 1)
         }
       }
 
-      const userScores = (profilesResult.data || []).map(profile => {
+      const userScores = profiles.map(profile => {
         const messageCount = messageCounts.get(profile.id) || 0
         const favoriteCount = favoriteCounts.get(profile.id) || 0
         const sessions = sessionCounts.get(profile.id) || 0
@@ -102,6 +173,7 @@ Deno.serve(async (req) => {
         .slice(0, 100)
 
       console.log('Analytics rankings (users) response:', topUsers.length, 'users')
+      console.log('Top 3 users:', topUsers.slice(0, 3).map(u => `${u.name}: ${u.messages} msgs, ${u.sessions} sessions`))
 
       return new Response(JSON.stringify(topUsers), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -109,28 +181,24 @@ Deno.serve(async (req) => {
     }
 
     if (type === 'locations') {
-      const [profilesResult, preferencesResult] = await Promise.all([
-        supabase
-          .from('user_profiles')
-          .select('city')
-          .not('city', 'is', null),
-        supabase
-          .from('user_preferences')
-          .select('state_preference')
-          .not('state_preference', 'is', null),
-      ])
+      // This shows where users LIVE (from user_profiles.city)
+      interface Profile { city: string | null }
+      
+      const profiles = await fetchAllRecords<Profile>(
+        supabase,
+        'user_profiles',
+        'city',
+        [{ column: 'city', operator: 'not.is', value: 'null' }]
+      )
 
       const locationCounts = new Map<string, number>()
       
-      for (const p of profilesResult.data || []) {
+      for (const p of profiles) {
         if (p.city) {
-          locationCounts.set(p.city, (locationCounts.get(p.city) || 0) + 1)
-        }
-      }
-
-      for (const p of preferencesResult.data || []) {
-        if (p.state_preference) {
-          locationCounts.set(p.state_preference, (locationCounts.get(p.state_preference) || 0) + 1)
+          const normalized = normalizeCity(p.city)
+          if (normalized) {
+            locationCounts.set(normalized, (locationCounts.get(normalized) || 0) + 1)
+          }
         }
       }
 
@@ -147,17 +215,23 @@ Deno.serve(async (req) => {
     }
 
     if (type === 'courses') {
-      const { data: preferences } = await supabase
-        .from('user_preferences')
-        .select('course_interest')
-        .not('course_interest', 'is', null)
+      interface Preference { course_interest: string[] | null }
+      
+      const preferences = await fetchAllRecords<Preference>(
+        supabase,
+        'user_preferences',
+        'course_interest',
+        [{ column: 'course_interest', operator: 'not.is', value: 'null' }]
+      )
 
       const courseCounts = new Map<string, number>()
       
-      for (const p of preferences || []) {
+      for (const p of preferences) {
         if (p.course_interest && Array.isArray(p.course_interest)) {
           for (const course of p.course_interest) {
-            courseCounts.set(course, (courseCounts.get(course) || 0) + 1)
+            if (course && course.trim()) {
+              courseCounts.set(course.trim(), (courseCounts.get(course.trim()) || 0) + 1)
+            }
           }
         }
       }
@@ -175,20 +249,24 @@ Deno.serve(async (req) => {
     }
 
     if (type === 'preferences') {
-      const { data: preferences } = await supabase
-        .from('user_preferences')
-        .select('program_preference')
-        .not('program_preference', 'is', null)
+      interface Preference { program_preference: string | null }
+      
+      const preferences = await fetchAllRecords<Preference>(
+        supabase,
+        'user_preferences',
+        'program_preference',
+        [{ column: 'program_preference', operator: 'not.is', value: 'null' }]
+      )
 
       const prefCounts = new Map<string, number>()
       
-      for (const p of preferences || []) {
+      for (const p of preferences) {
         if (p.program_preference) {
           prefCounts.set(p.program_preference, (prefCounts.get(p.program_preference) || 0) + 1)
         }
       }
 
-      const total = preferences?.length || 1
+      const total = preferences.length || 1
 
       const prefs = Array.from(prefCounts.entries())
         .map(([name, count]) => ({ 
@@ -206,18 +284,25 @@ Deno.serve(async (req) => {
     }
 
     if (type === 'location_preferences') {
-      const { data: preferences } = await supabase
-        .from('user_preferences')
-        .select('location_preference')
-        .not('location_preference', 'is', null)
+      // This shows where users WANT TO STUDY (from user_preferences.location_preference)
+      interface Preference { location_preference: string | null }
+      
+      const preferences = await fetchAllRecords<Preference>(
+        supabase,
+        'user_preferences',
+        'location_preference',
+        [{ column: 'location_preference', operator: 'not.is', value: 'null' }]
+      )
 
       const locationCounts = new Map<string, number>()
       
-      for (const p of preferences || []) {
-        let loc = (p.location_preference || '').trim()
-        if (!loc) continue
-        loc = loc.charAt(0).toUpperCase() + loc.slice(1)
-        locationCounts.set(loc, (locationCounts.get(loc) || 0) + 1)
+      for (const p of preferences) {
+        if (p.location_preference) {
+          const loc = normalizeCity(p.location_preference)
+          if (loc) {
+            locationCounts.set(loc, (locationCounts.get(loc) || 0) + 1)
+          }
+        }
       }
 
       const locations = Array.from(locationCounts.entries())

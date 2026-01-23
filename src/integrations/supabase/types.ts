@@ -697,12 +697,12 @@ export type Database = {
           created_at: string | null
           ds_mod_concorrencia: string | null
           id: string
-          nota_minima_ciencias_humanas: string | null
-          nota_minima_ciencias_natureza: string | null
-          nota_minima_linguagens: string | null
-          nota_minima_matematica: string | null
-          nota_minima_redacao: string | null
-          nu_media_minima_enem: string | null
+          nota_minima_ciencias_humanas: number | null
+          nota_minima_ciencias_natureza: number | null
+          nota_minima_linguagens: number | null
+          nota_minima_matematica: number | null
+          nota_minima_redacao: number | null
+          nu_media_minima_enem: number | null
           nu_perc_i: string | null
           nu_perc_lei: string | null
           nu_perc_pcd: string | null
@@ -717,11 +717,11 @@ export type Database = {
           perc_uf_ibge_pp: string | null
           perc_uf_ibge_ppi: string | null
           perc_uf_ibge_q: string | null
-          peso_ciencias_humanas: string | null
-          peso_ciencias_natureza: string | null
-          peso_linguagens: string | null
-          peso_matematica: string | null
-          peso_redacao: string | null
+          peso_ciencias_humanas: number | null
+          peso_ciencias_natureza: number | null
+          peso_linguagens: number | null
+          peso_matematica: number | null
+          peso_redacao: number | null
           qt_inscricao_2025: string | null
           qt_semestre: string | null
           qt_vagas_ofertadas: string | null
@@ -735,12 +735,12 @@ export type Database = {
           created_at?: string | null
           ds_mod_concorrencia?: string | null
           id?: string
-          nota_minima_ciencias_humanas?: string | null
-          nota_minima_ciencias_natureza?: string | null
-          nota_minima_linguagens?: string | null
-          nota_minima_matematica?: string | null
-          nota_minima_redacao?: string | null
-          nu_media_minima_enem?: string | null
+          nota_minima_ciencias_humanas?: number | null
+          nota_minima_ciencias_natureza?: number | null
+          nota_minima_linguagens?: number | null
+          nota_minima_matematica?: number | null
+          nota_minima_redacao?: number | null
+          nu_media_minima_enem?: number | null
           nu_perc_i?: string | null
           nu_perc_lei?: string | null
           nu_perc_pcd?: string | null
@@ -755,11 +755,11 @@ export type Database = {
           perc_uf_ibge_pp?: string | null
           perc_uf_ibge_ppi?: string | null
           perc_uf_ibge_q?: string | null
-          peso_ciencias_humanas?: string | null
-          peso_ciencias_natureza?: string | null
-          peso_linguagens?: string | null
-          peso_matematica?: string | null
-          peso_redacao?: string | null
+          peso_ciencias_humanas?: number | null
+          peso_ciencias_natureza?: number | null
+          peso_linguagens?: number | null
+          peso_matematica?: number | null
+          peso_redacao?: number | null
           qt_inscricao_2025?: string | null
           qt_semestre?: string | null
           qt_vagas_ofertadas?: string | null
@@ -773,12 +773,12 @@ export type Database = {
           created_at?: string | null
           ds_mod_concorrencia?: string | null
           id?: string
-          nota_minima_ciencias_humanas?: string | null
-          nota_minima_ciencias_natureza?: string | null
-          nota_minima_linguagens?: string | null
-          nota_minima_matematica?: string | null
-          nota_minima_redacao?: string | null
-          nu_media_minima_enem?: string | null
+          nota_minima_ciencias_humanas?: number | null
+          nota_minima_ciencias_natureza?: number | null
+          nota_minima_linguagens?: number | null
+          nota_minima_matematica?: number | null
+          nota_minima_redacao?: number | null
+          nu_media_minima_enem?: number | null
           nu_perc_i?: string | null
           nu_perc_lei?: string | null
           nu_perc_pcd?: string | null
@@ -793,11 +793,11 @@ export type Database = {
           perc_uf_ibge_pp?: string | null
           perc_uf_ibge_ppi?: string | null
           perc_uf_ibge_q?: string | null
-          peso_ciencias_humanas?: string | null
-          peso_ciencias_natureza?: string | null
-          peso_linguagens?: string | null
-          peso_matematica?: string | null
-          peso_redacao?: string | null
+          peso_ciencias_humanas?: number | null
+          peso_ciencias_natureza?: number | null
+          peso_linguagens?: number | null
+          peso_matematica?: number | null
+          peso_redacao?: number | null
           qt_inscricao_2025?: string | null
           qt_semestre?: string | null
           qt_vagas_ofertadas?: string | null
@@ -1585,6 +1585,7 @@ export type Database = {
           preferred_shifts: string[] | null
           program_preference: string | null
           quota_types: string[] | null
+          registration_step: string | null
           state_preference: string | null
           university_preference: string | null
           updated_at: string | null
@@ -1603,6 +1604,7 @@ export type Database = {
           preferred_shifts?: string[] | null
           program_preference?: string | null
           quota_types?: string[] | null
+          registration_step?: string | null
           state_preference?: string | null
           university_preference?: string | null
           updated_at?: string | null
@@ -1621,6 +1623,7 @@ export type Database = {
           preferred_shifts?: string[] | null
           program_preference?: string | null
           quota_types?: string[] | null
+          registration_step?: string | null
           state_preference?: string | null
           university_preference?: string | null
           updated_at?: string | null
@@ -1776,39 +1779,75 @@ export type Database = {
           similarity: number
         }[]
       }
-      match_opportunities: {
-        Args: {
-          city_names: string[]
-          course_interests: string[]
-          enem_score: number
-          income_per_capita: number
-          page_number?: number
-          page_size?: number
-          preferred_shifts: string[]
-          program_preference: string
-          quota_types: string[]
-          state_names: string[]
-          university_preference: string
-          user_lat: number
-          user_long: number
-        }
-        Returns: {
-          campus_city: string
-          campus_latitude: number
-          campus_longitude: number
-          campus_state: string
-          concurrency_tags: Json
-          course_id: string
-          course_name: string
-          cutoff_score: number
-          institution_name: string
-          opportunitiessisuvacancies: Json
-          opportunity_type: string
-          scholarship_tags: Json
-          shift: string
-        }[]
-      }
+      match_opportunities:
+        | {
+            Args: {
+              city_names: string[]
+              course_interests: string[]
+              enem_score: number
+              income_per_capita: number
+              page_number?: number
+              page_size?: number
+              preferred_shifts: string[]
+              program_preference: string
+              quota_types: string[]
+              state_names: string[]
+              university_preference: string
+              user_lat: number
+              user_long: number
+            }
+            Returns: {
+              campus_city: string
+              campus_latitude: number
+              campus_longitude: number
+              campus_state: string
+              concurrency_tags: Json
+              course_id: string
+              course_name: string
+              cutoff_score: number
+              institution_name: string
+              opportunitiessisuvacancies: Json
+              opportunity_type: string
+              scholarship_tags: Json
+              shift: string
+            }[]
+          }
+        | {
+            Args: {
+              city_names?: string[]
+              course_interests?: string[]
+              income_per_capita?: number
+              p_user_id?: string
+              page_number?: number
+              page_size?: number
+              preferred_shifts?: string[]
+              program_preference?: string
+              quota_types?: string[]
+              state_names?: string[]
+              user_lat?: number
+              user_long?: number
+            }
+            Returns: {
+              campus_city: string
+              campus_state: string
+              concurrency_tags: Json
+              concurrency_type: string
+              course_id: string
+              course_name: string
+              cutoff_score: number
+              distance_km: number
+              institution_igc: number
+              institution_name: string
+              nota_ponderada: number
+              opportunity_id: string
+              opportunity_type: string
+              scholarship_type: string
+              score_year: number
+              shift: string
+            }[]
+          }
       refresh_course_catalog: { Args: never; Returns: undefined }
+      safe_to_numeric: { Args: { val: string }; Returns: number }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       toggle_favorite: {
