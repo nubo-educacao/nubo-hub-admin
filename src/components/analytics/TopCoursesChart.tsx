@@ -19,6 +19,10 @@ const colors = [
   "hsl(38, 92%, 50%)",
   "hsl(280, 87%, 65%)",
   "hsl(199, 89%, 68%)",
+  "hsl(340, 82%, 52%)",
+  "hsl(160, 84%, 39%)",
+  "hsl(45, 93%, 47%)",
+  "hsl(262, 83%, 58%)",
 ];
 
 export function TopCoursesChart() {
@@ -30,10 +34,10 @@ export function TopCoursesChart() {
         <div className="mb-6 flex flex-col gap-1">
           <h3 className="text-lg font-semibold font-display">Cursos Mais Buscados</h3>
           <p className="text-sm text-muted-foreground">
-            Top 10 cursos com maior interesse
+            Top 20 cursos com maior interesse
           </p>
         </div>
-        <Skeleton className="h-[400px] w-full" />
+        <Skeleton className="h-[700px] w-full" />
       </div>
     );
   }
@@ -52,10 +56,10 @@ export function TopCoursesChart() {
         <div className="mb-6 flex flex-col gap-1">
           <h3 className="text-lg font-semibold font-display">Cursos Mais Buscados</h3>
           <p className="text-sm text-muted-foreground">
-            Top 10 cursos com maior interesse
+            Top 20 cursos com maior interesse
           </p>
         </div>
-        <div className="flex flex-col items-center justify-center h-[400px] text-muted-foreground">
+        <div className="flex flex-col items-center justify-center h-[700px] text-muted-foreground">
           <GraduationCap className="h-12 w-12 mb-4 opacity-50" />
           <p>Nenhum interesse de curso registrado</p>
         </div>
@@ -72,7 +76,7 @@ export function TopCoursesChart() {
         </p>
       </div>
       
-      <div className="h-[400px] w-full">
+      <div className="h-[700px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={normalizedData}

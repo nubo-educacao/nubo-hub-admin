@@ -251,7 +251,7 @@ Deno.serve(async (req) => {
       const courses = Array.from(courseCounts.entries())
         .map(([name, searches]) => ({ name, searches }))
         .sort((a, b) => b.searches - a.searches)
-        .slice(0, 10)
+        .slice(0, 20)
 
       console.log('Analytics rankings (courses) response:', courses.length, 'courses')
 
