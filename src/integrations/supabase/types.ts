@@ -1671,6 +1671,24 @@ export type Database = {
         }
         Relationships: []
       }
+      user_rate_limits: {
+        Row: {
+          last_message_at: string | null
+          message_count_window: number | null
+          user_id: string
+        }
+        Insert: {
+          last_message_at?: string | null
+          message_count_window?: number | null
+          user_id: string
+        }
+        Update: {
+          last_message_at?: string | null
+          message_count_window?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       mv_course_catalog: {
@@ -1779,73 +1797,40 @@ export type Database = {
           similarity: number
         }[]
       }
-      match_opportunities:
-        | {
-            Args: {
-              city_names: string[]
-              course_interests: string[]
-              enem_score: number
-              income_per_capita: number
-              page_number?: number
-              page_size?: number
-              preferred_shifts: string[]
-              program_preference: string
-              quota_types: string[]
-              state_names: string[]
-              university_preference: string
-              user_lat: number
-              user_long: number
-            }
-            Returns: {
-              campus_city: string
-              campus_latitude: number
-              campus_longitude: number
-              campus_state: string
-              concurrency_tags: Json
-              course_id: string
-              course_name: string
-              cutoff_score: number
-              institution_name: string
-              opportunitiessisuvacancies: Json
-              opportunity_type: string
-              scholarship_tags: Json
-              shift: string
-            }[]
-          }
-        | {
-            Args: {
-              city_names?: string[]
-              course_interests?: string[]
-              income_per_capita?: number
-              p_user_id?: string
-              page_number?: number
-              page_size?: number
-              preferred_shifts?: string[]
-              program_preference?: string
-              quota_types?: string[]
-              state_names?: string[]
-              user_lat?: number
-              user_long?: number
-            }
-            Returns: {
-              campus_city: string
-              campus_state: string
-              concurrency_tags: Json
-              concurrency_type: string
-              course_id: string
-              course_name: string
-              cutoff_score: number
-              distance_km: number
-              institution_igc: number
-              institution_name: string
-              nota_ponderada: number
-              opportunity_id: string
-              opportunity_type: string
-              scholarship_type: string
-              score_year: number
-              shift: string
-            }[]
-          }
+      match_opportunities: {
+        Args: {
+          city_names?: string[]
+          course_interests?: string[]
+          income_per_capita?: number
+          p_user_id?: string
+          page_number?: number
+          page_size?: number
+          preferred_shifts?: string[]
+          program_preference?: string
+          quota_types?: string[]
+          state_names?: string[]
+          user_lat?: number
+          user_long?: number
+        }
+        Returns: {
+          campus_city: string
+          campus_state: string
+          concurrency_tags: Json
+          concurrency_type: string
+          course_id: string
+          course_name: string
+          cutoff_score: number
+          distance_km: number
+          institution_igc: number
+          institution_name: string
+          nota_ponderada: number
+          opportunity_id: string
+          opportunity_type: string
+          scholarship_type: string
+          score_year: number
+          shift: string
+        }[]
+      }
       refresh_course_catalog: { Args: never; Returns: undefined }
       safe_to_numeric: { Args: { val: string }; Returns: number }
       show_limit: { Args: never; Returns: number }
