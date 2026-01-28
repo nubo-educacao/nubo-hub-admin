@@ -6,6 +6,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { InactiveUsersExportButton } from "./InactiveUsersExportButton";
 
 interface TotalUsersCardProps {
   totalRegistered: number;
@@ -98,7 +99,10 @@ export function TotalUsersCard({
             <div className="h-2 w-2 rounded-full bg-muted-foreground/30" />
             <span className="text-muted-foreground">Inativos (7d):</span>
           </div>
-          <span className="font-medium text-muted-foreground">{inactiveUsers.toLocaleString()}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-medium text-muted-foreground">{inactiveUsers.toLocaleString()}</span>
+            <InactiveUsersExportButton inactiveCount={inactiveUsers} />
+          </div>
         </div>
       </div>
     </div>

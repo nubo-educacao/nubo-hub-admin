@@ -49,3 +49,6 @@ verify_jwt = false
 
 [functions.analytics-segmented-export]
 verify_jwt = false
+
+[functions.analytics-export-inactive]
+verify_jwt = false

@@ -15,7 +15,7 @@ import { BarChart3, ZoomOut } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Button } from "@/components/ui/button";
 
-type ViewMode = "week" | "day";
+type ViewMode = "week" | "day" | "total";
 
 interface ActivityData {
   label: string;
@@ -92,6 +92,9 @@ export function ActivityChart() {
   }
 
   const getSubtitle = () => {
+    if (viewMode === "total") {
+      return "Histórico completo de atividade por dia";
+    }
     if (viewMode === "week") {
       return "Mensagens e usuários por dia da semana";
     }
@@ -147,6 +150,13 @@ export function ActivityChart() {
             >
               Hoje
             </ToggleGroupItem>
+            <ToggleGroupItem 
+              value="total" 
+              size="sm"
+              className="data-[state=on]:bg-background data-[state=on]:shadow-sm px-3"
+            >
+              Total
+            </ToggleGroupItem>
           </ToggleGroup>
         </div>
       </div>
@@ -180,7 +190,7 @@ export function ActivityChart() {
               tickLine={false}
               axisLine={false}
               className="text-muted-foreground"
-              interval={zoomHour !== null ? 0 : (viewMode === "day" ? 2 : 0)}
+              interval={zoomHour !== null ? 0 : (viewMode === "total" ? "preserveStartEnd" : (viewMode === "day" ? 2 : 0))}
             />
             <YAxis
               tick={{ fontSize: 12 }}

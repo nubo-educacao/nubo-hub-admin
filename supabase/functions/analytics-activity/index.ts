@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
     let zoomHour: number | null = null
     try {
       const body = await req.json()
-      if (body.mode === 'day' || body.mode === 'week') {
+      if (body.mode === 'day' || body.mode === 'week' || body.mode === 'total') {
         mode = body.mode
       }
       if (typeof body.zoomHour === 'number' && body.zoomHour >= 0 && body.zoomHour < 24) {
@@ -70,19 +70,24 @@ Deno.serve(async (req) => {
     console.log('Mode:', mode, 'ZoomHour:', zoomHour)
 
     // Helper function to fetch all messages with pagination
-    const fetchAllMessages = async (startDate: Date): Promise<{ created_at: string; user_id: string }[]> => {
+    const fetchAllMessages = async (startDate?: Date): Promise<{ created_at: string; user_id: string }[]> => {
       const allMessages: { created_at: string; user_id: string }[] = []
       const pageSize = 1000
       let from = 0
       let hasMore = true
 
       while (hasMore) {
-        const { data, error } = await supabase
+        let query = supabase
           .from('chat_messages')
           .select('created_at, user_id')
-          .gte('created_at', startDate.toISOString())
           .order('created_at', { ascending: true })
           .range(from, from + pageSize - 1)
+
+        if (startDate) {
+          query = query.gte('created_at', startDate.toISOString())
+        }
+
+        const { data, error } = await query
 
         if (error) throw error
 
@@ -96,6 +101,76 @@ Deno.serve(async (req) => {
       }
 
       return allMessages
+    }
+
+    // Format date as dd/mm
+    const formatDateLabel = (dateKey: string): string => {
+      const [year, month, day] = dateKey.split('-')
+      return `${day}/${month}`
+    }
+
+    if (mode === 'total') {
+      // Fetch ALL messages without date filter
+      const messages = await fetchAllMessages()
+
+      console.log('Total messages fetched for historical view:', messages.length)
+
+      if (messages.length === 0) {
+        return new Response(JSON.stringify([]), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      // Find first and last message dates
+      const firstMessageDate = getBrazilDateKey(messages[0].created_at)
+      const brazilNow = getNowInBrazil()
+      const todayKey = `${brazilNow.getUTCFullYear()}-${String(brazilNow.getUTCMonth() + 1).padStart(2, '0')}-${String(brazilNow.getUTCDate()).padStart(2, '0')}`
+
+      // Build a map of all dates from first message to today
+      const activityMap = new Map<string, { mensagens: number; usuarios: Set<string> }>()
+
+      // Parse first date
+      const [firstYear, firstMonth, firstDay] = firstMessageDate.split('-').map(Number)
+      const startDate = new Date(Date.UTC(firstYear, firstMonth - 1, firstDay))
+      
+      const [todayYear, todayMonth, todayDay] = todayKey.split('-').map(Number)
+      const endDate = new Date(Date.UTC(todayYear, todayMonth - 1, todayDay))
+
+      // Create entries for all days in range
+      const currentDate = new Date(startDate)
+      while (currentDate <= endDate) {
+        const dateKey = `${currentDate.getUTCFullYear()}-${String(currentDate.getUTCMonth() + 1).padStart(2, '0')}-${String(currentDate.getUTCDate()).padStart(2, '0')}`
+        activityMap.set(dateKey, { mensagens: 0, usuarios: new Set() })
+        currentDate.setUTCDate(currentDate.getUTCDate() + 1)
+      }
+
+      // Aggregate messages
+      for (const msg of messages) {
+        if (msg.created_at) {
+          const dateKey = getBrazilDateKey(msg.created_at)
+          if (activityMap.has(dateKey)) {
+            const dayData = activityMap.get(dateKey)!
+            dayData.mensagens++
+            if (msg.user_id) {
+              dayData.usuarios.add(msg.user_id)
+            }
+          }
+        }
+      }
+
+      // Convert to array sorted by date
+      const sortedKeys = Array.from(activityMap.keys()).sort()
+      const activity = sortedKeys.map(dateKey => ({
+        label: formatDateLabel(dateKey),
+        mensagens: activityMap.get(dateKey)!.mensagens,
+        usuarios: activityMap.get(dateKey)!.usuarios.size,
+      }))
+
+      console.log('Activity (total) - days with data:', activity.filter(a => a.mensagens > 0).length)
+
+      return new Response(JSON.stringify(activity), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
     }
 
     if (mode === 'day') {
