@@ -1,148 +1,161 @@
 
+# Plano: Corrigir Três Problemas na Aba "Conversas Recentes"
 
-## Plano de Implementacao
+## Resumo dos Problemas Identificados
 
-Este plano implementa duas funcionalidades solicitadas:
-
-1. **Botao de Exportar Usuarios Inativos** - no card "Usuarios Cadastrados"
-2. **Visao Historica Total no Grafico de Atividade** - desde o primeiro dia de atividade
-
----
-
-## Funcionalidade 1: Exportar Usuarios Inativos
-
-### O que sao "Usuarios Inativos"?
-- Usuarios cadastrados (auth.users) que **nao** tiveram atividade nos ultimos 7 dias
-- Nao enviaram mensagens
-- Nao atualizaram preferencias
-- Nao salvaram favoritos
-
-### Componentes a criar/modificar:
-
-**1.1 Nova Edge Function: `analytics-export-inactive`**
-- Busca todos os usuarios do auth.users
-- Identifica quais NAO tiveram atividade nos ultimos 7 dias
-- Retorna: nome, telefone, cidade, curso de interesse, etapa do funil, data de cadastro
-- Usa a mesma logica de paginacao e formatacao do `analytics-segmented-export`
-
-**1.2 Atualizar `supabase/config.toml`**
-- Adicionar configuracao para nova funcao
-
-**1.3 Modificar `TotalUsersCard.tsx`**
-- Adicionar botao de download na linha "Inativos (7d)"
-- Ao clicar, abre modal similar ao `SegmentedExportButton`
-- Permite baixar CSV com todos os usuarios inativos
-
-**1.4 Novo Componente: `InactiveUsersExportButton.tsx`**
-- Modal com preview da quantidade e opcao de download
-- Reutiliza logica de download CSV do SegmentedExportButton
+| Problema | Causa | Impacto |
+|:---------|:------|:--------|
+| **Usuários anônimos** | Limite de 1.000 rows do Supabase não paginado | ~715 usuários aparecem sem nome |
+| **Sem "Match Realizado"** | Estágio não implementado na função | 919 usuários não categorizados corretamente |
+| **Ordenação de mensagens** | Timestamps idênticos sem desempate | Conversa aparece desordenada |
 
 ---
 
-## Funcionalidade 2: Grafico de Atividade - Visao Historica
+## Correção 1: Resolver Limite de 1.000 Usuários
 
-### Comportamento atual:
-- "Semana": ultimos 7 dias
-- "Hoje": hora a hora do dia atual
+### Problema Técnico
+A query de busca de perfis usa `.in('id', uniqueUserIds)` sem paginação:
+```typescript
+// Linha 332-335 - Retorna máximo 1000 registros
+const { data: profiles } = await supabase
+  .from('user_profiles')
+  .select('id, full_name, city, age, onboarding_completed')
+  .in('id', uniqueUserIds)
+```
 
-### Novo comportamento:
-- Adicionar terceira opcao: **"Historico"** ou **"Total"**
-- Mostra atividade desde o primeiro registro ate hoje
-- Agrupado por dia (label: dd/mm)
+### Solução
+Implementar paginação em lotes de 500 IDs:
+```typescript
+// Buscar profiles em lotes para superar limite de 1000
+const BATCH_SIZE = 500
+const profileMap = new Map<string, {...}>()
 
-### Componentes a modificar:
+for (let i = 0; i < uniqueUserIds.length; i += BATCH_SIZE) {
+  const batchIds = uniqueUserIds.slice(i, i + BATCH_SIZE)
+  const { data: profiles } = await supabase
+    .from('user_profiles')
+    .select('id, full_name, city, age, onboarding_completed')
+    .in('id', batchIds)
+  
+  for (const profile of profiles || []) {
+    profileMap.set(profile.id, {...})
+  }
+}
+```
 
-**2.1 Modificar `ActivityChart.tsx`**
-- Adicionar opcao "Total" no ToggleGroup (3 opcoes: Semana, Hoje, Total)
-- Novo modo `ViewMode = "week" | "day" | "total"`
-- Quando "Total" selecionado, chama edge function com mode "total"
-
-**2.2 Modificar Edge Function `analytics-activity`**
-- Adicionar suporte ao modo `"total"`
-- Busca todas as mensagens desde a primeira
-- Agrupa por data (dd/mm/yyyy)
-- Retorna array ordenado cronologicamente
+Aplicar o mesmo padrão para `preferences` e `favorites`.
 
 ---
 
-## Diagrama de Fluxo
+## Correção 2: Adicionar Estágio "Match Realizado"
 
-```text
-+---------------------------+
-|   TotalUsersCard          |
-|   +-------------------+   |
-|   | Inativos (7d): X  |   | -> [Botao Download]
-|   +-------------------+   |        |
-+---------------------------+        v
-                              +------------------+
-                              | Modal Exportacao |
-                              | - Preview qtd    |
-                              | - Botao CSV      |
-                              +------------------+
-                                     |
-                                     v
-                              +------------------+
-                              | Edge Function    |
-                              | export-inactive  |
-                              +------------------+
+### Problema Técnico
+- A função `determineFunnelStage()` não verifica `workflow_data`
+- O frontend não lista "Match Realizado" nos filtros
+
+### Solução Backend (analytics-chats/index.ts)
+
+1. **Buscar workflow_data nas preferences:**
+```typescript
+// Linha 352-356 - Adicionar workflow_data à query
+const { data: preferences } = await supabase
+  .from('user_preferences')
+  .select('user_id, enem_score, workflow_data')
+  .in('user_id', batchIds)
+
+// Criar set para match realizado
+const hasMatchRealized = new Set<string>()
+for (const pref of preferences || []) {
+  if (pref.workflow_data && Object.keys(pref.workflow_data).length > 0) {
+    hasMatchRealized.add(pref.user_id)
+  }
+}
 ```
 
-```text
-+---------------------------+
-|   ActivityChart           |
-|   [Semana][Hoje][Total]   |  <- Nova opcao
-+---------------------------+
-        |
-        v (mode="total")
-+---------------------------+
-| Edge Function             |
-| analytics-activity        |
-| - Agrupa por dia          |
-| - Desde primeiro registro |
-+---------------------------+
+2. **Atualizar função de estágios:**
+```typescript
+function determineFunnelStage(
+  userId: string,
+  profile: { onboarding_completed?: boolean } | null,
+  hasPreferences: boolean,
+  hasMatchMessages: boolean,
+  hasMatchRealized: boolean, // NOVO PARÂMETRO
+  hasFavorites: boolean,
+  hasSpecificFlow: boolean
+): string {
+  if (hasSpecificFlow) return 'Fluxo Específico';
+  if (hasFavorites) return 'Salvaram Favoritos';
+  if (hasMatchRealized) return 'Match Realizado'; // NOVA ETAPA
+  if (hasMatchMessages) return 'Match Iniciado';
+  if (hasPreferences) return 'Preferências Definidas';
+  if (profile?.onboarding_completed) return 'Onboarding Completo';
+  return 'Cadastrados';
+}
+```
+
+### Solução Frontend (ChatExamplesPanel.tsx)
+
+```typescript
+// Linha 73-81 - Adicionar opção Match Realizado
+const funnelStages = [
+  { value: 'all', label: 'Todas as etapas' },
+  { value: 'Cadastrados', label: 'Cadastrados' },
+  { value: 'Onboarding Completo', label: 'Onboarding Completo' },
+  { value: 'Preferências Definidas', label: 'Preferências Definidas' },
+  { value: 'Match Iniciado', label: 'Match Iniciado' },
+  { value: 'Match Realizado', label: 'Match Realizado' }, // NOVO
+  { value: 'Salvaram Favoritos', label: 'Salvaram Favoritos' },
+  { value: 'Fluxo Específico', label: 'Fluxo Específico' },
+];
+
+// Linha 83-90 - Adicionar cor
+const funnelStageColors: Record<string, string> = {
+  // ...existentes...
+  'Match Realizado': 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30',
+};
 ```
 
 ---
 
-## Arquivos a Criar/Modificar
+## Correção 3: Ordenar Mensagens Corretamente
 
-| Arquivo | Acao | Descricao |
-|---------|------|-----------|
-| `supabase/functions/analytics-export-inactive/index.ts` | Criar | Edge function para exportar inativos |
-| `supabase/config.toml` | Modificar | Adicionar config da nova funcao |
-| `src/components/analytics/TotalUsersCard.tsx` | Modificar | Adicionar botao de exportar |
-| `src/components/analytics/InactiveUsersExportButton.tsx` | Criar | Componente do modal de exportacao |
-| `src/components/analytics/ActivityChart.tsx` | Modificar | Adicionar opcao "Total" |
-| `supabase/functions/analytics-activity/index.ts` | Modificar | Suportar modo "total" |
+### Problema Técnico
+Mensagens do usuário e bot têm **timestamps idênticos**, causando ordem inconsistente.
+
+### Solução
+Adicionar ordenação secundária por sender após reverter as mensagens:
+```typescript
+// Linha 210-211 - Ordenar com desempate
+const orderedMessages = (messages || [])
+  .reverse()
+  .sort((a, b) => {
+    const timeA = new Date(a.created_at).getTime()
+    const timeB = new Date(b.created_at).getTime()
+    
+    // Ordenação primária por tempo
+    if (timeA !== timeB) return timeA - timeB
+    
+    // Desempate: user antes de cloudinha
+    const senderOrder = (s: string) => s === 'user' ? 0 : 1
+    return senderOrder(a.sender) - senderOrder(b.sender)
+  })
+```
 
 ---
 
-## Detalhes Tecnicos
+## Arquivos a Modificar
 
-### Edge Function `analytics-export-inactive`
-```
-Logica:
-1. Buscar todos auth.users (paginado)
-2. Buscar mensagens dos ultimos 7 dias
-3. Buscar preferencias atualizadas nos ultimos 7 dias  
-4. Buscar favoritos dos ultimos 7 dias
-5. Identificar users que NAO aparecem em nenhum dos 3 sets
-6. Enriquecer com: profile, preferences, funnel stage
-7. Retornar CSV-ready data
-```
+| Arquivo | Alterações |
+|:--------|:-----------|
+| `supabase/functions/analytics-chats/index.ts` | Paginação de profiles, adicionar Match Realizado, ordenação de mensagens |
+| `src/components/analytics/ChatExamplesPanel.tsx` | Adicionar filtro e cor para Match Realizado |
 
-### Edge Function `analytics-activity` (modo total)
-```
-Logica:
-1. Buscar TODAS as mensagens (paginado)
-2. Identificar data da primeira mensagem
-3. Criar map de todas as datas ate hoje
-4. Agregar mensagens e usuarios unicos por dia
-5. Retornar array ordenado cronologicamente
-```
+---
 
-### Formato CSV Inativos
-```
-Nome, Telefone, Cidade, Curso, Etapa do Funil, Data de Cadastro
-```
+## Resultado Esperado
 
+Após as correções:
+- **100% dos usuários** com nome preenchido aparecerão com seu nome (não mais anônimos)
+- **919 usuários** serão categorizados como "Match Realizado"
+- **Mensagens** sempre aparecerão na ordem correta (pergunta → resposta)
+- **Filtro por "Match Realizado"** disponível na interface
