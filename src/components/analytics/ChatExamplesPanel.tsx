@@ -76,6 +76,7 @@ const funnelStages = [
   { value: 'Onboarding Completo', label: 'Onboarding Completo' },
   { value: 'Preferências Definidas', label: 'Preferências Definidas' },
   { value: 'Match Iniciado', label: 'Match Iniciado' },
+  { value: 'Match Realizado', label: 'Match Realizado' },
   { value: 'Salvaram Favoritos', label: 'Salvaram Favoritos' },
   { value: 'Fluxo Específico', label: 'Fluxo Específico' },
 ];
@@ -85,6 +86,7 @@ const funnelStageColors: Record<string, string> = {
   'Onboarding Completo': 'bg-chart-2/10 text-chart-2 border-chart-2/30',
   'Preferências Definidas': 'bg-chart-3/10 text-chart-3 border-chart-3/30',
   'Match Iniciado': 'bg-chart-4/10 text-chart-4 border-chart-4/30',
+  'Match Realizado': 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30',
   'Salvaram Favoritos': 'bg-chart-5/10 text-chart-5 border-chart-5/30',
   'Fluxo Específico': 'bg-success/10 text-success border-success/30',
 };
