@@ -69,25 +69,44 @@ async function fetchInBatches<T>(
   selectFields: string,
   filterColumn: string,
   ids: string[],
-  batchSize: number = 500
+  // NOTE: Using too-large batches with `.in()` can create very large URLs and fail at the HTTP layer.
+  // Keep the default conservative and add a fallback splitter to guarantee full retrieval.
+  batchSize: number = 100
 ): Promise<T[]> {
   const allResults: T[] = [];
-  
-  for (let i = 0; i < ids.length; i += batchSize) {
-    const batchIds = ids.slice(i, i + batchSize);
+
+  const fetchBatchWithFallback = async (batchIds: string[]): Promise<T[]> => {
     const { data, error } = await supabase
       .from(table)
       .select(selectFields)
       .in(filterColumn, batchIds);
-    
+
     if (error) {
-      console.error(`Error fetching ${table} batch:`, error);
-      continue;
+      // If the batch fails (commonly due to very large URL/query string), split and retry.
+      if (batchIds.length > 1) {
+        const mid = Math.ceil(batchIds.length / 2);
+        const left = await fetchBatchWithFallback(batchIds.slice(0, mid));
+        const right = await fetchBatchWithFallback(batchIds.slice(mid));
+        return [...left, ...right];
+      }
+
+      console.error(`Error fetching ${table} batch:`, {
+        error,
+        table,
+        filterColumn,
+        batchSize: batchIds.length,
+      });
+      return [];
     }
-    
-    if (data) {
-      allResults.push(...(data as T[]));
-    }
+
+    return (data as T[]) || [];
+  };
+  
+  for (let i = 0; i < ids.length; i += batchSize) {
+    const batchIds = ids.slice(i, i + batchSize);
+
+    const batchResults = await fetchBatchWithFallback(batchIds);
+    allResults.push(...batchResults);
   }
   
   return allResults;
