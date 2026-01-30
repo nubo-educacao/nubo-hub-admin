@@ -74,14 +74,14 @@ export function PowerUsersCard({ count, change, powerUsersList }: PowerUsersCard
           <div className="flex items-start justify-between">
             <div className="space-y-1">
               <div className="flex items-center gap-1.5">
-                <p className="text-sm font-medium text-muted-foreground">Power Users (7d)</p>
+                <p className="text-sm font-medium text-muted-foreground">Power Users</p>
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent side="bottom" className="max-w-xs">
-                      <p className="text-xs">Usuários recorrentes com 2 ou mais acessos nos últimos 7 dias. Clique para ver a lista.</p>
+                      <p className="text-xs">Usuários recorrentes com 2 ou mais sessões (considerando todo o período). Clique para ver a lista.</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -129,7 +129,7 @@ export function PowerUsersCard({ count, change, powerUsersList }: PowerUsersCard
         
         <div className="text-sm text-muted-foreground mb-4">
           {powerUsersList.length > 0 ? (
-            <p>Top {powerUsersList.length} usuários com mais acessos nos últimos 7 dias</p>
+            <p>Top {powerUsersList.length} usuários com mais sessões (todo o período)</p>
           ) : (
             <p>Nenhum usuário recorrente encontrado</p>
           )}
