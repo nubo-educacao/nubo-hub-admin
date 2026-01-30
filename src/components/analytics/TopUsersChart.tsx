@@ -14,6 +14,9 @@ interface UserExportData {
   cidade_residencia: string;
   local_interesse: string;
   mensagens: number;
+  etapa_funil: string;
+  curso_interesse: string;
+  favoritos: number;
 }
 
 export function TopUsersChart() {
@@ -39,12 +42,15 @@ export function TopUsersChart() {
       }
 
       // Generate CSV
-      const headers = ["Nome", "Telefone", "Cidade de Residência", "Local de Interesse", "Total de Mensagens"];
+      const headers = ["Nome", "Telefone", "Cidade de Residência", "Local de Interesse", "Etapa do Funil", "Curso de Interesse", "Favoritos", "Total de Mensagens"];
       const rows = exportData.map((user) => [
         user.nome,
         user.telefone,
         user.cidade_residencia,
         user.local_interesse,
+        user.etapa_funil,
+        user.curso_interesse,
+        user.favoritos.toString(),
         user.mensagens.toString(),
       ]);
 
