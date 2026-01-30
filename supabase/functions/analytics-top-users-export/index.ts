@@ -12,6 +12,9 @@ interface UserExportData {
   cidade_residencia: string;
   local_interesse: string;
   mensagens: number;
+  etapa_funil: string;
+  curso_interesse: string;
+  favoritos: number;
 }
 
 Deno.serve(async (req) => {
@@ -153,14 +156,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Step 5: Fetch user preferences for location_preference
-    const preferencesMap = new Map<string, string>();
+    // Step 5: Fetch user preferences for location_preference and course_interest
+    const preferencesMap = new Map<string, { location: string; courses: string[] }>();
     
     for (let i = 0; i < userIds.length; i += 50) {
       const batch = userIds.slice(i, i + 50);
       const { data: preferences, error: prefsError } = await supabase
         .from("user_preferences")
-        .select("user_id, location_preference")
+        .select("user_id, location_preference, course_interest")
         .in("user_id", batch);
 
       if (prefsError) {
@@ -170,7 +173,10 @@ Deno.serve(async (req) => {
 
       if (preferences) {
         for (const pref of preferences) {
-          preferencesMap.set(pref.user_id, pref.location_preference || "");
+          preferencesMap.set(pref.user_id, {
+            location: pref.location_preference || "",
+            courses: pref.course_interest || [],
+          });
         }
       }
     }
@@ -210,11 +216,109 @@ Deno.serve(async (req) => {
 
     console.log(`Fetched ${phonesMap.size} phone numbers`);
 
-    // Step 7: Build export data
+    // Step 7: Fetch favorites count for each user
+    const favoritesMap = new Map<string, number>();
+    
+    for (let i = 0; i < userIds.length; i += 50) {
+      const batch = userIds.slice(i, i + 50);
+      const { data: favorites, error: favsError } = await supabase
+        .from("user_favorites")
+        .select("user_id")
+        .in("user_id", batch);
+
+      if (favsError) {
+        console.error("Error fetching favorites:", favsError);
+        continue;
+      }
+
+      if (favorites) {
+        for (const fav of favorites) {
+          favoritesMap.set(fav.user_id, (favoritesMap.get(fav.user_id) || 0) + 1);
+        }
+      }
+    }
+
+    console.log(`Fetched favorites for ${favoritesMap.size} users`);
+
+    // Step 8: Determine funnel stage for each user
+    // Funnel stages: Cadastrados → Ativação → Onboarding → Preferências → Match Iniciado → Match Realizado → Favoritos
+    const funnelStageMap = new Map<string, string>();
+
+    // Check for onboarding_workflow activity
+    const onboardingUsers = new Set<string>();
+    let onboardingOffset = 0;
+    
+    while (true) {
+      const { data: onboardingMsgs, error: onboardingError } = await supabase
+        .from("chat_messages")
+        .select("user_id")
+        .eq("workflow", "onboarding_workflow")
+        .in("user_id", userIds)
+        .range(onboardingOffset, onboardingOffset + 999);
+
+      if (onboardingError) {
+        console.error("Error fetching onboarding messages:", onboardingError);
+        break;
+      }
+
+      if (!onboardingMsgs || onboardingMsgs.length === 0) break;
+
+      for (const msg of onboardingMsgs) {
+        if (msg.user_id) onboardingUsers.add(msg.user_id);
+      }
+
+      if (onboardingMsgs.length < 1000) break;
+      onboardingOffset += 1000;
+    }
+
+    // Check for match_workflow activity (Match Iniciado)
+    const matchIniciadoUsers = new Set<string>();
+    let matchOffset = 0;
+    
+    while (true) {
+      const { data: matchMsgs, error: matchError } = await supabase
+        .from("chat_messages")
+        .select("user_id")
+        .eq("workflow", "match_workflow")
+        .in("user_id", userIds)
+        .range(matchOffset, matchOffset + 999);
+
+      if (matchError) {
+        console.error("Error fetching match messages:", matchError);
+        break;
+      }
+
+      if (!matchMsgs || matchMsgs.length === 0) break;
+
+      for (const msg of matchMsgs) {
+        if (msg.user_id) matchIniciadoUsers.add(msg.user_id);
+      }
+
+      if (matchMsgs.length < 1000) break;
+      matchOffset += 1000;
+    }
+
+    // Determine funnel stage for each user (all users here have Match Realizado)
+    for (const userId of userIds) {
+      const hasFavorites = (favoritesMap.get(userId) || 0) > 0;
+      
+      // Since all users in this export have Match Realizado, determine highest stage
+      if (hasFavorites) {
+        funnelStageMap.set(userId, "Favoritos");
+      } else {
+        funnelStageMap.set(userId, "Match Realizado");
+      }
+    }
+
+    // Step 9: Build export data
     const exportData: UserExportData[] = top100.map((item) => {
       const profile = profilesMap.get(item.userId);
       const phone = phonesMap.get(item.userId) || "";
-      const locationPref = preferencesMap.get(item.userId) || "";
+      const prefs = preferencesMap.get(item.userId);
+      const locationPref = prefs?.location || "";
+      const courseInterest = prefs?.courses?.join(", ") || "";
+      const favoritesCount = favoritesMap.get(item.userId) || 0;
+      const funnelStage = funnelStageMap.get(item.userId) || "Match Realizado";
 
       // Format phone number
       let formattedPhone = phone;
@@ -233,6 +337,9 @@ Deno.serve(async (req) => {
         cidade_residencia: profile?.city || "",
         local_interesse: locationPref,
         mensagens: item.count,
+        etapa_funil: funnelStage,
+        curso_interesse: courseInterest,
+        favoritos: favoritesCount,
       };
     });
 
