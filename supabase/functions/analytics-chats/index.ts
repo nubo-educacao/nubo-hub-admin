@@ -48,15 +48,49 @@ function determineFunnelStage(
   profile: { onboarding_completed?: boolean } | null,
   hasPreferences: boolean,
   hasMatchMessages: boolean,
+  hasMatchRealized: boolean,
   hasFavorites: boolean,
   hasSpecificFlow: boolean
 ): string {
   if (hasSpecificFlow) return 'Fluxo Específico';
   if (hasFavorites) return 'Salvaram Favoritos';
+  if (hasMatchRealized) return 'Match Realizado';
   if (hasMatchMessages) return 'Match Iniciado';
   if (hasPreferences) return 'Preferências Definidas';
   if (profile?.onboarding_completed) return 'Onboarding Completo';
   return 'Cadastrados';
+}
+
+// Helper to fetch data in batches to overcome Supabase 1000-row limit
+// deno-lint-ignore no-explicit-any
+async function fetchInBatches<T>(
+  supabase: any,
+  table: string,
+  selectFields: string,
+  filterColumn: string,
+  ids: string[],
+  batchSize: number = 500
+): Promise<T[]> {
+  const allResults: T[] = [];
+  
+  for (let i = 0; i < ids.length; i += batchSize) {
+    const batchIds = ids.slice(i, i + batchSize);
+    const { data, error } = await supabase
+      .from(table)
+      .select(selectFields)
+      .in(filterColumn, batchIds);
+    
+    if (error) {
+      console.error(`Error fetching ${table} batch:`, error);
+      continue;
+    }
+    
+    if (data) {
+      allResults.push(...(data as T[]));
+    }
+  }
+  
+  return allResults;
 }
 
 Deno.serve(async (req) => {
@@ -137,10 +171,10 @@ Deno.serve(async (req) => {
         .eq('id', userId)
         .single()
 
-      // Fetch preferences for location_preference
+      // Fetch preferences for location_preference and workflow_data
       const { data: prefData } = await supabase
         .from('user_preferences')
-        .select('location_preference, enem_score')
+        .select('location_preference, enem_score, workflow_data')
         .eq('user_id', userId)
         .single()
 
@@ -198,17 +232,36 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Check if match was realized (workflow_data has content)
+      const hasMatchRealized = prefData?.workflow_data && 
+        typeof prefData.workflow_data === 'object' && 
+        Object.keys(prefData.workflow_data).length > 0
+
       const funnelStage = determineFunnelStage(
         userId,
         profileData ? { onboarding_completed: profileData.onboarding_completed } : null,
         !!prefData?.enem_score,
         hasMatchMessages,
+        hasMatchRealized,
         (favCount || 0) > 0,
         hasSpecificFlow
       )
 
-      // Reverse messages to chronological order
-      const orderedMessages = (messages || []).reverse()
+      // Reverse messages to chronological order and sort with tie-breaker
+      const orderedMessages = (messages || [])
+        .reverse()
+        .sort((a, b) => {
+          const timeA = new Date(a.created_at).getTime()
+          const timeB = new Date(b.created_at).getTime()
+          
+          // Primary sort by time
+          if (timeA !== timeB) return timeA - timeB
+          
+          // Tie-breaker: user before cloudinha
+          const senderOrder = (s: string) => s === 'user' ? 0 : 1
+          return senderOrder(a.sender) - senderOrder(b.sender)
+        })
+      
       const total = totalCount || 0
       const hasMore = total > offset + messagesLimit
 
@@ -262,7 +315,7 @@ Deno.serve(async (req) => {
       hasSpecificFlow: boolean;
     }>()
 
-    let offset = 0
+    let msgOffset = 0
     const batchSize = 1000
     let totalFetched = 0
 
@@ -274,7 +327,7 @@ Deno.serve(async (req) => {
         .lte('created_at', effectiveDateTo.toISOString())
         .not('user_id', 'is', null)
         .order('created_at', { ascending: false })
-        .range(offset, offset + batchSize - 1)
+        .range(msgOffset, msgOffset + batchSize - 1)
 
       if (batchError) {
         console.error('Error fetching messages batch:', batchError)
@@ -312,7 +365,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      offset += batchSize
+      msgOffset += batchSize
       
       // If we got less than batchSize, we've reached the end
       if (batch.length < batchSize) break
@@ -328,11 +381,22 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Batch fetch: profiles
-    const { data: profiles } = await supabase
-      .from('user_profiles')
-      .select('id, full_name, city, age, onboarding_completed')
-      .in('id', uniqueUserIds)
+    // Batch fetch: profiles (using helper to overcome 1000-row limit)
+    interface ProfileData {
+      id: string;
+      full_name: string | null;
+      city: string | null;
+      age: number | null;
+      onboarding_completed: boolean | null;
+    }
+    
+    const profiles = await fetchInBatches<ProfileData>(
+      supabase,
+      'user_profiles',
+      'id, full_name, city, age, onboarding_completed',
+      'id',
+      uniqueUserIds
+    )
 
     const profileMap = new Map<string, {
       full_name: string;
@@ -340,7 +404,7 @@ Deno.serve(async (req) => {
       age: number | null;
       onboarding_completed: boolean;
     }>()
-    for (const profile of profiles || []) {
+    for (const profile of profiles) {
       profileMap.set(profile.id, {
         full_name: profile.full_name || 'Usuário Anônimo',
         city: profile.city,
@@ -349,27 +413,54 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Batch fetch: preferences (for funnel stage)
-    const { data: preferences } = await supabase
-      .from('user_preferences')
-      .select('user_id, enem_score')
-      .in('user_id', uniqueUserIds)
+    console.log(`Fetched ${profiles.length} profiles for ${uniqueUserIds.length} users`)
+
+    // Batch fetch: preferences (for funnel stage and match realized)
+    interface PreferenceData {
+      user_id: string;
+      enem_score: number | null;
+      workflow_data: Record<string, unknown> | null;
+    }
+    
+    const preferences = await fetchInBatches<PreferenceData>(
+      supabase,
+      'user_preferences',
+      'user_id, enem_score, workflow_data',
+      'user_id',
+      uniqueUserIds
+    )
 
     const hasPreferencesSet = new Set<string>()
-    for (const pref of preferences || []) {
+    const hasMatchRealizedSet = new Set<string>()
+    for (const pref of preferences) {
       if (pref.user_id && pref.enem_score) {
         hasPreferencesSet.add(pref.user_id)
       }
+      // Check if workflow_data has content (Match Realizado)
+      if (pref.user_id && pref.workflow_data && 
+          typeof pref.workflow_data === 'object' && 
+          Object.keys(pref.workflow_data).length > 0) {
+        hasMatchRealizedSet.add(pref.user_id)
+      }
     }
 
+    console.log(`Found ${hasMatchRealizedSet.size} users with Match Realizado`)
+
     // Batch fetch: favorites (for funnel stage)
-    const { data: favorites } = await supabase
-      .from('user_favorites')
-      .select('user_id')
-      .in('user_id', uniqueUserIds)
+    interface FavoriteData {
+      user_id: string;
+    }
+    
+    const favorites = await fetchInBatches<FavoriteData>(
+      supabase,
+      'user_favorites',
+      'user_id',
+      'user_id',
+      uniqueUserIds
+    )
 
     const hasFavoritesSet = new Set<string>()
-    for (const fav of favorites || []) {
+    for (const fav of favorites) {
       if (fav.user_id) hasFavoritesSet.add(fav.user_id)
     }
 
@@ -396,6 +487,7 @@ Deno.serve(async (req) => {
         profile ? { onboarding_completed: profile.onboarding_completed } : null,
         hasPreferencesSet.has(userId),
         userData.hasMatch,
+        hasMatchRealizedSet.has(userId),
         hasFavoritesSet.has(userId),
         userData.hasSpecificFlow
       )
