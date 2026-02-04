@@ -817,6 +817,39 @@ export type Database = {
           },
         ]
       }
+      partner_solicitations: {
+        Row: {
+          contact_name: string
+          created_at: string
+          email: string | null
+          goals: string | null
+          how_did_you_know: string
+          id: string
+          institution_name: string
+          whatsapp: string | null
+        }
+        Insert: {
+          contact_name: string
+          created_at?: string
+          email?: string | null
+          goals?: string | null
+          how_did_you_know: string
+          id?: string
+          institution_name: string
+          whatsapp?: string | null
+        }
+        Update: {
+          contact_name?: string
+          created_at?: string
+          email?: string | null
+          goals?: string | null
+          how_did_you_know?: string
+          id?: string
+          institution_name?: string
+          whatsapp?: string | null
+        }
+        Relationships: []
+      }
       partners: {
         Row: {
           coverimage: string | null
@@ -858,6 +891,41 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      partners_click: {
+        Row: {
+          clicks: number
+          created_at: string
+          id: string
+          partner_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          clicks?: number
+          created_at?: string
+          id?: string
+          partner_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          clicks?: number
+          created_at?: string
+          id?: string
+          partner_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partners_click_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       rawemec: {
         Row: {
