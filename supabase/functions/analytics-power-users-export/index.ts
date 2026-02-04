@@ -184,28 +184,42 @@ Deno.serve(async (req) => {
       favoritesCount.set(f.user_id, (favoritesCount.get(f.user_id) || 0) + 1)
     }
 
-    // 4. Fetch phone numbers from Auth API
+    // 4. Fetch phone numbers from Auth API with pagination
     const phoneMap = new Map<string, string>()
-    const userIdList = powerUserIds.map(u => u.userId)
+    const powerUserIdSet = new Set(powerUserIds.map(u => u.userId))
     
-    // Fetch users in batches of 50
-    const batchSize = 50
-    for (let i = 0; i < userIdList.length; i += batchSize) {
-      const batch = userIdList.slice(i, i + batchSize)
-      const { data: authData } = await supabase.auth.admin.listUsers({
-        page: 1,
-        perPage: 1000
+    let page = 1
+    const perPage = 1000
+    let hasMoreUsers = true
+    
+    console.log('Fetching phone numbers for', powerUserIdSet.size, 'power users...')
+    
+    while (hasMoreUsers) {
+      const { data: authData, error: authError } = await supabase.auth.admin.listUsers({
+        page,
+        perPage
       })
       
-      if (authData?.users) {
+      if (authError) {
+        console.error('Error fetching auth users:', authError)
+        break
+      }
+      
+      if (authData?.users && authData.users.length > 0) {
         for (const user of authData.users) {
-          if (batch.includes(user.id) && user.phone) {
+          if (powerUserIdSet.has(user.id) && user.phone) {
             phoneMap.set(user.id, user.phone)
           }
         }
+        console.log(`Auth page ${page}: ${authData.users.length} users, found ${phoneMap.size} phones so far`)
+        page++
+        hasMoreUsers = authData.users.length === perPage
+      } else {
+        hasMoreUsers = false
       }
-      break // Only need one call since we're getting all users
     }
+    
+    console.log('Total phones found:', phoneMap.size)
 
     // 5. Build enriched power users list
     const enrichedUsers = powerUserIds.map(({ userId, sessionCount }) => {
