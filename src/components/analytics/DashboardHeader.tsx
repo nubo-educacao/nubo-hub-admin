@@ -1,14 +1,8 @@
-import { Cloud, Settings, Sparkles, MessageSquare, Clock, Menu } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Cloud, Settings, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DateRangeFilter, DateRangeValue } from "./DateRangeFilter";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import {
-  Sheet,
-  SheetContent,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 import SegmentedExportButton from "./SegmentedExportButton";
 
 interface DashboardHeaderProps {
@@ -29,31 +23,6 @@ export function DashboardHeader({
   const formatLastUpdate = () => {
     return format(lastUpdate, "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR });
   };
-
-  const NavLinks = () => (
-    <>
-      <Link to="/conversas">
-        <Button
-          variant="default"
-          size="sm"
-          className="gap-2 bg-gradient-to-r from-chart-1 to-chart-2 hover:opacity-90 w-full sm:w-auto"
-        >
-          <MessageSquare className="h-4 w-4" />
-          Conversas
-        </Button>
-      </Link>
-      <Link to="/ai-insights">
-        <Button
-          variant="default"
-          size="sm"
-          className="gap-2 bg-gradient-to-r from-chart-1 to-chart-2 hover:opacity-90 w-full sm:w-auto"
-        >
-          <Sparkles className="h-4 w-4" />
-          Insights AI
-        </Button>
-      </Link>
-    </>
-  );
 
   return (
     <header className="sticky top-0 z-40 backdrop-blur-md bg-background/80 border-b border-border">
@@ -77,7 +46,6 @@ export function DashboardHeader({
 
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-2">
-            <NavLinks />
             <SegmentedExportButton />
             <DateRangeFilter
               selectedRange={selectedRange}
@@ -98,22 +66,6 @@ export function DashboardHeader({
               onRefresh={onRefresh}
               isRefreshing={isRefreshing}
             />
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="outline" size="icon" className="shrink-0">
-                  <Menu className="h-4 w-4" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="right" className="w-64">
-                <div className="flex flex-col gap-3 mt-6">
-                  <NavLinks />
-                  <Button variant="outline" size="sm" className="gap-2 w-full">
-                    <Settings className="h-4 w-4" />
-                    Configurações
-                  </Button>
-                </div>
-              </SheetContent>
-            </Sheet>
           </div>
         </div>
 

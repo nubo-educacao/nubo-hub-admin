@@ -1,0 +1,175 @@
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { toast } from "sonner";
+
+interface UserModalProps {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    user?: {
+        id: string;
+        email: string;
+        permissions: string[];
+    };
+    onSuccess: () => void;
+}
+
+const AVAILABLE_PERMISSIONS = ["Dashboard", "Controle de usuários"];
+
+export default function UserModal({ open, onOpenChange, user, onSuccess }: UserModalProps) {
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (user) {
+            setEmail(user.email);
+            setSelectedPermissions(user.permissions);
+        } else {
+            setEmail("");
+            setPassword("");
+            setSelectedPermissions([]);
+        }
+    }, [user, open]);
+
+    const handleTogglePermission = (permission: string) => {
+        setSelectedPermissions((prev) =>
+            prev.includes(permission)
+                ? prev.filter((p) => p !== permission)
+                : [...prev, permission]
+        );
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+
+        try {
+            let userId = user?.id;
+
+            if (!userId) {
+                // Create new user in handles auth
+                // NOTE: In a real app, you might want to use a service role or a specialized RPC 
+                // to create users if you don't want them to be logged in immediately.
+                // For this demo/task, we assume we can invite or create.
+                // Since we don't have a service role client here, we use signUp.
+                const { data: authData, error: authError } = await supabase.auth.signUp({
+                    email,
+                    password,
+                });
+
+                if (authError) throw authError;
+                userId = authData.user?.id;
+            }
+
+            if (!userId) throw new Error("Falha ao obter ID do usuário");
+
+            // Update permissions
+            // First, delete existing
+            if (user) {
+                const { error: deleteError } = await supabase
+                    .from("user_permissions" as any)
+                    .delete()
+                    .eq("user_id", userId);
+
+                if (deleteError) throw deleteError;
+            }
+
+            // Then insert new ones
+            if (selectedPermissions.length > 0) {
+                const { error: insertError } = await supabase
+                    .from("user_permissions" as any)
+                    .insert(
+                        selectedPermissions.map((p) => ({
+                            user_id: userId,
+                            permission: p,
+                        }))
+                    );
+
+                if (insertError) throw insertError;
+            }
+
+            toast.success(user ? "Usuário atualizado!" : "Usuário criado!");
+            onSuccess();
+            onOpenChange(false);
+        } catch (error: any) {
+            toast.error(error.message || "Erro ao salvar usuário");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>{user ? "Editar Usuário" : "Novo Usuário"}</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="space-y-4 py-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="email">E-mail</Label>
+                        <Input
+                            id="email"
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            disabled={!!user}
+                            required
+                        />
+                    </div>
+                    {!user && (
+                        <div className="space-y-2">
+                            <Label htmlFor="password">Senha</Label>
+                            <Input
+                                id="password"
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                            />
+                        </div>
+                    )}
+                    <div className="space-y-3">
+                        <Label>Permissões</Label>
+                        <div className="grid gap-2">
+                            {AVAILABLE_PERMISSIONS.map((permission) => (
+                                <div key={permission} className="flex items-center space-x-2">
+                                    <Checkbox
+                                        id={`perm-${permission}`}
+                                        checked={selectedPermissions.includes(permission)}
+                                        onCheckedChange={() => handleTogglePermission(permission)}
+                                    />
+                                    <label
+                                        htmlFor={`perm-${permission}`}
+                                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                    >
+                                        {permission}
+                                    </label>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <DialogFooter className="pt-4">
+                        <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+                            Cancelar
+                        </Button>
+                        <Button type="submit" disabled={loading}>
+                            {loading ? "Salvando..." : "Salvar"}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
