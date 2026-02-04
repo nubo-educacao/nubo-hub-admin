@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { UserCheck, ChevronRight, Copy, Check } from "lucide-react";
+import { UserCheck, ChevronRight, Copy, Check, Download, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -16,7 +16,9 @@ import {
 } from "@/components/ui/tooltip";
 import { HelpCircle } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface PowerUser {
   userId: string;
@@ -31,9 +33,21 @@ interface PowerUsersCardProps {
   powerUsersList: PowerUser[];
 }
 
+interface ExportUser {
+  nome: string;
+  telefone: string;
+  cidadeResidencia: string;
+  localInteresse: string;
+  cursoInteresse: string;
+  etapaFunil: string;
+  favoritos: number;
+  totalAcessos: number;
+}
+
 export function PowerUsersCard({ count, change, powerUsersList }: PowerUsersCardProps) {
   const [open, setOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const isPositive = change && change > 0;
   const isNegative = change && change < 0;
 
@@ -59,6 +73,70 @@ export function PowerUsersCard({ count, change, powerUsersList }: PowerUsersCard
       setTimeout(() => setCopiedId(null), 2000);
     } catch (err) {
       toast.error('Erro ao copiar');
+    }
+  };
+
+  const handleExportCSV = async () => {
+    setIsExporting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('analytics-power-users-export');
+      
+      if (error) throw error;
+      
+      const users: ExportUser[] = data.users || [];
+      
+      if (users.length === 0) {
+        toast.error('Nenhum Power User encontrado para exportar');
+        return;
+      }
+
+      // CSV header
+      const headers = [
+        'Nome',
+        'Telefone',
+        'Cidade de Residência',
+        'Local de Interesse',
+        'Curso de Interesse',
+        'Etapa do Funil',
+        'Favoritos',
+        'Total de Acessos'
+      ];
+
+      // CSV rows
+      const rows = users.map(user => [
+        user.nome,
+        user.telefone,
+        user.cidadeResidencia,
+        user.localInteresse,
+        user.cursoInteresse,
+        user.etapaFunil,
+        user.favoritos.toString(),
+        user.totalAcessos.toString()
+      ]);
+
+      // Build CSV content with BOM for Excel compatibility
+      const csvContent = '\uFEFF' + [
+        headers.join(';'),
+        ...rows.map(row => row.map(cell => `"${(cell || '').replace(/"/g, '""')}"`).join(';'))
+      ].join('\n');
+
+      // Create and download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `power-users-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success(`${users.length} Power Users exportados com sucesso!`);
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Erro ao exportar Power Users');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -121,10 +199,26 @@ export function PowerUsersCard({ count, change, powerUsersList }: PowerUsersCard
       
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <UserCheck className="h-5 w-5 text-chart-3" />
-            Power Users - Usuários Recorrentes
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-2">
+              <UserCheck className="h-5 w-5 text-chart-3" />
+              Power Users - Usuários Recorrentes
+            </DialogTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportCSV}
+              disabled={isExporting}
+              className="ml-4 gap-1"
+            >
+              {isExporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              <span className="ml-1.5">Exportar CSV</span>
+            </Button>
+          </div>
         </DialogHeader>
         
         <div className="text-sm text-muted-foreground mb-4">

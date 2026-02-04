@@ -55,3 +55,6 @@ verify_jwt = false
 
 [functions.analytics-top-users-export]
 verify_jwt = false
+
+[functions.analytics-power-users-export]
+verify_jwt = false
