@@ -11,7 +11,8 @@ import {
     AlertCircle,
     UsersRound,
     UserCog,
-    Handshake
+    Handshake,
+    GraduationCap
 } from "lucide-react";
 
 
@@ -58,31 +59,37 @@ export default function Sidebar() {
             to: "/conversas",
             icon: MessageSquare,
             label: "Conversas",
-            permission: "Dashboard",
+            permission: "Conversas",
         },
         {
             to: "/ai-insights",
             icon: Sparkles,
             label: "Insights AI",
-            permission: "Dashboard",
+            permission: "Insights AI",
         },
         {
             to: "/errors",
             icon: AlertCircle,
             label: "Erros",
-            permission: "Dashboard",
+            permission: "Erros",
         },
         {
             to: "/influencers",
             icon: UsersRound,
             label: "Influencers",
-            permission: "Dashboard",
+            permission: "Influencers",
         },
         {
             to: "/partners",
             icon: Handshake,
             label: "Parceiros",
-            permission: "Dashboard",
+            permission: "Parceiros",
+        },
+        {
+            to: "/students",
+            icon: GraduationCap,
+            label: "Estudantes",
+            permission: "Estudantes",
         },
         {
             to: "/users",

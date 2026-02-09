@@ -13,6 +13,7 @@ import AIInsights from "./pages/AIInsights";
 import Conversas from "./pages/Conversas";
 import Influencers from "./pages/Influencers";
 import Partners from "./pages/Partners";
+import Students from "./pages/Students";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => (
               <Route path="/users" element={<Users />} />
               <Route path="/influencers" element={<Influencers />} />
               <Route path="/partners" element={<Partners />} />
+              <Route path="/students" element={<Students />} />
             </Route>
 
 

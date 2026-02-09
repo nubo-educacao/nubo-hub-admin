@@ -15,11 +15,20 @@ import {
 } from "@/services/partnersService";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import {
+    getPartnerSolicitations,
+    PartnerSolicitation,
+} from "@/services/partnerSolicitationsService";
+import { PartnerSolicitationsTable } from "@/components/partners/PartnerSolicitationsTable";
+import { PartnerSolicitationDialog } from "@/components/partners/PartnerSolicitationDialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function Partners() {
     const queryClient = useQueryClient();
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [selectedPartner, setSelectedPartner] = useState<Partner | undefined>();
+    const [selectedSolicitation, setSelectedSolicitation] = useState<PartnerSolicitation | null>(null);
+    const [isSolicitationDialogOpen, setIsSolicitationDialogOpen] = useState(false);
 
     // Queries
     const { data: partners = [], isLoading: isLoadingPartners } = useQuery({
@@ -50,6 +59,11 @@ export default function Partners() {
             });
             return map;
         }
+    });
+
+    const { data: solicitations = [], isLoading: isLoadingSolicitations } = useQuery({
+        queryKey: ["partner-solicitations"],
+        queryFn: getPartnerSolicitations,
     });
 
     // Mutations
@@ -93,6 +107,11 @@ export default function Partners() {
         setIsDialogOpen(true);
     };
 
+    const handleViewSolicitation = (solicitation: PartnerSolicitation) => {
+        setSelectedSolicitation(solicitation);
+        setIsSolicitationDialogOpen(true);
+    };
+
     const handleSubmit = async (values: any) => {
         if (selectedPartner) {
             await updateMutation.mutateAsync({ id: selectedPartner.id, data: values });
@@ -118,22 +137,46 @@ export default function Partners() {
                         Gerencie os parceiros e acompanhe o desempenho de cliques.
                     </p>
                 </div>
-                <Button onClick={handleAddPartner} className="gap-2">
-                    <Plus className="h-4 w-4" />
-                    Novo Parceiro
-                </Button>
             </div>
 
-            {stats && <PartnerStats stats={stats} />}
+            <Tabs defaultValue="partners" className="space-y-4">
+                <div className="flex justify-between items-center">
+                    <TabsList>
+                        <TabsTrigger value="partners">Parceiros</TabsTrigger>
+                        <TabsTrigger value="solicitations">Solicitações</TabsTrigger>
+                    </TabsList>
 
-            <div className="space-y-4">
-                <h2 className="text-xl font-semibold">Listagem de Parceiros</h2>
-                <PartnerTable
-                    partners={partners}
-                    clicksMap={clicksMap}
-                    onEdit={handleEditPartner}
-                />
-            </div>
+                    <TabsContent value="partners" className="mt-0">
+                        <Button onClick={handleAddPartner} className="gap-2">
+                            <Plus className="h-4 w-4" />
+                            Novo Parceiro
+                        </Button>
+                    </TabsContent>
+                </div>
+
+                <TabsContent value="partners" className="space-y-4">
+                    {stats && <PartnerStats stats={stats} />}
+
+                    <div className="space-y-4">
+                        <h2 className="text-xl font-semibold">Listagem de Parceiros</h2>
+                        <PartnerTable
+                            partners={partners}
+                            clicksMap={clicksMap}
+                            onEdit={handleEditPartner}
+                        />
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="solicitations" className="space-y-4">
+                    <div className="space-y-4">
+                        <h2 className="text-xl font-semibold">Solicitações de Parceria</h2>
+                        <PartnerSolicitationsTable
+                            solicitations={solicitations}
+                            onView={handleViewSolicitation}
+                        />
+                    </div>
+                </TabsContent>
+            </Tabs>
 
             <PartnerDialog
                 isOpen={isDialogOpen}
@@ -143,6 +186,12 @@ export default function Partners() {
                 onDelete={selectedPartner ? async () => {
                     await deleteMutation.mutateAsync(selectedPartner.id);
                 } : undefined}
+            />
+
+            <PartnerSolicitationDialog
+                isOpen={isSolicitationDialogOpen}
+                onOpenChange={setIsSolicitationDialogOpen}
+                solicitation={selectedSolicitation}
             />
         </div>
     );

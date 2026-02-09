@@ -24,7 +24,16 @@ interface UserModalProps {
     onSuccess: () => void;
 }
 
-const AVAILABLE_PERMISSIONS = ["Dashboard", "Controle de usuários"];
+const AVAILABLE_PERMISSIONS = [
+    "Dashboard",
+    "Conversas",
+    "Insights AI",
+    "Erros",
+    "Influencers",
+    "Parceiros",
+    "Estudantes",
+    "Controle de usuários"
+];
 
 export default function UserModal({ open, onOpenChange, user, onSuccess }: UserModalProps) {
     const [email, setEmail] = useState("");
@@ -76,28 +85,39 @@ export default function UserModal({ open, onOpenChange, user, onSuccess }: UserM
             if (!userId) throw new Error("Falha ao obter ID do usuário");
 
             // Update permissions
-            // First, delete existing
-            if (user) {
-                const { error: deleteError } = await supabase
-                    .from("user_permissions" as any)
-                    .delete()
-                    .eq("user_id", userId);
+            // Update permissions using Diff logic to avoid self-lockout
+            // 1. Identify what to add and what to remove
+            const currentPermissions = user ? user.permissions : [];
+            const permissionsToAdd = selectedPermissions.filter(
+                (p) => !currentPermissions.includes(p)
+            );
+            const permissionsToRemove = currentPermissions.filter(
+                (p) => !selectedPermissions.includes(p)
+            );
 
-                if (deleteError) throw deleteError;
-            }
-
-            // Then insert new ones
-            if (selectedPermissions.length > 0) {
+            // 2. Perform INSERTs first (ADD permissions)
+            if (permissionsToAdd.length > 0) {
                 const { error: insertError } = await supabase
                     .from("user_permissions" as any)
                     .insert(
-                        selectedPermissions.map((p) => ({
+                        permissionsToAdd.map((p) => ({
                             user_id: userId,
                             permission: p,
                         }))
                     );
 
                 if (insertError) throw insertError;
+            }
+
+            // 3. Perform DELETEs last (REMOVE permissions)
+            if (permissionsToRemove.length > 0) {
+                const { error: deleteError } = await supabase
+                    .from("user_permissions" as any)
+                    .delete()
+                    .eq("user_id", userId)
+                    .in("permission", permissionsToRemove);
+
+                if (deleteError) throw deleteError;
             }
 
             toast.success(user ? "Usuário atualizado!" : "Usuário criado!");
