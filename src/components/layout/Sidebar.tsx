@@ -12,7 +12,8 @@ import {
     UsersRound,
     UserCog,
     Handshake,
-    GraduationCap
+    GraduationCap,
+    PieChart
 } from "lucide-react";
 
 
@@ -96,6 +97,12 @@ export default function Sidebar() {
             icon: UserCog,
             label: "Controle de Usuários",
             permission: "Controle de usuários",
+        },
+        {
+            to: "/sean-ellis",
+            icon: PieChart,
+            label: "Sean Ellis Score",
+            permission: "Sean Ellis Score",
         },
 
     ];
