@@ -32,7 +32,8 @@ const AVAILABLE_PERMISSIONS = [
     "Influencers",
     "Parceiros",
     "Estudantes",
-    "Controle de usuários"
+    "Controle de usuários",
+    "Sean Ellis Score"
 ];
 
 export default function UserModal({ open, onOpenChange, user, onSuccess }: UserModalProps) {

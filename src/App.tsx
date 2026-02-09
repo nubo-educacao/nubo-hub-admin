@@ -14,6 +14,7 @@ import Conversas from "./pages/Conversas";
 import Influencers from "./pages/Influencers";
 import Partners from "./pages/Partners";
 import Students from "./pages/Students";
+import SeanEllis from "./pages/SeanEllis";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +39,7 @@ const App = () => (
               <Route path="/influencers" element={<Influencers />} />
               <Route path="/partners" element={<Partners />} />
               <Route path="/students" element={<Students />} />
+              <Route path="/sean-ellis" element={<SeanEllis />} />
             </Route>
 
 
