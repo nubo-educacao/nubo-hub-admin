@@ -15,3 +15,12 @@ export const supabase = createClient<Database>(SUPABASE_URL || '', SUPABASE_PUBL
     autoRefreshToken: true,
   }
 });
+
+// Helper to create a client that doesn't persist session
+// Useful for admin operations on the frontend (like creating users)
+// without signing out the currently logged in admin.
+export const createTempClient = () => createClient<Database>(SUPABASE_URL || '', SUPABASE_PUBLISHABLE_KEY || '', {
+  auth: {
+    persistSession: false,
+  }
+});

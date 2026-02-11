@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, createTempClient } from "@/integrations/supabase/client";
 import {
     Dialog,
     DialogContent,
@@ -33,7 +33,8 @@ const AVAILABLE_PERMISSIONS = [
     "Parceiros",
     "Estudantes",
     "Controle de usuários",
-    "Sean Ellis Score"
+    "Sean Ellis Score",
+    "Calendário"
 ];
 
 export default function UserModal({ open, onOpenChange, user, onSuccess }: UserModalProps) {
@@ -69,12 +70,10 @@ export default function UserModal({ open, onOpenChange, user, onSuccess }: UserM
             let userId = user?.id;
 
             if (!userId) {
-                // Create new user in handles auth
-                // NOTE: In a real app, you might want to use a service role or a specialized RPC 
-                // to create users if you don't want them to be logged in immediately.
-                // For this demo/task, we assume we can invite or create.
-                // Since we don't have a service role client here, we use signUp.
-                const { data: authData, error: authError } = await supabase.auth.signUp({
+                // Use a temporary client for signUp to avoid signing out the admin
+                // This ensures the current admin session remains active for the subsequent permission insertion
+                const tempClient = createTempClient();
+                const { data: authData, error: authError } = await tempClient.auth.signUp({
                     email,
                     password,
                 });
@@ -82,6 +81,7 @@ export default function UserModal({ open, onOpenChange, user, onSuccess }: UserM
                 if (authError) throw authError;
                 userId = authData.user?.id;
             }
+
 
             if (!userId) throw new Error("Falha ao obter ID do usuário");
 
@@ -162,8 +162,28 @@ export default function UserModal({ open, onOpenChange, user, onSuccess }: UserM
                         </div>
                     )}
                     <div className="space-y-3">
-                        <Label>Permissões</Label>
+                        <div className="flex items-center justify-between">
+                            <Label>Permissões</Label>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-auto px-2 py-1 text-xs"
+                                onClick={() => {
+                                    if (selectedPermissions.length === AVAILABLE_PERMISSIONS.length) {
+                                        setSelectedPermissions([]);
+                                    } else {
+                                        setSelectedPermissions([...AVAILABLE_PERMISSIONS]);
+                                    }
+                                }}
+                            >
+                                {selectedPermissions.length === AVAILABLE_PERMISSIONS.length
+                                    ? "Desmarcar todas"
+                                    : "Selecionar todas"}
+                            </Button>
+                        </div>
                         <div className="grid gap-2">
+
                             {AVAILABLE_PERMISSIONS.map((permission) => (
                                 <div key={permission} className="flex items-center space-x-2">
                                     <Checkbox
