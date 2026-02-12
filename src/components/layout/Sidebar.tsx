@@ -14,7 +14,9 @@ import {
     Handshake,
     GraduationCap,
     PieChart,
-    CalendarDays
+    CalendarDays,
+    Bot,
+    ChevronDown
 } from "lucide-react";
 
 
@@ -47,6 +49,7 @@ const NavItem = ({ to, icon: Icon, label, collapsed, active }: NavItemProps) => 
 
 export default function Sidebar() {
     const [collapsed, setCollapsed] = useState(false);
+    const [cloudinhaOpen, setCloudinhaOpen] = useState(true);
     const { permissions, signOut } = useAuth();
     const location = useLocation();
 
@@ -58,34 +61,30 @@ export default function Sidebar() {
             permission: "Dashboard",
         },
         {
-            to: "/conversas",
-            icon: MessageSquare,
-            label: "Conversas",
-            permission: "Conversas",
-        },
-        {
-            to: "/ai-insights",
-            icon: Sparkles,
-            label: "Insights AI",
-            permission: "Insights AI",
-        },
-        {
-            to: "/errors",
-            icon: AlertCircle,
-            label: "Erros",
-            permission: "Erros",
-        },
-        {
-            to: "/influencers",
-            icon: UsersRound,
-            label: "Influencers",
-            permission: "Influencers",
-        },
-        {
-            to: "/partners",
-            icon: Handshake,
-            label: "Parceiros",
-            permission: "Parceiros",
+            label: "Cloudinha",
+            icon: Bot,
+            permission: "Cloudinha", // We might need to check if this permission exists or use one from sub-items
+            isGroup: true,
+            items: [
+                {
+                    to: "/conversas",
+                    icon: MessageSquare,
+                    label: "Conversas",
+                    permission: "Conversas",
+                },
+                {
+                    to: "/ai-insights",
+                    icon: Sparkles,
+                    label: "Insights AI",
+                    permission: "Insights AI",
+                },
+                {
+                    to: "/errors",
+                    icon: AlertCircle,
+                    label: "Erros",
+                    permission: "Erros",
+                },
+            ]
         },
         {
             to: "/students",
@@ -94,10 +93,16 @@ export default function Sidebar() {
             permission: "Estudantes",
         },
         {
-            to: "/sean-ellis",
-            icon: PieChart,
-            label: "Sean Ellis Score",
-            permission: "Sean Ellis Score",
+            to: "/partners",
+            icon: Handshake,
+            label: "Parceiros",
+            permission: "Parceiros",
+        },
+        {
+            to: "/influencers",
+            icon: UsersRound,
+            label: "Influencers",
+            permission: "Influencers",
         },
         {
             to: "/calendar",
@@ -106,19 +111,87 @@ export default function Sidebar() {
             permission: "Calendário",
         },
         {
+            to: "/sean-ellis",
+            icon: PieChart,
+            label: "Sean Ellis Score",
+            permission: "Sean Ellis Score",
+        },
+        {
             to: "/users",
             icon: UserCog,
             label: "Controle de Usuários",
             permission: "Controle de usuários",
         },
-
     ];
 
+    // Check if user has permission for at least one item in the group
+    const hasGroupPermission = (group: any) => {
+        return group.items.some((item: any) => permissions.includes(item.permission));
+    };
 
+    const renderNavItem = (item: any) => {
+        if (item.isGroup) {
+            const allowedItems = item.items.filter((subItem: any) =>
+                permissions.includes(subItem.permission)
+            );
 
-    const filteredItems = navItems.filter((item) =>
-        permissions.includes(item.permission)
-    );
+            if (allowedItems.length === 0) return null;
+
+            const isChildActive = allowedItems.some((subItem: any) => location.pathname === subItem.to);
+
+            return (
+                <div key={item.label} className="space-y-1">
+                    <button
+                        onClick={() => !collapsed && setCloudinhaOpen(!cloudinhaOpen)}
+                        className={cn(
+                            "w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg transition-colors",
+                            isChildActive
+                                ? "text-primary font-medium"
+                                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                        )}
+                    >
+                        <div className="flex items-center gap-3">
+                            <item.icon className={cn("h-5 w-5 shrink-0", isChildActive && "text-primary")} />
+                            {!collapsed && <span className="text-sm">{item.label}</span>}
+                        </div>
+                        {!collapsed && (
+                            <ChevronDown className={cn(
+                                "h-4 w-4 transition-transform",
+                                cloudinhaOpen ? "transform rotate-0" : "transform -rotate-90"
+                            )} />
+                        )}
+                    </button>
+                    {!collapsed && cloudinhaOpen && (
+                        <div className="pl-6 space-y-1 border-l ml-5 border-border/50">
+                            {allowedItems.map((subItem: any) => (
+                                <NavItem
+                                    key={subItem.to}
+                                    to={subItem.to}
+                                    icon={subItem.icon}
+                                    label={subItem.label}
+                                    collapsed={collapsed}
+                                    active={location.pathname === subItem.to}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        if (!permissions.includes(item.permission)) return null;
+
+        return (
+            <NavItem
+                key={item.to}
+                to={item.to}
+                icon={item.icon}
+                label={item.label}
+                collapsed={collapsed}
+                active={location.pathname === item.to}
+            />
+        );
+    };
 
     return (
         <div
@@ -139,17 +212,8 @@ export default function Sidebar() {
                 </Button>
             </div>
 
-            <nav className="flex-1 space-y-1 p-2">
-                {filteredItems.map((item) => (
-                    <NavItem
-                        key={item.to}
-                        to={item.to}
-                        icon={item.icon}
-                        label={item.label}
-                        collapsed={collapsed}
-                        active={location.pathname === item.to}
-                    />
-                ))}
+            <nav className="flex-1 space-y-1 p-2 overflow-y-auto">
+                {navItems.map(renderNavItem)}
             </nav>
 
             <div className="p-2 border-t">

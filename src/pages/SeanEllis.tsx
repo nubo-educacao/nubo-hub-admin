@@ -82,7 +82,6 @@ export default function SeanEllis() {
         setPage(0);
     };
 
-<<<<<<< HEAD
     const handleSort = (field: string) => {
         if (sortBy === field) {
             setSortOrder(sortOrder === "asc" ? "desc" : "asc");
@@ -93,8 +92,6 @@ export default function SeanEllis() {
         setPage(0);
     };
 
-=======
->>>>>>> 0996a6a9a72beb3e91ed0746587685be8a27be39
     if (isLoading) {
         return (
             <div className="flex h-[400px] items-center justify-center">
@@ -143,48 +140,44 @@ export default function SeanEllis() {
                     </Button>
                 </div>
 
-<<<<<<< HEAD
-    <SeanEllisTable
-        data={scores}
-        sortBy={sortBy}
-        sortOrder={sortOrder}
-        onSort={handleSort}
-    />
-=======
-                <SeanEllisTable data={scores} />
->>>>>>> 0996a6a9a72beb3e91ed0746587685be8a27be39
+                <SeanEllisTable
+                    data={scores}
+                    sortBy={sortBy}
+                    sortOrder={sortOrder}
+                    onSort={handleSort}
+                />
             </div >
 
-        <div className="flex items-center justify-end space-x-2 py-4">
-            <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0}
-            >
-                Anterior
-            </Button>
-            <div className="text-sm text-muted-foreground">
-                Página {page + 1} de {totalPages || 1}
+            <div className="flex items-center justify-end space-x-2 py-4">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                    disabled={page === 0}
+                >
+                    Anterior
+                </Button>
+                <div className="text-sm text-muted-foreground">
+                    Página {page + 1} de {totalPages || 1}
+                </div>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                    disabled={page >= totalPages - 1}
+                >
+                    Próxima
+                </Button>
             </div>
-            <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-            >
-                Próxima
-            </Button>
-        </div>
 
-    {/* Reusing StudentFilterModal as it contains the required filters */ }
-    <StudentFilterModal
-        open={isFilterOpen}
-        onOpenChange={setIsFilterOpen}
-        filters={filters}
-        onApplyFilters={handleApplyFilters}
-        onClearFilters={handleClearFilters}
-    />
+            {/* Reusing StudentFilterModal as it contains the required filters */}
+            <StudentFilterModal
+                open={isFilterOpen}
+                onOpenChange={setIsFilterOpen}
+                filters={filters}
+                onApplyFilters={handleApplyFilters}
+                onClearFilters={handleClearFilters}
+            />
         </div >
     );
 }
