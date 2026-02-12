@@ -63,7 +63,13 @@ export interface StudentFilters {
     quotaTypes?: string[];
 }
 
-export const getStudents = async (page: number = 0, pageSize: number = 20, filters?: StudentFilters): Promise<{ data: StudentProfile[], count: number }> => {
+export const getStudents = async (
+    page: number = 0,
+    pageSize: number = 20,
+    filters?: StudentFilters,
+    sortBy: string = 'created_at',
+    sortOrder: string = 'desc'
+): Promise<{ data: StudentProfile[], count: number }> => {
     const paramFilters = {
         p_page: page,
         p_page_size: pageSize,
@@ -73,7 +79,9 @@ export const getStudents = async (page: number = 0, pageSize: number = 20, filte
         p_filter_is_nubo_student: filters?.isNuboStudent ?? null,
         p_filter_income_min: filters?.incomeMin || null,
         p_filter_income_max: filters?.incomeMax || null,
-        p_filter_quota_types: (filters?.quotaTypes && filters.quotaTypes.length > 0) ? filters.quotaTypes : null
+        p_filter_quota_types: (filters?.quotaTypes && filters.quotaTypes.length > 0) ? filters.quotaTypes : null,
+        p_sort_by: sortBy,
+        p_sort_order: sortOrder
     };
 
     const { data, error } = await supabase.rpc('get_students_paginated', paramFilters);

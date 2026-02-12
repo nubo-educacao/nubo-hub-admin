@@ -30,16 +30,29 @@ export default function Partners() {
     const [selectedSolicitation, setSelectedSolicitation] = useState<PartnerSolicitation | null>(null);
     const [isSolicitationDialogOpen, setIsSolicitationDialogOpen] = useState(false);
 
+    // Sorting state
+    const [sortBy, setSortBy] = useState("name");
+    const [sortOrder, setSortOrder] = useState("asc");
+
     // Queries
     const { data: partners = [], isLoading: isLoadingPartners } = useQuery({
-        queryKey: ["partners"],
-        queryFn: getPartners,
+        queryKey: ["partners", sortBy, sortOrder],
+        queryFn: () => getPartners(sortBy, sortOrder),
     });
 
     const { data: stats, isLoading: isLoadingStats } = useQuery({
         queryKey: ["partner-stats"],
         queryFn: getPartnerStatistics,
     });
+
+    const handleSort = (field: string) => {
+        if (sortBy === field) {
+            setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+        } else {
+            setSortBy(field);
+            setSortOrder("asc");
+        }
+    };
 
     // Since we don't have a direct click map from the service (it's calculated internal to stats)
     // we'll fetch it here for the table or use the stats if we change the structure.
@@ -163,6 +176,9 @@ export default function Partners() {
                             partners={partners}
                             clicksMap={clicksMap}
                             onEdit={handleEditPartner}
+                            sortBy={sortBy}
+                            sortOrder={sortOrder}
+                            onSort={handleSort}
                         />
                     </div>
                 </TabsContent>

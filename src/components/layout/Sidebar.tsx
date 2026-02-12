@@ -92,6 +92,12 @@ export default function Sidebar() {
             permission: "Estudantes",
         },
         {
+            to: "/sean-ellis",
+            icon: PieChart,
+            label: "Sean Ellis Score",
+            permission: "Sean Ellis Score",
+        },
+        {
             to: "/users",
             icon: UserCog,
             label: "Controle de Usuários",

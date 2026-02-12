@@ -1,15 +1,34 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Edit, Image as ImageIcon } from "lucide-react";
+import { Edit, Image as ImageIcon, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Partner } from "@/services/partnersService";
 
 interface PartnerTableProps {
     partners: Partner[];
     clicksMap: Record<string, number>;
     onEdit: (partner: Partner) => void;
+    sortBy?: string;
+    sortOrder?: string;
+    onSort?: (field: string) => void;
 }
 
-export function PartnerTable({ partners, clicksMap, onEdit }: PartnerTableProps) {
+export function PartnerTable({
+    partners,
+    clicksMap,
+    onEdit,
+    sortBy,
+    sortOrder,
+    onSort
+}: PartnerTableProps) {
+    const renderSortIcon = (field: string) => {
+        if (sortBy !== field) return <ArrowUpDown className="ml-2 h-4 w-4 text-muted-foreground/30" />;
+        return sortOrder === "asc" ? (
+            <ArrowUp className="ml-2 h-4 w-4 text-primary" />
+        ) : (
+            <ArrowDown className="ml-2 h-4 w-4 text-primary" />
+        );
+    };
+
     const formatDateRange = (dates: any) => {
         const datesObj = Array.isArray(dates) ? dates[0] : dates;
 
@@ -38,8 +57,24 @@ export function PartnerTable({ partners, clicksMap, onEdit }: PartnerTableProps)
                 <TableHeader>
                     <TableRow>
                         <TableHead className="w-[80px]">Capa</TableHead>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Tipo</TableHead>
+                        <TableHead
+                            className="cursor-pointer hover:bg-muted/50 transition-colors"
+                            onClick={() => onSort?.("name")}
+                        >
+                            <div className="flex items-center">
+                                Nome
+                                {renderSortIcon("name")}
+                            </div>
+                        </TableHead>
+                        <TableHead
+                            className="cursor-pointer hover:bg-muted/50 transition-colors"
+                            onClick={() => onSort?.("type")}
+                        >
+                            <div className="flex items-center">
+                                Tipo
+                                {renderSortIcon("type")}
+                            </div>
+                        </TableHead>
                         <TableHead>Período</TableHead>
                         <TableHead className="text-right">Total de Cliques</TableHead>
                         <TableHead className="text-right">Ações</TableHead>

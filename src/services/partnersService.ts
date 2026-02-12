@@ -14,8 +14,14 @@ export interface PartnerStats {
     clicksPerUser: number;
 }
 
-export async function getPartners(): Promise<Partner[]> {
-    const { data, error } = await supabase.rpc("get_partners");
+export async function getPartners(
+    sortBy: string = 'name',
+    sortOrder: string = 'asc'
+): Promise<Partner[]> {
+    const { data, error } = await supabase.rpc("get_partners", {
+        p_sort_by: sortBy,
+        p_sort_order: sortOrder
+    });
 
     if (error) {
         console.error("Error fetching partners:", error);

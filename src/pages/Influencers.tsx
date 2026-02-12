@@ -9,7 +9,7 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import { Plus, Users, Award, TrendingUp, Loader2, Eye, Link as LinkIcon } from "lucide-react";
+import { Plus, Users, Award, TrendingUp, Loader2, Eye, Link as LinkIcon, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 
 import { StatCard } from "@/components/analytics/StatCard";
 import InfluencerModal from "@/components/influencers/InfluencerModal";
@@ -28,11 +28,13 @@ interface Influencer {
 export default function Influencers() {
     const [influencers, setInfluencers] = useState<Influencer[]>([]);
     const [loading, setLoading] = useState(true);
+    const [sortBy, setSortBy] = useState("name");
+    const [sortOrder, setSortOrder] = useState("asc");
     const [modalOpen, setModalOpen] = useState(false);
+    // ... rest
     const [affiliatesModalOpen, setAffiliatesModalOpen] = useState(false);
     const [linkModalOpen, setLinkModalOpen] = useState(false);
     const [selectedInfluencer, setSelectedInfluencer] = useState<{ code: string; name: string } | null>(null);
-
 
     // Stats
     const [totalAffiliates, setTotalAffiliates] = useState(0);
@@ -42,8 +44,11 @@ export default function Influencers() {
     const fetchData = async () => {
         setLoading(true);
         try {
-            // Fetch influencer stats directly via RPC (bypasses RLS issues)
-            const { data: processedInfluencers, error: influencersError } = await supabase.rpc("get_influencer_stats" as any);
+            // Fetch influencer stats directly via RPC
+            const { data: processedInfluencers, error: influencersError } = await supabase.rpc("get_influencer_stats" as any, {
+                p_sort_by: sortBy,
+                p_sort_order: sortOrder
+            });
 
             if (influencersError) throw influencersError;
             setInfluencers((processedInfluencers as any) || []);
@@ -70,7 +75,16 @@ export default function Influencers() {
 
     useEffect(() => {
         fetchData();
-    }, []);
+    }, [sortBy, sortOrder]);
+
+    const handleSort = (field: string) => {
+        if (sortBy === field) {
+            setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+        } else {
+            setSortBy(field);
+            setSortOrder("asc");
+        }
+    };
 
     const handleViewAffiliates = (influencer: Influencer) => {
         setSelectedInfluencer({ code: influencer.code, name: influencer.name });
@@ -119,9 +133,45 @@ export default function Influencers() {
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>Nome</TableHead>
-                            <TableHead>Código</TableHead>
-                            <TableHead className="text-center">Total Afiliados</TableHead>
+                            <TableHead
+                                className="cursor-pointer hover:bg-muted/50 transition-colors"
+                                onClick={() => handleSort("name")}
+                            >
+                                <div className="flex items-center">
+                                    Nome
+                                    {sortBy === "name" ? (
+                                        sortOrder === "asc" ? <ArrowUp className="ml-2 h-4 w-4 text-primary" /> : <ArrowDown className="ml-2 h-4 w-4 text-primary" />
+                                    ) : (
+                                        <ArrowUpDown className="ml-2 h-4 w-4 text-muted-foreground/30" />
+                                    )}
+                                </div>
+                            </TableHead>
+                            <TableHead
+                                className="cursor-pointer hover:bg-muted/50 transition-colors"
+                                onClick={() => handleSort("code")}
+                            >
+                                <div className="flex items-center">
+                                    Código
+                                    {sortBy === "code" ? (
+                                        sortOrder === "asc" ? <ArrowUp className="ml-2 h-4 w-4 text-primary" /> : <ArrowDown className="ml-2 h-4 w-4 text-primary" />
+                                    ) : (
+                                        <ArrowUpDown className="ml-2 h-4 w-4 text-muted-foreground/30" />
+                                    )}
+                                </div>
+                            </TableHead>
+                            <TableHead
+                                className="cursor-pointer hover:bg-muted/50 transition-colors text-center"
+                                onClick={() => handleSort("affiliate_count")}
+                            >
+                                <div className="flex items-center justify-center">
+                                    Total Afiliados
+                                    {sortBy === "affiliate_count" ? (
+                                        sortOrder === "asc" ? <ArrowUp className="ml-2 h-4 w-4 text-primary" /> : <ArrowDown className="ml-2 h-4 w-4 text-primary" />
+                                    ) : (
+                                        <ArrowUpDown className="ml-2 h-4 w-4 text-muted-foreground/30" />
+                                    )}
+                                </div>
+                            </TableHead>
                             <TableHead className="text-right">Ações</TableHead>
                         </TableRow>
                     </TableHeader>
