@@ -12,7 +12,9 @@ import {
     UsersRound,
     UserCog,
     Handshake,
-    GraduationCap
+    GraduationCap,
+    PieChart,
+    CalendarDays
 } from "lucide-react";
 
 
@@ -96,6 +98,12 @@ export default function Sidebar() {
             icon: PieChart,
             label: "Sean Ellis Score",
             permission: "Sean Ellis Score",
+        },
+        {
+            to: "/calendar",
+            icon: CalendarDays,
+            label: "Calendário",
+            permission: "Calendário",
         },
         {
             to: "/users",

@@ -42,6 +42,7 @@ export function SeanEllisTable({ data, sortBy, sortOrder, onSort }: SeanEllisTab
             <Table>
                 <TableHeader>
                     <TableRow>
+<<<<<<< HEAD
                         <TableHead
                             className="cursor-pointer hover:bg-muted/50 transition-colors"
                             onClick={() => onSort?.("submitted_at")}
@@ -97,30 +98,39 @@ export function SeanEllisTable({ data, sortBy, sortOrder, onSort }: SeanEllisTab
                                 {renderSortIcon("prouni_subscribed")}
                             </div>
                         </TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {data.map((item) => (
-                        <TableRow key={item.id}>
-                            <TableCell className="whitespace-nowrap">
-                                {item.submitted_at ? format(new Date(item.submitted_at), "dd/MM/yyyy HH:mm", { locale: ptBR }) : "-"}
-                            </TableCell>
-                            <TableCell>{item.full_name}</TableCell>
-                            <TableCell>{item.whatsapp_raw}</TableCell>
-                            <TableCell>
-                                {item.user_id ? (
-                                    <Check className="h-4 w-4 text-green-500" />
-                                ) : (
-                                    <Minus className="h-4 w-4 text-gray-300" />
-                                )}
-                            </TableCell>
-                            <TableCell>{item.disappointment_level}</TableCell>
-                            <TableCell>{item.sisu_subscribed}</TableCell>
-                            <TableCell>{item.prouni_subscribed}</TableCell>
-                        </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
-        </div>
+=======
+                        <TableHead>Data</TableHead>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Whatsapp</TableHead>
+                        <TableHead>Identificado?</TableHead>
+                        <TableHead>Nível de Decepção</TableHead>
+                        <TableHead>SISU Inscrito?</TableHead>
+                        <TableHead>PROUNI Inscrito?</TableHead>
+>>>>>>> 0996a6a9a72beb3e91ed0746587685be8a27be39
+                    </TableRow >
+                </TableHeader >
+        <TableBody>
+            {data.map((item) => (
+                <TableRow key={item.id}>
+                    <TableCell className="whitespace-nowrap">
+                        {item.submitted_at ? format(new Date(item.submitted_at), "dd/MM/yyyy HH:mm", { locale: ptBR }) : "-"}
+                    </TableCell>
+                    <TableCell>{item.full_name}</TableCell>
+                    <TableCell>{item.whatsapp_raw}</TableCell>
+                    <TableCell>
+                        {item.user_id ? (
+                            <Check className="h-4 w-4 text-green-500" />
+                        ) : (
+                            <Minus className="h-4 w-4 text-gray-300" />
+                        )}
+                    </TableCell>
+                    <TableCell>{item.disappointment_level}</TableCell>
+                    <TableCell>{item.sisu_subscribed}</TableCell>
+                    <TableCell>{item.prouni_subscribed}</TableCell>
+                </TableRow>
+            ))}
+        </TableBody>
+            </Table >
+        </div >
     );
 }
