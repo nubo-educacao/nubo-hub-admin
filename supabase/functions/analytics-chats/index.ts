@@ -101,14 +101,14 @@ async function fetchInBatches<T>(
 
     return (data as T[]) || [];
   };
-  
+
   for (let i = 0; i < ids.length; i += batchSize) {
     const batchIds = ids.slice(i, i + batchSize);
 
     const batchResults = await fetchBatchWithFallback(batchIds);
     allResults.push(...batchResults);
   }
-  
+
   return allResults;
 }
 
@@ -124,10 +124,10 @@ Deno.serve(async (req) => {
     )
 
     // Parse request body for optional filters
-    let body: { 
+    let body: {
       mode?: 'list' | 'conversation';
-      user_id?: string; 
-      offset?: number; 
+      user_id?: string;
+      offset?: number;
       messages_limit?: number;
       date_from?: string;
       date_to?: string;
@@ -151,7 +151,7 @@ Deno.serve(async (req) => {
     // ============ MODE: CONVERSATION - Load details for a specific user ============
     if (mode === 'conversation' && body.user_id) {
       console.log(`Loading conversation for user: ${body.user_id}`)
-      
+
       const userId = body.user_id
       const messagesLimit = body.messages_limit || 20
       const offset = body.offset || 0
@@ -252,8 +252,8 @@ Deno.serve(async (req) => {
       }
 
       // Check if match was realized (workflow_data has content)
-      const hasMatchRealized = prefData?.workflow_data && 
-        typeof prefData.workflow_data === 'object' && 
+      const hasMatchRealized = prefData?.workflow_data &&
+        typeof prefData.workflow_data === 'object' &&
         Object.keys(prefData.workflow_data).length > 0
 
       const funnelStage = determineFunnelStage(
@@ -272,15 +272,15 @@ Deno.serve(async (req) => {
         .sort((a, b) => {
           const timeA = new Date(a.created_at).getTime()
           const timeB = new Date(b.created_at).getTime()
-          
+
           // Primary sort by time
           if (timeA !== timeB) return timeA - timeB
-          
+
           // Tie-breaker: user before cloudinha
           const senderOrder = (s: string) => s === 'user' ? 0 : 1
           return senderOrder(a.sender) - senderOrder(b.sender)
         })
-      
+
       const total = totalCount || 0
       const hasMore = total > offset + messagesLimit
 
@@ -315,224 +315,32 @@ Deno.serve(async (req) => {
       })
     }
 
-    // ============ MODE: LIST - Fast loading of user summaries ============
-    console.log('Loading user list (fast mode)')
-    
+    // ============ MODE: LIST - Fast loading using Database RPC ============
+    console.log('Loading user list (RPC mode)')
+
     // Use date filters if provided, otherwise default to last 30 days
     const defaultDateFrom = new Date()
     defaultDateFrom.setDate(defaultDateFrom.getDate() - 30)
-    
+
     const effectiveDateFrom = dateFrom || defaultDateFrom
     const effectiveDateTo = dateTo || new Date()
+    // If dateTo is provided, it was already set to end of day above. If new Date(), it is now.
 
-    // Get all messages in date range with PAGINATION to overcome 1000-row limit
-    const userDataMap = new Map<string, {
-      last_activity: string;
-      total_messages: number;
-      workflows: Map<string, number>;
-      hasMatch: boolean;
-      hasSpecificFlow: boolean;
-    }>()
+    console.log(`Date range: ${effectiveDateFrom.toISOString()} to ${effectiveDateTo.toISOString()}`)
 
-    let msgOffset = 0
-    const batchSize = 1000
-    let totalFetched = 0
-
-    while (true) {
-      const { data: batch, error: batchError } = await supabase
-        .from('chat_messages')
-        .select('user_id, workflow, created_at')
-        .gte('created_at', effectiveDateFrom.toISOString())
-        .lte('created_at', effectiveDateTo.toISOString())
-        .not('user_id', 'is', null)
-        .order('created_at', { ascending: false })
-        .range(msgOffset, msgOffset + batchSize - 1)
-
-      if (batchError) {
-        console.error('Error fetching messages batch:', batchError)
-        throw batchError
-      }
-
-      if (!batch || batch.length === 0) break
-
-      totalFetched += batch.length
-
-      // Aggregate data per user
-      for (const row of batch) {
-        if (!row.user_id) continue
-        
-        let userData = userDataMap.get(row.user_id)
-        if (!userData) {
-          userData = {
-            last_activity: row.created_at,
-            total_messages: 0,
-            workflows: new Map(),
-            hasMatch: false,
-            hasSpecificFlow: false
-          }
-          userDataMap.set(row.user_id, userData)
-        }
-        
-        userData.total_messages++
-        
-        if (row.workflow) {
-          userData.workflows.set(row.workflow, (userData.workflows.get(row.workflow) || 0) + 1)
-          if (row.workflow === 'match_workflow') userData.hasMatch = true
-          if (['sisu_workflow', 'prouni_workflow', 'fies_workflow'].includes(row.workflow)) {
-            userData.hasSpecificFlow = true
-          }
-        }
-      }
-
-      msgOffset += batchSize
-      
-      // If we got less than batchSize, we've reached the end
-      if (batch.length < batchSize) break
-    }
-
-    console.log(`Fetched ${totalFetched} messages, found ${userDataMap.size} unique users`)
-
-    const uniqueUserIds = Array.from(userDataMap.keys())
-
-    if (uniqueUserIds.length === 0) {
-      return new Response(JSON.stringify({ users: [], total: 0 }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
-    // Batch fetch: profiles (using helper to overcome 1000-row limit)
-    interface ProfileData {
-      id: string;
-      full_name: string | null;
-      city: string | null;
-      age: number | null;
-      onboarding_completed: boolean | null;
-    }
-    
-    const profiles = await fetchInBatches<ProfileData>(
-      supabase,
-      'user_profiles',
-      'id, full_name, city, age, onboarding_completed',
-      'id',
-      uniqueUserIds
-    )
-
-    const profileMap = new Map<string, {
-      full_name: string;
-      city: string | null;
-      age: number | null;
-      onboarding_completed: boolean;
-    }>()
-    for (const profile of profiles) {
-      profileMap.set(profile.id, {
-        full_name: profile.full_name || 'Usuário Anônimo',
-        city: profile.city,
-        age: profile.age,
-        onboarding_completed: profile.onboarding_completed || false,
-      })
-    }
-
-    console.log(`Fetched ${profiles.length} profiles for ${uniqueUserIds.length} users`)
-
-    // Batch fetch: preferences (for funnel stage and match realized)
-    interface PreferenceData {
-      user_id: string;
-      enem_score: number | null;
-      workflow_data: Record<string, unknown> | null;
-    }
-    
-    const preferences = await fetchInBatches<PreferenceData>(
-      supabase,
-      'user_preferences',
-      'user_id, enem_score, workflow_data',
-      'user_id',
-      uniqueUserIds
-    )
-
-    const hasPreferencesSet = new Set<string>()
-    const hasMatchRealizedSet = new Set<string>()
-    for (const pref of preferences) {
-      if (pref.user_id && pref.enem_score) {
-        hasPreferencesSet.add(pref.user_id)
-      }
-      // Check if workflow_data has content (Match Realizado)
-      if (pref.user_id && pref.workflow_data && 
-          typeof pref.workflow_data === 'object' && 
-          Object.keys(pref.workflow_data).length > 0) {
-        hasMatchRealizedSet.add(pref.user_id)
-      }
-    }
-
-    console.log(`Found ${hasMatchRealizedSet.size} users with Match Realizado`)
-
-    // Batch fetch: favorites (for funnel stage)
-    interface FavoriteData {
-      user_id: string;
-    }
-    
-    const favorites = await fetchInBatches<FavoriteData>(
-      supabase,
-      'user_favorites',
-      'user_id',
-      'user_id',
-      uniqueUserIds
-    )
-
-    const hasFavoritesSet = new Set<string>()
-    for (const fav of favorites) {
-      if (fav.user_id) hasFavoritesSet.add(fav.user_id)
-    }
-
-    // Build user summaries
-    const users: UserSummary[] = []
-
-    for (const userId of uniqueUserIds) {
-      const userData = userDataMap.get(userId)!
-      const profile = profileMap.get(userId)
-
-      // Get dominant workflow
-      let dominantWorkflow: string | null = null
-      let maxCount = 0
-      for (const [workflow, count] of userData.workflows) {
-        if (count > maxCount) {
-          maxCount = count
-          dominantWorkflow = workflow
-        }
-      }
-
-      // Determine funnel stage
-      const funnelStage = determineFunnelStage(
-        userId,
-        profile ? { onboarding_completed: profile.onboarding_completed } : null,
-        hasPreferencesSet.has(userId),
-        userData.hasMatch,
-        hasMatchRealizedSet.has(userId),
-        hasFavoritesSet.has(userId),
-        userData.hasSpecificFlow
-      )
-
-      users.push({
-        user_id: userId,
-        user_name: profile?.full_name || 'Usuário Anônimo',
-        city: profile?.city || null,
-        age: profile?.age || null,
-        funnel_stage: funnelStage,
-        last_activity: userData.last_activity,
-        total_messages: userData.total_messages,
-        workflow: dominantWorkflow,
-      })
-    }
-
-    // Sort by last_activity (most recent first)
-    users.sort((a, b) => {
-      const dateA = a.last_activity ? new Date(a.last_activity).getTime() : 0
-      const dateB = b.last_activity ? new Date(b.last_activity).getTime() : 0
-      return dateB - dateA
+    const { data: users, error } = await supabase.rpc('get_chat_analytics_summary', {
+      p_date_from: effectiveDateFrom.toISOString(),
+      p_date_to: effectiveDateTo.toISOString()
     })
 
-    console.log(`Returning ${users.length} user summaries`)
+    if (error) {
+      console.error('Error fetching analytics summary:', error)
+      throw error
+    }
 
-    return new Response(JSON.stringify({ users, total: users.length }), {
+    console.log(`RPC returned ${users?.length || 0} user summaries`)
+
+    return new Response(JSON.stringify({ users: users || [], total: users?.length || 0 }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (error) {
