@@ -112,7 +112,7 @@ const formatRelativeTime = (dateString: string | null) => {
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
-  
+
   if (diffMins < 1) return 'agora';
   if (diffMins < 60) return `há ${diffMins} min`;
   if (diffHours < 24) return `há ${diffHours}h`;
@@ -124,19 +124,20 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
   // Phase 1: User list (fast load)
   const [userList, setUserList] = useState<UserSummary[]>([]);
   const [loadingList, setLoadingList] = useState(true);
-  
+  const [visibleCount, setVisibleCount] = useState(30);
+
   // Phase 2: Active conversation (on-demand load)
   const [activeConversation, setActiveConversation] = useState<UserConversation | null>(null);
   const [loadingConversation, setLoadingConversation] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  
+
   const [error, setError] = useState<string | null>(null);
   const [funnelFilter, setFunnelFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingMore, setLoadingMore] = useState(false);
   const [copiedPhone, setCopiedPhone] = useState<string | null>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
-  
+
   // Date filter states
   const [datePreset, setDatePreset] = useState('last30days');
   const [dateFrom, setDateFrom] = useState<Date | undefined>(subDays(new Date(), 30));
@@ -149,39 +150,64 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
       setLoadingList(true);
       setError(null);
       console.log('Fetching user list (fast mode):', { dateFrom, dateTo });
-      
-      const requestBody: { 
+
+      const requestBody: {
         mode: 'list';
-        date_from?: string; 
-        date_to?: string 
+        date_from?: string;
+        date_to?: string
       } = { mode: 'list' };
-      
+
       if (dateFrom) {
         requestBody.date_from = startOfDay(dateFrom).toISOString();
       }
       if (dateTo) {
         requestBody.date_to = endOfDay(dateTo).toISOString();
       }
-      
-      const { data, error: fetchError } = await supabase.functions.invoke('analytics-chats', {
-        body: requestBody
-      });
 
-      if (fetchError) {
-        console.error('Error from analytics-chats:', fetchError);
-        throw fetchError;
+      let allUsers: UserSummary[] = [];
+      let page = 0;
+      const pageSize = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        // @ts-ignore - RPC not yet typed
+        const { data, error: fetchError } = await supabase
+          .rpc('get_chat_analytics_summary', {
+            p_date_from: requestBody.date_from || startOfDay(subDays(new Date(), 30)).toISOString(),
+            p_date_to: requestBody.date_to || endOfDay(new Date()).toISOString()
+          })
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+
+        if (fetchError) {
+          console.error('Error from RPC get_chat_analytics_summary:', fetchError);
+          throw fetchError;
+        }
+
+        const pageData = data as unknown as UserSummary[];
+
+        if (pageData && Array.isArray(pageData)) {
+          allUsers = [...allUsers, ...pageData];
+          if (pageData.length < pageSize) {
+            hasMore = false;
+          } else {
+            page++;
+          }
+        } else {
+          hasMore = false;
+        }
       }
-      
-      if (data && data.users && Array.isArray(data.users)) {
-        console.log('Loaded', data.users.length, 'users (fast mode)');
-        setUserList(data.users);
-        
+
+      if (allUsers.length > 0) {
+        console.log('Loaded', allUsers.length, 'users (RPC batch mode)');
+        setUserList(allUsers);
+        setVisibleCount(30);
+
         // Auto-select first user if none selected
-        if (data.users.length > 0 && !selectedUserId) {
-          loadConversation(data.users[0].user_id);
+        if (allUsers.length > 0 && !selectedUserId) {
+          loadConversation(allUsers[0].user_id);
         }
       } else {
-        console.warn('Unexpected data format from analytics-chats:', data);
+        console.warn('Unexpected data format from RPC:', data);
         setUserList([]);
       }
     } catch (e) {
@@ -198,11 +224,11 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
       setLoadingConversation(true);
       setSelectedUserId(userId);
       console.log('Loading conversation for user:', userId);
-      
+
       const { data, error: fetchError } = await supabase.functions.invoke('analytics-chats', {
-        body: { 
+        body: {
           mode: 'conversation',
-          user_id: userId 
+          user_id: userId
         }
       });
 
@@ -213,7 +239,7 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
 
       if (data) {
         setActiveConversation(data);
-        
+
         // Scroll to bottom of messages
         setTimeout(() => {
           if (chatContainerRef.current) {
@@ -227,7 +253,7 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
       setLoadingConversation(false);
     }
   };
-  
+
   // Handle date preset change
   const handleDatePresetChange = (preset: string) => {
     setDatePreset(preset);
@@ -244,34 +270,37 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
   useEffect(() => {
     setSelectedUserId(null);
     setActiveConversation(null);
+    setVisibleCount(30);
     fetchUserList();
   }, [dateFrom, dateTo]);
 
   // Filter users by funnel stage and search query
   const filteredUsers = userList.filter(u => {
     const matchesFunnel = funnelFilter === 'all' || u.funnel_stage === funnelFilter;
-    const matchesSearch = searchQuery === '' || 
+    const matchesSearch = searchQuery === '' ||
       u.user_name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesFunnel && matchesSearch;
   });
 
+  const visibleUsers = filteredUsers.slice(0, visibleCount);
+
   // Load more messages for current conversation
   const loadMoreMessages = async () => {
     if (!activeConversation || loadingMore) return;
-    
+
     const currentMessagesCount = activeConversation.messages.length;
-    
+
     try {
       setLoadingMore(true);
-      
+
       // Save scroll height before loading
       const container = chatContainerRef.current;
       const scrollHeightBefore = container?.scrollHeight || 0;
-      
+
       const { data, error: fetchError } = await supabase.functions.invoke('analytics-chats', {
-        body: { 
+        body: {
           mode: 'conversation',
-          user_id: activeConversation.user_id, 
+          user_id: activeConversation.user_id,
           offset: currentMessagesCount,
           messages_limit: 20
         }
@@ -372,7 +401,7 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
               ))}
             </SelectContent>
           </Select>
-          
+
           {datePreset === 'custom' && (
             <div className="space-y-2">
               <Popover open={isDatePopoverOpen} onOpenChange={setIsDatePopoverOpen}>
@@ -411,7 +440,7 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
               </Popover>
             </div>
           )}
-          
+
           {dateFrom && dateTo && datePreset !== 'custom' && (
             <p className="text-xs text-muted-foreground mt-1">
               {format(dateFrom, "dd/MM/yyyy", { locale: ptBR })} - {format(dateTo, "dd/MM/yyyy", { locale: ptBR })}
@@ -442,22 +471,22 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
         {/* User Count */}
         <div className="mb-2 flex-shrink-0">
           <span className="text-sm text-muted-foreground">
-            {filteredUsers.length} conversas
+            Mostrando {visibleUsers.length} de {filteredUsers.length} conversas
           </span>
         </div>
 
         {/* Scrollable User List */}
         <ScrollArea className="flex-1">
-          <div className="space-y-1 pr-2">
-            {filteredUsers.map((user) => (
+          <div className="space-y-1 pr-2 pb-4">
+            {visibleUsers.map((user) => (
               <div
                 key={user.user_id}
                 onClick={() => loadConversation(user.user_id)}
                 className={cn(
                   "p-2 rounded-lg cursor-pointer transition-colors",
                   "hover:bg-muted/80",
-                  selectedUserId === user.user_id 
-                    ? "bg-primary/10 border border-primary/30" 
+                  selectedUserId === user.user_id
+                    ? "bg-primary/10 border border-primary/30"
                     : "bg-muted/30 border border-transparent"
                 )}
               >
@@ -470,8 +499,8 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge 
-                    variant="outline" 
+                  <Badge
+                    variant="outline"
                     className={cn(
                       "text-[10px] px-1.5 py-0",
                       funnelStageColors[user.funnel_stage || ''] || "bg-muted"
@@ -485,6 +514,17 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
                 </div>
               </div>
             ))}
+
+            {visibleUsers.length < filteredUsers.length && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-xs text-muted-foreground"
+                onClick={() => setVisibleCount(prev => prev + 50)}
+              >
+                Carregar mais ({filteredUsers.length - visibleUsers.length})
+              </Button>
+            )}
           </div>
         </ScrollArea>
       </div>
@@ -527,7 +567,7 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
           )}
 
           {activeConversation && (
-            <div 
+            <div
               ref={chatContainerRef}
               className="flex-1 overflow-y-auto rounded-lg border border-border bg-card/50 p-4"
             >
@@ -568,7 +608,7 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
                         <User className="h-4 w-4 text-muted-foreground" />
                       </div>
                     )}
-                    
+
                     <div
                       className={cn(
                         "max-w-[75%] rounded-2xl px-4 py-3",
@@ -629,8 +669,8 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
 
               {/* Funnel Stage Badge */}
               {activeConversation.funnel_stage && (
-                <Badge 
-                  variant="outline" 
+                <Badge
+                  variant="outline"
                   className={cn(
                     "w-full justify-center mb-3 text-xs",
                     funnelStageColors[activeConversation.funnel_stage] || "bg-muted"
@@ -702,9 +742,9 @@ export function ChatExamplesPanel({ fullPage = false }: ChatExamplesPanelProps) 
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Calendar className="h-3.5 w-3.5 flex-shrink-0" />
                     <span className="truncate">
-                      {formatDistanceToNow(new Date(activeConversation.first_contact), { 
-                        addSuffix: true, 
-                        locale: ptBR 
+                      {formatDistanceToNow(new Date(activeConversation.first_contact), {
+                        addSuffix: true,
+                        locale: ptBR
                       })}
                     </span>
                   </div>
