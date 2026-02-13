@@ -10,6 +10,7 @@ import Papa from "papaparse";
 import { SeanEllisStatsDisplay } from "@/components/seanellis/SeanEllisStats";
 import { SeanEllisTable } from "@/components/seanellis/SeanEllisTable";
 import { getSeanEllisData, getSeanEllisStats, importSeanEllisData } from "@/services/seanEllisService";
+import { useStudentFilters } from "@/hooks/useStudentFilters";
 
 export default function SeanEllis() {
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -17,7 +18,7 @@ export default function SeanEllis() {
 
     // Filter State - Reusing StudentFilters as requested
     const [isFilterOpen, setIsFilterOpen] = useState(false);
-    const [filters, setFilters] = useState<StudentFilters>({});
+    const { filters, setFilters, clearFilters } = useStudentFilters("sean-ellis-filters");
 
     const [page, setPage] = useState(0);
     const [sortBy, setSortBy] = useState("submitted_at");
@@ -78,7 +79,7 @@ export default function SeanEllis() {
     };
 
     const handleClearFilters = () => {
-        setFilters({});
+        clearFilters();
         setPage(0);
     };
 

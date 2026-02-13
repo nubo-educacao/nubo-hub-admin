@@ -7,7 +7,9 @@ export interface StudentProfile {
     age: number | null;
     city: string | null;
     education: string | null;
-    // Add other fields if necessary
+    state: string | null;
+    is_nubo_student: boolean;
+    created_at: string;
 }
 
 export interface UserPreference {
@@ -61,6 +63,9 @@ export interface StudentFilters {
     incomeMin?: number;
     incomeMax?: number;
     quotaTypes?: string[];
+    state?: string;
+    ageMin?: number;
+    ageMax?: number;
 }
 
 export const getStudents = async (
@@ -81,7 +86,10 @@ export const getStudents = async (
         p_filter_income_max: filters?.incomeMax || null,
         p_filter_quota_types: (filters?.quotaTypes && filters.quotaTypes.length > 0) ? filters.quotaTypes : null,
         p_sort_by: sortBy,
-        p_sort_order: sortOrder
+        p_sort_order: sortOrder,
+        p_filter_state: filters?.state || null,
+        p_filter_age_min: filters?.ageMin || null,
+        p_filter_age_max: filters?.ageMax || null
     };
 
     const { data, error } = await supabase.rpc('get_students_paginated', paramFilters);
@@ -169,7 +177,10 @@ export const getStudentStats = async (filters?: StudentFilters): Promise<Student
             filter_is_nubo_student: filters?.isNuboStudent ?? null,
             filter_income_min: filters?.incomeMin || null,
             filter_income_max: filters?.incomeMax || null,
-            filter_quota_types: (filters?.quotaTypes && filters.quotaTypes.length > 0) ? filters.quotaTypes : null
+            filter_quota_types: (filters?.quotaTypes && filters.quotaTypes.length > 0) ? filters.quotaTypes : null,
+            filter_state: filters?.state || null,
+            filter_age_min: filters?.ageMin || null,
+            filter_age_max: filters?.ageMax || null
         });
 
     if (error) throw error;

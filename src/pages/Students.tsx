@@ -11,6 +11,8 @@ import { getStudents, getStudentStats, StudentProfile, importNuboStudents, Stude
 import Papa from "papaparse";
 import { toast } from "sonner";
 import { Filter } from "lucide-react";
+import { useStudentFilters } from "@/hooks/useStudentFilters";
+import { StudentExportButton } from "@/components/students/StudentExportButton";
 
 export default function Students() {
     const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
@@ -18,7 +20,7 @@ export default function Students() {
 
     // Filter State
     const [isFilterOpen, setIsFilterOpen] = useState(false);
-    const [filters, setFilters] = useState<StudentFilters>({});
+    const { filters, setFilters, clearFilters } = useStudentFilters("students-filters");
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const queryClient = useQueryClient();
@@ -62,7 +64,7 @@ export default function Students() {
     };
 
     const handleClearFilters = () => {
-        setFilters({});
+        clearFilters();
         setPage(0);
     };
 
@@ -139,15 +141,18 @@ export default function Students() {
             <div className="space-y-4">
                 <div className="flex items-center justify-between">
                     <h2 className="text-xl font-semibold">Listagem de Estudantes</h2>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-2"
-                        onClick={() => setIsFilterOpen(true)}
-                    >
-                        <Filter className="h-4 w-4" />
-                        Filtrar
-                    </Button>
+                    <div className="flex gap-2">
+                        <StudentExportButton filters={filters} />
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => setIsFilterOpen(true)}
+                        >
+                            <Filter className="h-4 w-4" />
+                            Filtrar
+                        </Button>
+                    </div>
                 </div>
                 <StudentTable
                     students={students}
