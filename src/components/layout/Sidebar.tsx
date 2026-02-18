@@ -16,7 +16,10 @@ import {
     PieChart,
     CalendarDays,
     Bot,
-    ChevronDown
+    ChevronDown,
+    Ticket,
+    ClipboardList,
+    FileText
 } from "lucide-react";
 
 
@@ -49,7 +52,10 @@ const NavItem = ({ to, icon: Icon, label, collapsed, active }: NavItemProps) => 
 
 export default function Sidebar() {
     const [collapsed, setCollapsed] = useState(false);
-    const [cloudinhaOpen, setCloudinhaOpen] = useState(true);
+    const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
+        Cloudinha: true,
+        Passaporte: true,
+    });
     const { permissions, signOut } = useAuth();
     const location = useLocation();
 
@@ -87,16 +93,42 @@ export default function Sidebar() {
             ]
         },
         {
+            label: "Passaporte",
+            icon: Ticket,
+            permission: "Parceiros",
+            isGroup: true,
+            items: [
+                {
+                    to: "/partners",
+                    icon: Handshake,
+                    label: "Parceiros",
+                    permission: "Parceiros",
+                },
+                {
+                    to: "/solicitations",
+                    icon: ClipboardList,
+                    label: "Solicitações",
+                    permission: "Parceiros",
+                },
+                {
+                    to: "/forms",
+                    icon: FileText,
+                    label: "Formulários",
+                    permission: "Parceiros",
+                },
+                {
+                    to: "/partners-users",
+                    icon: Users,
+                    label: "Usuários",
+                    permission: "Parceiros",
+                },
+            ]
+        },
+        {
             to: "/students",
             icon: GraduationCap,
             label: "Estudantes",
             permission: "Estudantes",
-        },
-        {
-            to: "/partners",
-            icon: Handshake,
-            label: "Parceiros",
-            permission: "Parceiros",
         },
         {
             to: "/influencers",
@@ -124,6 +156,14 @@ export default function Sidebar() {
         },
     ];
 
+    const toggleGroup = (label: string) => {
+        if (collapsed) return;
+        setOpenGroups(prev => ({
+            ...prev,
+            [label]: !prev[label]
+        }));
+    };
+
     // Check if user has permission for at least one item in the group
     const hasGroupPermission = (group: any) => {
         return group.items.some((item: any) => permissions.includes(item.permission));
@@ -138,11 +178,12 @@ export default function Sidebar() {
             if (allowedItems.length === 0) return null;
 
             const isChildActive = allowedItems.some((subItem: any) => location.pathname === subItem.to);
+            const isOpen = openGroups[item.label] ?? false;
 
             return (
                 <div key={item.label} className="space-y-1">
                     <button
-                        onClick={() => !collapsed && setCloudinhaOpen(!cloudinhaOpen)}
+                        onClick={() => toggleGroup(item.label)}
                         className={cn(
                             "w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg transition-colors",
                             isChildActive
@@ -157,11 +198,11 @@ export default function Sidebar() {
                         {!collapsed && (
                             <ChevronDown className={cn(
                                 "h-4 w-4 transition-transform",
-                                cloudinhaOpen ? "transform rotate-0" : "transform -rotate-90"
+                                isOpen ? "transform rotate-0" : "transform -rotate-90"
                             )} />
                         )}
                     </button>
-                    {!collapsed && cloudinhaOpen && (
+                    {!collapsed && isOpen && (
                         <div className="pl-6 space-y-1 border-l ml-5 border-border/50">
                             {allowedItems.map((subItem: any) => (
                                 <NavItem

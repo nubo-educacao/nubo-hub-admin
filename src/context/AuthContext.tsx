@@ -6,6 +6,7 @@ import { toast } from "sonner";
 interface AuthContextType {
     session: Session | null;
     user: User | null;
+    userRole: string | null;
     permissions: string[];
     loading: boolean;
     signOut: () => Promise<void>;
@@ -16,6 +17,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [session, setSession] = useState<Session | null>(null);
     const [user, setUser] = useState<User | null>(null);
+    const [userRole, setUserRole] = useState<string | null>(null);
     const [permissions, setPermissions] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -27,6 +29,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             console.log("AuthContext: Sessão inicial obtida", session?.user?.id);
             setSession(session);
             setUser(session?.user ?? null);
+            setUserRole(session?.user?.role ?? null);
             if (session?.user) {
                 fetchPermissions(session.user.id);
             } else {
@@ -39,6 +42,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             console.log("AuthContext: Evento de Auth", event, session?.user?.id);
             setSession(session);
             setUser(session?.user ?? null);
+            setUserRole(session?.user?.role ?? null);
             if (session?.user) {
                 // We don't await here to avoid blocking the trigger flow
                 fetchPermissions(session.user.id);
@@ -78,11 +82,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
             setPermissions(userPerms);
 
-            if (userPerms.length === 0) {
+            if (userPerms.length === 0 && userRole !== "partner") {
                 console.warn("AuthContext: Usuário sem permissões detectado!");
                 toast.error("Você não tem permissão para acessar o painel.");
-                // Optional: sign out automatically
-                // await supabase.auth.signOut();
             }
         } catch (error) {
             console.error("AuthContext: Erro capturado", error);
@@ -100,7 +102,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ session, user, permissions, loading, signOut }}>
+        <AuthContext.Provider value={{ session, user, userRole, permissions, loading, signOut }}>
             {children}
         </AuthContext.Provider>
     );

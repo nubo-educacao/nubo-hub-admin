@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import AdminLayout from "./components/layout/AdminLayout";
+import PartnerLayout from "./components/layout/PartnerLayout";
 import Login from "./pages/Login";
 import Users from "./pages/Users";
 import Index from "./pages/Index";
@@ -13,9 +14,13 @@ import AIInsights from "./pages/AIInsights";
 import Conversas from "./pages/Conversas";
 import Influencers from "./pages/Influencers";
 import Partners from "./pages/Partners";
+import PartnerSolicitations from "./pages/PartnerSolicitations";
+import PartnerForms from "./pages/PartnerForms";
+import PartnerUsers from "./pages/PartnerUsers";
 import Students from "./pages/Students";
 import SeanEllis from "./pages/SeanEllis";
 import Calendar from "./pages/Calendar";
+import PartnerDashboard from "./pages/PartnerDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,6 +36,7 @@ const App = () => (
           <Routes>
             <Route path="/login" element={<Login />} />
 
+            {/* Admin Routes */}
             <Route element={<AdminLayout />}>
               <Route path="/" element={<Index />} />
               <Route path="/errors" element={<ErrorDetails />} />
@@ -39,11 +45,18 @@ const App = () => (
               <Route path="/users" element={<Users />} />
               <Route path="/influencers" element={<Influencers />} />
               <Route path="/partners" element={<Partners />} />
+              <Route path="/solicitations" element={<PartnerSolicitations />} />
+              <Route path="/forms" element={<PartnerForms />} />
+              <Route path="/partners-users" element={<PartnerUsers />} />
               <Route path="/students" element={<Students />} />
               <Route path="/sean-ellis" element={<SeanEllis />} />
               <Route path="/calendar" element={<Calendar />} />
             </Route>
 
+            {/* Partner Portal Routes */}
+            <Route element={<PartnerLayout />}>
+              <Route path="/partner" element={<PartnerDashboard />} />
+            </Route>
 
             <Route path="*" element={<NotFound />} />
           </Routes>

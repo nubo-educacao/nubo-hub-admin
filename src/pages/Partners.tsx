@@ -15,20 +15,11 @@ import {
 } from "@/services/partnersService";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import {
-    getPartnerSolicitations,
-    PartnerSolicitation,
-} from "@/services/partnerSolicitationsService";
-import { PartnerSolicitationsTable } from "@/components/partners/PartnerSolicitationsTable";
-import { PartnerSolicitationDialog } from "@/components/partners/PartnerSolicitationDialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function Partners() {
     const queryClient = useQueryClient();
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [selectedPartner, setSelectedPartner] = useState<Partner | undefined>();
-    const [selectedSolicitation, setSelectedSolicitation] = useState<PartnerSolicitation | null>(null);
-    const [isSolicitationDialogOpen, setIsSolicitationDialogOpen] = useState(false);
 
     // Sorting state
     const [sortBy, setSortBy] = useState("name");
@@ -54,9 +45,6 @@ export default function Partners() {
         }
     };
 
-    // Since we don't have a direct click map from the service (it's calculated internal to stats)
-    // we'll fetch it here for the table or use the stats if we change the structure.
-    // To keep it simple and efficient, let's fetch clicks for the map separately or extract from a new service call.
     const { data: clicksMap = {} } = useQuery({
         queryKey: ["partners-clicks-map"],
         queryFn: async () => {
@@ -72,11 +60,6 @@ export default function Partners() {
             });
             return map;
         }
-    });
-
-    const { data: solicitations = [], isLoading: isLoadingSolicitations } = useQuery({
-        queryKey: ["partner-solicitations"],
-        queryFn: getPartnerSolicitations,
     });
 
     // Mutations
@@ -120,11 +103,6 @@ export default function Partners() {
         setIsDialogOpen(true);
     };
 
-    const handleViewSolicitation = (solicitation: PartnerSolicitation) => {
-        setSelectedSolicitation(solicitation);
-        setIsSolicitationDialogOpen(true);
-    };
-
     const handleSubmit = async (values: any) => {
         if (selectedPartner) {
             await updateMutation.mutateAsync({ id: selectedPartner.id, data: values });
@@ -150,49 +128,27 @@ export default function Partners() {
                         Gerencie os parceiros e acompanhe o desempenho de cliques.
                     </p>
                 </div>
+                <Button onClick={handleAddPartner} className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Novo Parceiro
+                </Button>
             </div>
 
-            <Tabs defaultValue="partners" className="space-y-4">
-                <div className="flex justify-between items-center">
-                    <TabsList>
-                        <TabsTrigger value="partners">Parceiros</TabsTrigger>
-                        <TabsTrigger value="solicitations">Solicitações</TabsTrigger>
-                    </TabsList>
+            <div className="space-y-4">
+                {stats && <PartnerStats stats={stats} />}
 
-                    <TabsContent value="partners" className="mt-0">
-                        <Button onClick={handleAddPartner} className="gap-2">
-                            <Plus className="h-4 w-4" />
-                            Novo Parceiro
-                        </Button>
-                    </TabsContent>
+                <div className="space-y-4">
+                    <h2 className="text-xl font-semibold">Listagem de Parceiros</h2>
+                    <PartnerTable
+                        partners={partners}
+                        clicksMap={clicksMap}
+                        onEdit={handleEditPartner}
+                        sortBy={sortBy}
+                        sortOrder={sortOrder}
+                        onSort={handleSort}
+                    />
                 </div>
-
-                <TabsContent value="partners" className="space-y-4">
-                    {stats && <PartnerStats stats={stats} />}
-
-                    <div className="space-y-4">
-                        <h2 className="text-xl font-semibold">Listagem de Parceiros</h2>
-                        <PartnerTable
-                            partners={partners}
-                            clicksMap={clicksMap}
-                            onEdit={handleEditPartner}
-                            sortBy={sortBy}
-                            sortOrder={sortOrder}
-                            onSort={handleSort}
-                        />
-                    </div>
-                </TabsContent>
-
-                <TabsContent value="solicitations" className="space-y-4">
-                    <div className="space-y-4">
-                        <h2 className="text-xl font-semibold">Solicitações de Parceria</h2>
-                        <PartnerSolicitationsTable
-                            solicitations={solicitations}
-                            onView={handleViewSolicitation}
-                        />
-                    </div>
-                </TabsContent>
-            </Tabs>
+            </div>
 
             <PartnerDialog
                 isOpen={isDialogOpen}
@@ -203,12 +159,7 @@ export default function Partners() {
                     await deleteMutation.mutateAsync(selectedPartner.id);
                 } : undefined}
             />
-
-            <PartnerSolicitationDialog
-                isOpen={isSolicitationDialogOpen}
-                onOpenChange={setIsSolicitationDialogOpen}
-                solicitation={selectedSolicitation}
-            />
         </div>
     );
 }
+
