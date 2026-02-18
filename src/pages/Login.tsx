@@ -32,11 +32,17 @@ export default function Login() {
 
             console.log("Login: signInWithPassword sucesso!", data.user?.id);
 
-            // We will let AdminLayout/AuthContext handle permission checking
-            // for a faster login experience.
+            // Role-based redirect
+            const role = data.user?.role;
             toast.success("Autenticado com sucesso!");
-            console.log("Login: Navegando para /");
-            navigate("/");
+
+            if (role === "partner") {
+                console.log("Login: Usuário parceiro, navegando para /partner");
+                navigate("/partner");
+            } else {
+                console.log("Login: Usuário admin, navegando para /");
+                navigate("/");
+            }
         } catch (error: any) {
             console.error("Login: Erro capturado no catch", error);
             toast.error(error.message || "Erro ao realizar login");
