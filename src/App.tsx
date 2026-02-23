@@ -17,6 +17,7 @@ import Partners from "./pages/Partners";
 import PartnerSolicitations from "./pages/PartnerSolicitations";
 import PartnerForms from "./pages/PartnerForms";
 import PartnerUsers from "./pages/PartnerUsers";
+import PartnerApplications from "./pages/PartnerApplications";
 import Students from "./pages/Students";
 import SeanEllis from "./pages/SeanEllis";
 import Calendar from "./pages/Calendar";
@@ -48,6 +49,7 @@ const App = () => (
               <Route path="/solicitations" element={<PartnerSolicitations />} />
               <Route path="/forms" element={<PartnerForms />} />
               <Route path="/partners-users" element={<PartnerUsers />} />
+              <Route path="/applications" element={<PartnerApplications />} />
               <Route path="/students" element={<Students />} />
               <Route path="/sean-ellis" element={<SeanEllis />} />
               <Route path="/calendar" element={<Calendar />} />

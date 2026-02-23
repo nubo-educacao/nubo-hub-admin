@@ -19,7 +19,8 @@ import {
     ChevronDown,
     Ticket,
     ClipboardList,
-    FileText
+    FileText,
+    FolderOpen
 } from "lucide-react";
 
 
@@ -120,6 +121,12 @@ export default function Sidebar() {
                     to: "/partners-users",
                     icon: Users,
                     label: "Usuários",
+                    permission: "Parceiros",
+                },
+                {
+                    to: "/applications",
+                    icon: FolderOpen,
+                    label: "Aplicações",
                     permission: "Parceiros",
                 },
             ]
