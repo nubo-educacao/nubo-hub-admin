@@ -8,9 +8,8 @@ const corsHeaders = {
 const funnelDescriptions: Record<string, string> = {
   'Cadastrados': 'Total de usuários autenticados (auth.users)',
   'Ativação': 'Usuários que enviaram ao menos 1 mensagem',
-  'Onboarding Completo': 'Usuários que passaram pelo workflow de onboarding',
-  'Preferências Definidas': 'Usuários que preencheram preferências',
-  'Match Iniciado': 'Usuários que iniciaram o workflow de match',
+  'Onboarding Completo': 'Usuários com onboarding_completed = true em user_profiles',
+  'Match Iniciado': 'Usuários que preencheram nota do ENEM em user_preferences',
   'Match Realizado': 'Usuários que receberam resultado (workflow_data preenchido)',
   'Salvaram Favoritos': 'Usuários que salvaram ao menos 1 favorito',
 }
@@ -141,10 +140,15 @@ Deno.serve(async (req) => {
         supabase, 'user_favorites', 'user_id'
       ),
       
-      // 5. Profiles (for details)
-      includeDetails ? fetchAllRows<{ id: string; full_name: string | null; city: string | null; created_at: string | null }>(
-        supabase, 'user_profiles', 'id, full_name, city, created_at'
-      ) : Promise.resolve([]),
+      // 5. profiles with onboarding_completed = true (always needed for count)
+      // AND full profiles for details if requested
+      includeDetails 
+        ? fetchAllRows<{ id: string; full_name: string | null; city: string | null; created_at: string | null; onboarding_completed: boolean }>(
+            supabase, 'user_profiles', 'id, full_name, city, created_at, onboarding_completed'
+          )
+        : fetchAllRows<{ id: string; onboarding_completed: boolean }>(
+            supabase, 'user_profiles', 'id, onboarding_completed'
+          ),
     ])
 
     // Get total from auth metadata - works for both includeDetails and non-includeDetails cases
@@ -158,7 +162,6 @@ Deno.serve(async (req) => {
     // Process messages for funnel stages
     const ativacaoSet = new Set<string>()
     const onboardingSet = new Set<string>()
-    const matchIniciadoSet = new Set<string>()
 
     for (const msg of allMessagesResult) {
       if (!msg.user_id) continue
@@ -166,20 +169,17 @@ Deno.serve(async (req) => {
       // Ativação = any message
       ativacaoSet.add(msg.user_id)
       
-      // Onboarding = onboarding_workflow
-      if (msg.workflow === 'onboarding_workflow') {
-        onboardingSet.add(msg.user_id)
-      }
+      // Onboarding = onboarding_completed = true in user_profiles
+      // Logic handled below using profilesResult
       
-      // Match iniciado = match_workflow
-      if (msg.workflow === 'match_workflow') {
-        matchIniciadoSet.add(msg.user_id)
-      }
+      // Match iniciado = match_workflow (Logic removed)
     }
 
     const ativacaoIds = [...ativacaoSet]
-    const onboardingCompletedIds = [...onboardingSet]
-    const matchIniciadoIds = [...matchIniciadoSet]
+    // Onboarding from profiles
+    const onboardingCompletedIds = profilesResult
+      .filter((p: any) => p.onboarding_completed === true)
+      .map((p: any) => p.id)
     
     // Preferências Definidas
     const preferenciasIds = [...new Set(preferencesResult.map(p => p.user_id).filter(Boolean))]
@@ -202,7 +202,6 @@ Deno.serve(async (req) => {
       ativacao: ativacaoIds.length,
       onboarding: onboardingCompletedIds.length,
       preferencias: preferenciasIds.length,
-      matchIniciado: matchIniciadoIds.length,
       matchRealizado: matchRealizadoIds.length,
       favoritos: favoritosIds.length,
     })
@@ -295,21 +294,12 @@ Deno.serve(async (req) => {
         })
       },
       { 
-        etapa: 'Preferências Definidas', 
+        etapa: 'Match Iniciado', 
         valor: preferenciasIds.length,
-        description: funnelDescriptions['Preferências Definidas'],
+        description: funnelDescriptions['Match Iniciado'],
         ...(includeDetails && { 
           user_ids: preferenciasIds,
           users: getUsersData(preferenciasIds)
-        })
-      },
-      { 
-        etapa: 'Match Iniciado', 
-        valor: matchIniciadoIds.length,
-        description: funnelDescriptions['Match Iniciado'],
-        ...(includeDetails && { 
-          user_ids: matchIniciadoIds,
-          users: getUsersData(matchIniciadoIds)
         })
       },
       { 

@@ -34,8 +34,7 @@ const colors = [
 const funnelDescriptions: Record<string, string> = {
   'Cadastrados': 'Total de usuários na tabela user_profiles',
   'Onboarding Completo': 'Usuários com onboarding_completed = true',
-  'Preferências Definidas': 'Usuários que preencheram nota do ENEM em user_preferences',
-  'Match Iniciado': 'Usuários únicos que iniciaram o workflow de match',
+  'Match Iniciado': 'Usuários que preencheram nota do ENEM em user_preferences',
   'Salvaram Favoritos': 'Usuários únicos que salvaram ao menos 1 favorito',
   'Fluxo Específico': 'Usuários que entraram em SISU, ProUni ou FIES workflow',
 };
