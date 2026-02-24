@@ -19,7 +19,8 @@ import {
     ChevronDown,
     Ticket,
     ClipboardList,
-    FileText
+    FileText,
+    FolderOpen
 } from "lucide-react";
 
 
@@ -53,8 +54,8 @@ const NavItem = ({ to, icon: Icon, label, collapsed, active }: NavItemProps) => 
 export default function Sidebar() {
     const [collapsed, setCollapsed] = useState(false);
     const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-        Cloudinha: true,
-        Passaporte: true,
+        Cloudinha: false,
+        Passaporte: false,
     });
     const { permissions, signOut } = useAuth();
     const location = useLocation();
@@ -120,6 +121,12 @@ export default function Sidebar() {
                     to: "/partners-users",
                     icon: Users,
                     label: "Usuários",
+                    permission: "Parceiros",
+                },
+                {
+                    to: "/applications",
+                    icon: FolderOpen,
+                    label: "Aplicações",
                     permission: "Parceiros",
                 },
             ]

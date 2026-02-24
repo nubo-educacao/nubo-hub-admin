@@ -6,8 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Switch } from "@/components/ui/switch";
 import {
     Select,
@@ -44,19 +44,29 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, Loader2, GripVertical, Code2, Check, ChevronsUpDown } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Code2, Check, ChevronsUpDown, X } from "lucide-react";
 import { toast } from "sonner";
 import { CriterionRuleBuilder } from "./CriterionRuleBuilder";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+interface PartnerStep {
+    id: string;
+    partner_id: string;
+    step_name: string;
+    sort_order: number;
+    created_at?: string;
+    updated_at?: string;
+}
+
 interface PartnerFormField {
     id: string;
     partner_id: string;
+    step_id: string | null;
     field_name: string;
     question_text: string;
     data_type: string;
-    options: unknown[] | null;
+    options: string[] | null;
     mapping_source: string | null;
     is_criterion: boolean;
     criterion_rule: Record<string, unknown> | null;
@@ -66,10 +76,11 @@ interface PartnerFormField {
 }
 
 interface FormFieldValues {
+    step_id: string;
     field_name: string;
     question_text: string;
     data_type: string;
-    options: string;
+    optionsList: string[];
     mapping_source: string;
     is_criterion: boolean;
     criterion_rule: string;
@@ -77,10 +88,11 @@ interface FormFieldValues {
 }
 
 const EMPTY_FIELD: FormFieldValues = {
+    step_id: "",
     field_name: "",
     question_text: "",
     data_type: "text",
-    options: "",
+    optionsList: ["Opção 1", "Opção 2"],
     mapping_source: "",
     is_criterion: false,
     criterion_rule: "",
@@ -92,6 +104,7 @@ const DATA_TYPES = [
     { value: "number", label: "Número" },
     { value: "boolean", label: "Sim/Não" },
     { value: "select", label: "Seleção" },
+    { value: "multiselect", label: "Multiseleção" },
 ];
 
 const MAPPING_SOURCES = [
@@ -124,15 +137,41 @@ interface PartnerFormsManagerProps {
 export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
     const queryClient = useQueryClient();
     const [selectedPartnerId, setSelectedPartnerId] = useState<string>("");
+    
+    // Field Modal State
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingField, setEditingField] = useState<PartnerFormField | null>(null);
     const [formValues, setFormValues] = useState<FormFieldValues>(EMPTY_FIELD);
     const [deleteFieldId, setDeleteFieldId] = useState<string | null>(null);
     const [mappingOpen, setMappingOpen] = useState(false);
 
+    // Step Modal State
+    const [isStepDialogOpen, setIsStepDialogOpen] = useState(false);
+    const [editingStep, setEditingStep] = useState<PartnerStep | null>(null);
+    const [stepName, setStepName] = useState("");
+    const [stepSortOrder, setStepSortOrder] = useState(0);
+    const [deleteStepId, setDeleteStepId] = useState<string | null>(null);
+
     // ─── Queries ─────────────────────────────────────────────────────────────
 
-    const { data: fields = [], isLoading } = useQuery({
+    // Fetch Steps
+    const { data: steps = [], isLoading: isLoadingSteps } = useQuery({
+        queryKey: ["partner-steps", selectedPartnerId],
+        queryFn: async () => {
+            if (!selectedPartnerId) return [];
+            const { data, error } = await (supabase
+                .from("partner_steps" as any)
+                .select("*")
+                .eq("partner_id", selectedPartnerId)
+                .order("sort_order", { ascending: true }) as any);
+            if (error) throw error;
+            return (data ?? []) as PartnerStep[];
+        },
+        enabled: !!selectedPartnerId,
+    });
+
+    // Fetch Fields
+    const { data: fields = [], isLoading: isLoadingFields } = useQuery({
         queryKey: ["partner-forms", selectedPartnerId],
         queryFn: async () => {
             if (!selectedPartnerId) return [];
@@ -147,16 +186,68 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
         enabled: !!selectedPartnerId,
     });
 
-    // ─── Mutations ───────────────────────────────────────────────────────────
+    // ─── Mutations (Steps) ───────────────────────────────────────────────────
+
+    const saveStepMutation = useMutation({
+        mutationFn: async () => {
+            const payload = {
+                partner_id: selectedPartnerId,
+                step_name: stepName,
+                sort_order: stepSortOrder,
+            };
+            if (editingStep) {
+                const { error } = await (supabase
+                    .from("partner_steps" as any)
+                    .update(payload)
+                    .eq("id", editingStep.id) as any);
+                if (error) throw error;
+            } else {
+                const { error } = await (supabase
+                    .from("partner_steps" as any)
+                    .insert(payload) as any);
+                if (error) throw error;
+            }
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["partner-steps", selectedPartnerId] });
+            toast.success(editingStep ? "Step atualizado!" : "Step criado!");
+            setIsStepDialogOpen(false);
+            setEditingStep(null);
+            setStepName("");
+        },
+        onError: (err: any) => {
+            toast.error(`Erro: ${err.message}`);
+        },
+    });
+
+    const deleteStepMutation = useMutation({
+        mutationFn: async (id: string) => {
+            const { error } = await (supabase
+                .from("partner_steps" as any)
+                .delete()
+                .eq("id", id) as any);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["partner-steps", selectedPartnerId] });
+            toast.success("Step removido!");
+            setDeleteStepId(null);
+        },
+        onError: () => toast.error("Erro ao remover step. Verifique se existem campos associados."),
+    });
+
+    // ─── Mutations (Fields) ──────────────────────────────────────────────────
 
     const saveMutation = useMutation({
         mutationFn: async (values: FormFieldValues) => {
+            const hasOptions = values.data_type === "select" || values.data_type === "multiselect";
             const payload: any = {
                 partner_id: selectedPartnerId,
+                step_id: values.step_id || null,
                 field_name: values.field_name,
                 question_text: values.question_text,
                 data_type: values.data_type,
-                options: values.options ? JSON.parse(values.options) : null,
+                options: hasOptions ? values.optionsList.filter(o => o.trim() !== "") : null,
                 mapping_source: values.mapping_source || null,
                 is_criterion: values.is_criterion,
                 criterion_rule: values.criterion_rule ? JSON.parse(values.criterion_rule) : null,
@@ -204,12 +295,54 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
         onError: () => toast.error("Erro ao remover campo."),
     });
 
-    // ─── Handlers ────────────────────────────────────────────────────────────
+    // ─── Handlers (Steps) ────────────────────────────────────────────────────
 
-    const handleAdd = () => {
+    const handleAddStep = () => {
+        setEditingStep(null);
+        setStepName("");
+        setStepSortOrder(steps.length + 1);
+        setIsStepDialogOpen(true);
+    };
+
+    const handleEditStep = (step: PartnerStep) => {
+        setEditingStep(step);
+        setStepName(step.step_name);
+        setStepSortOrder(step.sort_order);
+        setIsStepDialogOpen(true);
+    };
+
+    const handleSaveStep = () => {
+        if (!stepName.trim()) {
+            toast.error("Nome do step é obrigatório.");
+            return;
+        }
+        saveStepMutation.mutate();
+    };
+
+    // ─── Helpers ──────────────────────────────────────────────────────────────
+
+    // Group fields by step, ordered by step sort_order
+    const fieldsByStep = (() => {
+        const groups: { step: PartnerStep | null; fields: PartnerFormField[] }[] = [];
+        // Add one group per step (in sort_order)
+        for (const step of steps) {
+            groups.push({ step, fields: fields.filter(f => f.step_id === step.id) });
+        }
+        // Add orphan fields (no step)
+        const orphans = fields.filter(f => !f.step_id || !steps.find(s => s.id === f.step_id));
+        if (orphans.length > 0) {
+            groups.push({ step: null, fields: orphans });
+        }
+        return groups;
+    })();
+
+    // ─── Handlers (Fields) ───────────────────────────────────────────────────
+
+    const handleAdd = (preSelectedStepId?: string) => {
         setEditingField(null);
         setFormValues({
             ...EMPTY_FIELD,
+            step_id: preSelectedStepId || "",
             sort_order: fields.length,
         });
         setIsDialogOpen(true);
@@ -217,11 +350,18 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
 
     const handleEdit = (field: PartnerFormField) => {
         setEditingField(field);
+        
+        let optionsList = ["Opção 1", "Opção 2"];
+        if (field.options && Array.isArray(field.options) && field.options.length > 0) {
+            optionsList = field.options as string[];
+        }
+
         setFormValues({
+            step_id: field.step_id || "",
             field_name: field.field_name,
             question_text: field.question_text,
             data_type: field.data_type,
-            options: field.options ? JSON.stringify(field.options, null, 2) : "",
+            optionsList: optionsList,
             mapping_source: field.mapping_source || "",
             is_criterion: field.is_criterion,
             criterion_rule: field.criterion_rule ? JSON.stringify(field.criterion_rule, null, 2) : "",
@@ -235,13 +375,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
             toast.error("Nome do campo e texto da pergunta são obrigatórios.");
             return;
         }
-        // Validate JSON fields
-        try {
-            if (formValues.options) JSON.parse(formValues.options);
-        } catch {
-            toast.error("JSON inválido no campo 'Opções'.");
-            return;
-        }
+        
         // criterion_rule is now managed by the visual builder, 
         // but still validate if present
         try {
@@ -253,10 +387,25 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
         saveMutation.mutate(formValues);
     };
 
+    const updateOption = (index: number, val: string) => {
+        const newOptions = [...formValues.optionsList];
+        newOptions[index] = val;
+        setFormValues({ ...formValues, optionsList: newOptions });
+    };
+
+    const removeOption = (index: number) => {
+        const newOptions = formValues.optionsList.filter((_, i) => i !== index);
+        setFormValues({ ...formValues, optionsList: newOptions });
+    };
+
+    const addOption = () => {
+        setFormValues({ ...formValues, optionsList: [...formValues.optionsList, ""] });
+    };
+
     // ─── Render ──────────────────────────────────────────────────────────────
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-6">
             {/* Partner Selector */}
             <div className="flex items-end gap-4">
                 <div className="flex-1 max-w-sm space-y-2">
@@ -274,96 +423,212 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                         </SelectContent>
                     </Select>
                 </div>
-                {selectedPartnerId && (
-                    <Button onClick={handleAdd} className="gap-2">
-                        <Plus className="h-4 w-4" />
-                        Novo Campo
-                    </Button>
-                )}
             </div>
 
-            {/* Fields Table */}
             {selectedPartnerId && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-lg">Campos do Formulário</CardTitle>
-                        <CardDescription>
-                            {fields.length} campo(s) configurado(s). A Cloudinha usará esses campos para entrevistar o estudante.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {isLoading ? (
-                            <div className="flex justify-center py-8">
-                                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <>
+                    {/* Steps Table */}
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <div className="space-y-1">
+                                <CardTitle className="text-lg">Etapas do Formulário (Steps)</CardTitle>
+                                <CardDescription>
+                                    Crie blocos visuais para organizar as perguntas durante a entrevista.
+                                </CardDescription>
                             </div>
-                        ) : fields.length === 0 ? (
-                            <div className="text-center py-8 text-muted-foreground">
-                                Nenhum campo configurado. Clique em "Novo Campo" para começar.
-                            </div>
-                        ) : (
-                            <div className="rounded-md border overflow-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead className="w-[40px]">#</TableHead>
-                                            <TableHead>Campo</TableHead>
-                                            <TableHead>Pergunta</TableHead>
-                                            <TableHead>Tipo</TableHead>
-                                            <TableHead>Auto-Fill</TableHead>
-                                            <TableHead>Critério</TableHead>
-                                            <TableHead className="w-[100px]">Ações</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {fields.map((field, idx) => (
-                                            <TableRow key={field.id}>
-                                                <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
-                                                <TableCell className="font-mono text-sm">{field.field_name}</TableCell>
-                                                <TableCell className="max-w-[200px] truncate">{field.question_text}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant="outline">
-                                                        {DATA_TYPES.find((d) => d.value === field.data_type)?.label || field.data_type}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-xs text-muted-foreground">
-                                                    {field.mapping_source || "—"}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {field.is_criterion ? (
-                                                        <Badge variant="default" className="bg-amber-500/80">Sim</Badge>
-                                                    ) : (
-                                                        <span className="text-muted-foreground">Não</span>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex gap-1">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={() => handleEdit(field)}
-                                                        >
-                                                            <Pencil className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={() => setDeleteFieldId(field.id)}
-                                                        >
-                                                            <Trash2 className="h-4 w-4 text-destructive" />
-                                                        </Button>
-                                                    </div>
-                                                </TableCell>
+                            <Button onClick={handleAddStep} size="sm" className="gap-2">
+                                <Plus className="h-4 w-4" />
+                                Novo Step
+                            </Button>
+                        </CardHeader>
+                        <CardContent>
+                            {isLoadingSteps ? (
+                                <div className="flex justify-center py-4">
+                                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                                </div>
+                            ) : steps.length === 0 ? (
+                                <div className="text-center py-4 text-sm text-muted-foreground">
+                                    Nenhum step configurado. Você pode cadastrar perguntas sem steps, mas é recomendado organizá-las.
+                                </div>
+                            ) : (
+                                <div className="rounded-md border overflow-auto">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead className="w-[80px]">Ordem</TableHead>
+                                                <TableHead>Nome do Step</TableHead>
+                                                <TableHead className="w-[100px]">Ações</TableHead>
                                             </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {steps.map((step) => (
+                                                <TableRow key={step.id}>
+                                                    <TableCell className="font-mono text-sm">{step.sort_order}</TableCell>
+                                                    <TableCell>{step.step_name}</TableCell>
+                                                    <TableCell>
+                                                        <div className="flex gap-1">
+                                                            <Button variant="ghost" size="icon" onClick={() => handleEditStep(step)}>
+                                                                <Pencil className="h-4 w-4" />
+                                                            </Button>
+                                                            <Button variant="ghost" size="icon" onClick={() => setDeleteStepId(step.id)}>
+                                                                <Trash2 className="h-4 w-4 text-destructive" />
+                                                            </Button>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* Fields organized by Step Accordions */}
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <div className="space-y-1">
+                                <CardTitle className="text-lg">Campos do Formulário</CardTitle>
+                                <CardDescription>
+                                    {fields.length} campo(s) configurado(s). A Cloudinha usará esses campos para entrevistar o estudante.
+                                </CardDescription>
                             </div>
-                        )}
-                    </CardContent>
-                </Card>
+                        </CardHeader>
+                        <CardContent>
+                            {isLoadingFields ? (
+                                <div className="flex justify-center py-8">
+                                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                                </div>
+                            ) : fieldsByStep.length === 0 || fields.length === 0 ? (
+                                <div className="text-center py-8 text-muted-foreground border border-dashed rounded-md">
+                                    Nenhum campo configurado. Crie steps e adicione campos a eles.
+                                </div>
+                            ) : (
+                                <Accordion type="multiple" defaultValue={fieldsByStep.map((_, i) => `step-${i}`)} className="w-full">
+                                    {fieldsByStep.map((group, groupIdx) => (
+                                        <AccordionItem key={group.step?.id || "orphan"} value={`step-${groupIdx}`}>
+                                            <AccordionTrigger className="hover:no-underline px-1">
+                                                <div className="flex items-center gap-3">
+                                                    <Badge variant={group.step ? "default" : "secondary"} className="text-sm">
+                                                        {group.step ? `${group.step.sort_order}. ${group.step.step_name}` : "Sem Step Associado"}
+                                                    </Badge>
+                                                    <span className="text-xs text-muted-foreground">
+                                                        {group.fields.length} campo(s)
+                                                    </span>
+                                                </div>
+                                            </AccordionTrigger>
+                                            <AccordionContent>
+                                                <div className="space-y-3">
+                                                    {group.fields.length === 0 ? (
+                                                        <div className="text-center py-4 text-sm text-muted-foreground border border-dashed rounded-md">
+                                                            Nenhum campo neste step.
+                                                        </div>
+                                                    ) : (
+                                                        <div className="rounded-md border overflow-auto">
+                                                            <Table>
+                                                                <TableHeader>
+                                                                    <TableRow>
+                                                                        <TableHead className="w-[40px]">#</TableHead>
+                                                                        <TableHead>Campo</TableHead>
+                                                                        <TableHead>Pergunta</TableHead>
+                                                                        <TableHead>Tipo</TableHead>
+                                                                        <TableHead>Auto-Fill</TableHead>
+                                                                        <TableHead>Critério</TableHead>
+                                                                        <TableHead className="w-[100px]">Ações</TableHead>
+                                                                    </TableRow>
+                                                                </TableHeader>
+                                                                <TableBody>
+                                                                    {group.fields.map((field, idx) => (
+                                                                        <TableRow key={field.id}>
+                                                                            <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
+                                                                            <TableCell className="font-mono text-sm">{field.field_name}</TableCell>
+                                                                            <TableCell className="max-w-[200px] truncate">{field.question_text}</TableCell>
+                                                                            <TableCell>
+                                                                                <Badge variant="outline">
+                                                                                    {DATA_TYPES.find((d) => d.value === field.data_type)?.label || field.data_type}
+                                                                                </Badge>
+                                                                            </TableCell>
+                                                                            <TableCell className="text-xs text-muted-foreground">
+                                                                                {field.mapping_source || "—"}
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                {field.is_criterion ? (
+                                                                                    <Badge variant="default" className="bg-amber-500/80">Sim</Badge>
+                                                                                ) : (
+                                                                                    <span className="text-muted-foreground">Não</span>
+                                                                                )}
+                                                                            </TableCell>
+                                                                            <TableCell>
+                                                                                <div className="flex gap-1">
+                                                                                    <Button variant="ghost" size="icon" onClick={() => handleEdit(field)}>
+                                                                                        <Pencil className="h-4 w-4" />
+                                                                                    </Button>
+                                                                                    <Button variant="ghost" size="icon" onClick={() => setDeleteFieldId(field.id)}>
+                                                                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                                                                    </Button>
+                                                                                </div>
+                                                                            </TableCell>
+                                                                        </TableRow>
+                                                                    ))}
+                                                                </TableBody>
+                                                            </Table>
+                                                        </div>
+                                                    )}
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="w-full border-dashed gap-2"
+                                                        onClick={() => handleAdd(group.step?.id)}
+                                                    >
+                                                        <Plus className="h-4 w-4" />
+                                                        Novo Campo {group.step ? `em "${group.step.step_name}"` : ""}
+                                                    </Button>
+                                                </div>
+                                            </AccordionContent>
+                                        </AccordionItem>
+                                    ))}
+                                </Accordion>
+                            )}
+                        </CardContent>
+                    </Card>
+                </>
             )}
 
-            {/* Add/Edit Dialog */}
+            {/* Add/Edit Step Dialog */}
+            <Dialog open={isStepDialogOpen} onOpenChange={setIsStepDialogOpen}>
+                <DialogContent className="max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>{editingStep ? "Editar Step" : "Novo Step"}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Nome do Step</Label>
+                            <Input
+                                placeholder="Ex: Dados Pessoais"
+                                value={stepName}
+                                onChange={(e) => setStepName(e.target.value)}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Ordem de Exibição</Label>
+                            <Input
+                                type="number"
+                                value={stepSortOrder}
+                                onChange={(e) => setStepSortOrder(parseInt(e.target.value) || 0)}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsStepDialogOpen(false)}>Cancelar</Button>
+                        <Button onClick={handleSaveStep} disabled={saveStepMutation.isPending}>
+                            {saveStepMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                            {editingStep ? "Salvar" : "Criar"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Add/Edit Field Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
@@ -372,6 +637,27 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                         </DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4 py-2">
+                        {/* Passo/Step Selection */}
+                        <div className="space-y-2">
+                            <Label>Etapa / Step (Opcional)</Label>
+                            <Select
+                                value={formValues.step_id}
+                                onValueChange={(val) => setFormValues(prev => ({ ...prev, step_id: val === "none" ? "" : val }))}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecione um passo..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">Sem Passo Assinado</SelectItem>
+                                    {steps.map((st) => (
+                                        <SelectItem key={st.id} value={st.id}>
+                                            {st.step_name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label>Nome do Campo (key)</Label>
@@ -382,7 +668,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label>Ordem</Label>
+                                <Label>Ordem dentro do formulário</Label>
                                 <Input
                                     type="number"
                                     value={formValues.sort_order}
@@ -467,19 +753,41 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                             </div>
                         </div>
 
-                        {formValues.data_type === "select" && (
-                            <div className="space-y-2">
+                        {(formValues.data_type === "select" || formValues.data_type === "multiselect") && (
+                            <div className="space-y-3 bg-muted/50 p-4 rounded-md border">
                                 <Label className="flex items-center gap-2">
                                     <Code2 className="h-4 w-4" />
-                                    Opções (JSON Array)
+                                    Opções de Escolha
                                 </Label>
-                                <Textarea
-                                    placeholder='["Opção 1", "Opção 2", "Opção 3"]'
-                                    className="font-mono text-sm"
-                                    rows={3}
-                                    value={formValues.options}
-                                    onChange={(e) => setFormValues({ ...formValues, options: e.target.value })}
-                                />
+                                <div className="space-y-2">
+                                    {formValues.optionsList.map((opt, i) => (
+                                        <div key={i} className="flex gap-2 items-center">
+                                            <Input 
+                                                value={opt} 
+                                                onChange={(e) => updateOption(i, e.target.value)}
+                                                placeholder={`Opção ${i + 1}`}
+                                                className="bg-background"
+                                            />
+                                            <Button 
+                                                variant="ghost" 
+                                                size="icon" 
+                                                onClick={() => removeOption(i)}
+                                                disabled={formValues.optionsList.length <= 1}
+                                            >
+                                                <X className="h-4 w-4 text-muted-foreground" />
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="w-full mt-2 border-dashed"
+                                    onClick={addOption}
+                                >
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Adicionar Opção
+                                </Button>
                             </div>
                         )}
 
@@ -514,7 +822,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                 </DialogContent>
             </Dialog>
 
-            {/* Delete Confirmation */}
+            {/* Delete Field Confirmation */}
             <AlertDialog open={!!deleteFieldId} onOpenChange={() => setDeleteFieldId(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
@@ -527,6 +835,27 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                         <AlertDialogCancel>Cancelar</AlertDialogCancel>
                         <AlertDialogAction
                             onClick={() => deleteFieldId && deleteMutation.mutate(deleteFieldId)}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            Remover
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Delete Step Confirmation */}
+            <AlertDialog open={!!deleteStepId} onOpenChange={() => setDeleteStepId(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Remover Step?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Tem certeza? Isso apagará o Step. Lembre-se que campos associados a este step ficarão órfãos.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => deleteStepId && deleteStepMutation.mutate(deleteStepId)}
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
                             Remover
