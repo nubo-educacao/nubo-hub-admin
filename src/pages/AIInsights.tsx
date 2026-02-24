@@ -65,7 +65,7 @@ export default function AIInsights() {
       <footer className="border-t border-border py-6 mt-12">
         <div className="container text-center text-sm text-muted-foreground">
           <p>
-            Cloudinha Analytics © {new Date().getFullYear()} • Powered by Lovable AI
+            Cloudinha Analytics © {new Date().getFullYear()} • Nubo Educação
           </p>
         </div>
       </footer>
