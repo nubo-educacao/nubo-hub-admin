@@ -54,8 +54,8 @@ const NavItem = ({ to, icon: Icon, label, collapsed, active }: NavItemProps) => 
 export default function Sidebar() {
     const [collapsed, setCollapsed] = useState(false);
     const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-        Cloudinha: true,
-        Passaporte: true,
+        Cloudinha: false,
+        Passaporte: false,
     });
     const { permissions, signOut } = useAuth();
     const location = useLocation();
