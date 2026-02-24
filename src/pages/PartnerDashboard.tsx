@@ -2,83 +2,42 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
     getMyPartnerId,
-    getApplicationsByPartner,
     getPartnerFormFields,
     getPartnerDetails,
-    getUserProfiles,
-    type StudentApplication,
     type PartnerFormField,
 } from "@/services/partnerPortalService";
+import {
+    getApplicationsWithDetails,
+    type ApplicationWithDetails,
+} from "@/services/applicationsService";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
 import {
     Download,
-    Search,
     Users,
     CheckCircle2,
     XCircle,
-    Clock,
     FileSpreadsheet,
 } from "lucide-react";
 import { toast } from "sonner";
-
-// ─── Status helpers ──────────────────────────────────────────────────────────
-
-const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType }> = {
-    started: { label: "Em Andamento", variant: "outline", icon: Clock },
-    eligible: { label: "Elegível", variant: "default", icon: CheckCircle2 },
-    ineligible: { label: "Inelegível", variant: "destructive", icon: XCircle },
-    submitted: { label: "Enviado", variant: "secondary", icon: FileSpreadsheet },
-};
-
-function StatusBadge({ status }: { status: string }) {
-    const config = STATUS_CONFIG[status] || STATUS_CONFIG.started;
-    const Icon = config.icon;
-    return (
-        <Badge variant={config.variant} className="flex items-center gap-1 whitespace-nowrap">
-            <Icon className="h-3 w-3" />
-            {config.label}
-        </Badge>
-    );
-}
+import ApplicationsTable, { STATUS_CONFIG } from "@/components/applications/ApplicationsTable";
+import ApplicationAnswersModal from "@/components/applications/ApplicationAnswersModal";
 
 // ─── Excel Export ────────────────────────────────────────────────────────────
 
 function exportToExcel(
-    applications: StudentApplication[],
+    applications: ApplicationWithDetails[],
     formFields: PartnerFormField[],
-    profiles: Record<string, any>,
     partnerName: string
 ) {
-    // Build CSV headers
-    const fixedHeaders = ["Nome", "Cidade", "Estado", "Status", "Data"];
+    const fixedHeaders = ["Nome", "Whatsapp", "Status", "Data"];
     const dynamicHeaders = formFields.map((f) => f.question_text || f.field_name);
     const allHeaders = [...fixedHeaders, ...dynamicHeaders];
 
-    // Build rows
     const rows = applications.map((app) => {
-        const profile = profiles[app.user_id] || {};
         const fixedCols = [
-            profile.full_name || "—",
-            profile.city || "—",
-            profile.state || "—",
+            app.full_name || "—",
+            app.phone || "—",
             STATUS_CONFIG[app.status]?.label || app.status,
             new Date(app.created_at).toLocaleDateString("pt-BR"),
         ];
@@ -89,7 +48,6 @@ function exportToExcel(
         return [...fixedCols, ...dynamicCols];
     });
 
-    // Build CSV content (BOM for Excel)
     const BOM = "\uFEFF";
     const csvContent =
         BOM +
@@ -97,7 +55,6 @@ function exportToExcel(
             "\n"
         );
 
-    // Download
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -111,8 +68,8 @@ function exportToExcel(
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function PartnerDashboard() {
-    const [search, setSearch] = useState("");
-    const [statusFilter, setStatusFilter] = useState<string>("all");
+    const [selectedApp, setSelectedApp] = useState<ApplicationWithDetails | null>(null);
+    const [modalOpen, setModalOpen] = useState(false);
 
     // 1. Resolve the partner_id for this user
     const { data: partnerId, isLoading: loadingPartnerId } = useQuery({
@@ -134,48 +91,12 @@ export default function PartnerDashboard() {
         enabled: !!partnerId,
     });
 
-    // 4. Fetch applications
+    // 4. Fetch applications via new RPC
     const { data: applications = [], isLoading: loadingApps } = useQuery({
-        queryKey: ["partnerApplications", partnerId],
-        queryFn: () => getApplicationsByPartner(partnerId!),
+        queryKey: ["applicationsWithDetails", partnerId],
+        queryFn: () => getApplicationsWithDetails(partnerId!),
         enabled: !!partnerId,
     });
-
-    // 5. Fetch user profiles to enrich table
-    const userIds = useMemo(() => [...new Set(applications.map((a) => a.user_id))], [applications]);
-    const { data: profilesRaw = [] } = useQuery({
-        queryKey: ["userProfiles", userIds],
-        queryFn: () => getUserProfiles(userIds),
-        enabled: userIds.length > 0,
-    });
-
-    const profiles = useMemo(() => {
-        const map: Record<string, any> = {};
-        profilesRaw.forEach((p: any) => {
-            map[p.id] = p;
-        });
-        return map;
-    }, [profilesRaw]);
-
-    // ─── Filtering ───────────────────────────────────────────────────────────
-
-    const filteredApplications = useMemo(() => {
-        return applications.filter((app) => {
-            // Status filter
-            if (statusFilter !== "all" && app.status !== statusFilter) return false;
-
-            // Search filter (name, city)
-            if (search) {
-                const profile = profiles[app.user_id];
-                const searchLower = search.toLowerCase();
-                const nameMatch = profile?.full_name?.toLowerCase().includes(searchLower);
-                const cityMatch = profile?.city?.toLowerCase().includes(searchLower);
-                if (!nameMatch && !cityMatch) return false;
-            }
-
-            return true;
-        });
-    }, [applications, statusFilter, search, profiles]);
 
     // ─── Stats ───────────────────────────────────────────────────────────────
 
@@ -186,12 +107,19 @@ export default function PartnerDashboard() {
         return { total, eligible, submitted };
     }, [applications]);
 
+    // ─── Handlers ────────────────────────────────────────────────────────────
+
+    const handleViewAnswers = (app: ApplicationWithDetails) => {
+        setSelectedApp(app);
+        setModalOpen(true);
+    };
+
     // ─── Loading & Error States ──────────────────────────────────────────────
 
     if (loadingPartnerId || loadingApps) {
         return (
             <div className="flex h-full items-center justify-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
             </div>
         );
     }
@@ -223,8 +151,8 @@ export default function PartnerDashboard() {
                     </p>
                 </div>
                 <Button
-                    onClick={() => exportToExcel(filteredApplications, formFields, profiles, partner?.name || "parceiro")}
-                    disabled={filteredApplications.length === 0}
+                    onClick={() => exportToExcel(applications, formFields, partner?.name || "parceiro")}
+                    disabled={applications.length === 0}
                     className="flex items-center gap-2"
                 >
                     <Download className="h-4 w-4" />
@@ -269,93 +197,29 @@ export default function PartnerDashboard() {
                 </Card>
             </div>
 
-            {/* Filters */}
+            {/* Applications Table */}
             <Card>
                 <CardHeader>
                     <CardTitle className="text-lg">Candidaturas</CardTitle>
                     <CardDescription>
-                        {filteredApplications.length} de {applications.length} registros
+                        {applications.length} registros
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="flex flex-col sm:flex-row gap-3">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                placeholder="Buscar por nome ou cidade..."
-                                className="pl-9"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                            />
-                        </div>
-                        <Select value={statusFilter} onValueChange={setStatusFilter}>
-                            <SelectTrigger className="w-full sm:w-[180px]">
-                                <SelectValue placeholder="Todos os Status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Todos os Status</SelectItem>
-                                <SelectItem value="started">Em Andamento</SelectItem>
-                                <SelectItem value="eligible">Elegível</SelectItem>
-                                <SelectItem value="ineligible">Inelegível</SelectItem>
-                                <SelectItem value="submitted">Enviado</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    {/* Table */}
-                    <div className="rounded-md border overflow-auto">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Nome</TableHead>
-                                    <TableHead>Cidade/UF</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    {formFields.map((f) => (
-                                        <TableHead key={f.id}>{f.question_text || f.field_name}</TableHead>
-                                    ))}
-                                    <TableHead>Data</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredApplications.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={4 + formFields.length} className="text-center py-8 text-muted-foreground">
-                                            Nenhuma candidatura encontrada.
-                                        </TableCell>
-                                    </TableRow>
-                                ) : (
-                                    filteredApplications.map((app) => {
-                                        const profile = profiles[app.user_id] || {};
-                                        return (
-                                            <TableRow key={app.id}>
-                                                <TableCell className="font-medium whitespace-nowrap">
-                                                    {profile.full_name || "—"}
-                                                </TableCell>
-                                                <TableCell className="whitespace-nowrap">
-                                                    {profile.city || "—"}{profile.state ? ` / ${profile.state}` : ""}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <StatusBadge status={app.status} />
-                                                </TableCell>
-                                                {formFields.map((f) => (
-                                                    <TableCell key={f.id}>
-                                                        {(app.answers as Record<string, unknown>)?.[f.field_name] != null
-                                                            ? String((app.answers as Record<string, unknown>)[f.field_name])
-                                                            : "—"}
-                                                    </TableCell>
-                                                ))}
-                                                <TableCell className="whitespace-nowrap text-muted-foreground">
-                                                    {new Date(app.created_at).toLocaleDateString("pt-BR")}
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
+                <CardContent>
+                    <ApplicationsTable
+                        applications={applications}
+                        isLoading={loadingApps}
+                        onViewAnswers={handleViewAnswers}
+                    />
                 </CardContent>
             </Card>
+
+            {/* Answers Modal */}
+            <ApplicationAnswersModal
+                application={selectedApp}
+                open={modalOpen}
+                onOpenChange={setModalOpen}
+            />
         </div>
     );
 }

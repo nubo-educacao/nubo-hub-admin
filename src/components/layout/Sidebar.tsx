@@ -126,7 +126,7 @@ export default function Sidebar() {
                 {
                     to: "/applications",
                     icon: FolderOpen,
-                    label: "Aplicações",
+                    label: "Candidaturas",
                     permission: "Parceiros",
                 },
             ]
