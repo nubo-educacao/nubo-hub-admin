@@ -66,10 +66,10 @@ interface PartnerFormField {
     field_name: string;
     question_text: string;
     data_type: string;
-    options: string[] | null;
+    options: any; // Using any for Json compatibility
     mapping_source: string | null;
     is_criterion: boolean;
-    criterion_rule: Record<string, unknown> | null;
+    criterion_rule: any; // Using any for Json compatibility
     sort_order: number;
     created_at: string;
     updated_at: string;
@@ -159,13 +159,13 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
         queryKey: ["partner-steps", selectedPartnerId],
         queryFn: async () => {
             if (!selectedPartnerId) return [];
-            const { data, error } = await (supabase
-                .from("partner_steps" as any)
+            const { data, error } = await supabase
+                .from("partner_steps")
                 .select("*")
                 .eq("partner_id", selectedPartnerId)
-                .order("sort_order", { ascending: true }) as any);
+                .order("sort_order", { ascending: true });
             if (error) throw error;
-            return (data ?? []) as PartnerStep[];
+            return (data ?? []);
         },
         enabled: !!selectedPartnerId,
     });
@@ -175,13 +175,13 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
         queryKey: ["partner-forms", selectedPartnerId],
         queryFn: async () => {
             if (!selectedPartnerId) return [];
-            const { data, error } = await (supabase
-                .from("partner_forms" as any)
+            const { data, error } = await supabase
+                .from("partner_forms")
                 .select("*")
                 .eq("partner_id", selectedPartnerId)
-                .order("sort_order", { ascending: true }) as any);
+                .order("sort_order", { ascending: true });
             if (error) throw error;
-            return (data ?? []) as PartnerFormField[];
+            return (data ?? []);
         },
         enabled: !!selectedPartnerId,
     });
@@ -196,15 +196,15 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                 sort_order: stepSortOrder,
             };
             if (editingStep) {
-                const { error } = await (supabase
-                    .from("partner_steps" as any)
+                const { error } = await supabase
+                    .from("partner_steps")
                     .update(payload)
-                    .eq("id", editingStep.id) as any);
+                    .eq("id", editingStep.id);
                 if (error) throw error;
             } else {
-                const { error } = await (supabase
-                    .from("partner_steps" as any)
-                    .insert(payload) as any);
+                const { error } = await supabase
+                    .from("partner_steps")
+                    .insert(payload);
                 if (error) throw error;
             }
         },
@@ -222,10 +222,10 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
 
     const deleteStepMutation = useMutation({
         mutationFn: async (id: string) => {
-            const { error } = await (supabase
-                .from("partner_steps" as any)
+            const { error } = await supabase
+                .from("partner_steps")
                 .delete()
-                .eq("id", id) as any);
+                .eq("id", id);
             if (error) throw error;
         },
         onSuccess: () => {
@@ -255,15 +255,15 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
             };
 
             if (editingField) {
-                const { error } = await (supabase
-                    .from("partner_forms" as any)
+                const { error } = await supabase
+                    .from("partner_forms")
                     .update(payload)
-                    .eq("id", editingField.id) as any);
+                    .eq("id", editingField.id);
                 if (error) throw error;
             } else {
-                const { error } = await (supabase
-                    .from("partner_forms" as any)
-                    .insert(payload) as any);
+                const { error } = await supabase
+                    .from("partner_forms")
+                    .insert(payload);
                 if (error) throw error;
             }
         },
@@ -281,10 +281,10 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
 
     const deleteMutation = useMutation({
         mutationFn: async (id: string) => {
-            const { error } = await (supabase
-                .from("partner_forms" as any)
+            const { error } = await supabase
+                .from("partner_forms")
                 .delete()
-                .eq("id", id) as any);
+                .eq("id", id);
             if (error) throw error;
         },
         onSuccess: () => {
@@ -499,7 +499,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                 <div className="flex justify-center py-8">
                                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                                 </div>
-                            ) : fieldsByStep.length === 0 || fields.length === 0 ? (
+                            ) : fieldsByStep.length === 0 ? (
                                 <div className="text-center py-8 text-muted-foreground border border-dashed rounded-md">
                                     Nenhum campo configurado. Crie steps e adicione campos a eles.
                                 </div>
