@@ -75,17 +75,12 @@ export function PartnerUsersManager({ partners }: PartnerUsersManagerProps) {
         queryFn: async () => {
             if (!selectedPartnerId) return [];
 
-            // Fetch partner_users records
-            const { data, error } = await (supabase
-                .from("partners_users" as any)
-                .select("*")
-                .eq("partner_id", selectedPartnerId)
-                .order("created_at", { ascending: false }) as any);
+            // Fetch partner_users records with emails via RPC
+            const { data, error } = await supabase.rpc("get_partner_users", {
+                p_partner_id: selectedPartnerId
+            });
+            
             if (error) throw error;
-
-            // Enrich with email from auth.users via admin API
-            // Since we can't directly query auth.users from frontend,
-            // we'll show the user_id and rely on the invite flow for emails
             return (data ?? []) as PartnerUser[];
         },
         enabled: !!selectedPartnerId,
@@ -95,12 +90,12 @@ export function PartnerUsersManager({ partners }: PartnerUsersManagerProps) {
 
     const linkMutation = useMutation({
         mutationFn: async (userId: string) => {
-            const { error } = await (supabase
-                .from("partners_users" as any)
+            const { error } = await supabase
+                .from("partners_users")
                 .insert({
                     user_id: userId.trim(),
                     partner_id: selectedPartnerId,
-                }) as any);
+                });
 
             if (error) {
                 if (error.code === "23505") {
@@ -165,10 +160,10 @@ export function PartnerUsersManager({ partners }: PartnerUsersManagerProps) {
 
     const deleteMutation = useMutation({
         mutationFn: async (id: string) => {
-            const { error } = await (supabase
-                .from("partners_users" as any)
+            const { error } = await supabase
+                .from("partners_users")
                 .delete()
-                .eq("id", id) as any);
+                .eq("id", id);
             if (error) throw error;
         },
         onSuccess: () => {
@@ -255,7 +250,7 @@ export function PartnerUsersManager({ partners }: PartnerUsersManagerProps) {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead>User ID</TableHead>
+                                            <TableHead>Email do Usuário</TableHead>
                                             <TableHead>Vinculado em</TableHead>
                                             <TableHead className="w-[80px]">Ações</TableHead>
                                         </TableRow>
@@ -263,7 +258,7 @@ export function PartnerUsersManager({ partners }: PartnerUsersManagerProps) {
                                     <TableBody>
                                         {partnerUsers.map((pu) => (
                                             <TableRow key={pu.id}>
-                                                <TableCell className="font-mono text-sm">{pu.user_id}</TableCell>
+                                                <TableCell className="text-sm">{pu.email}</TableCell>
                                                 <TableCell className="text-muted-foreground">
                                                     {new Date(pu.created_at).toLocaleDateString("pt-BR")}
                                                 </TableCell>

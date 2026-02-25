@@ -817,6 +817,104 @@ export type Database = {
           },
         ]
       }
+      partner_forms: {
+        Row: {
+          created_at: string
+          criterion_rule: Json | null
+          data_type: string
+          field_name: string
+          id: string
+          is_criterion: boolean
+          mapping_source: string | null
+          options: Json | null
+          partner_id: string
+          question_text: string
+          sort_order: number
+          step_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          criterion_rule?: Json | null
+          data_type?: string
+          field_name: string
+          id?: string
+          is_criterion?: boolean
+          mapping_source?: string | null
+          options?: Json | null
+          partner_id: string
+          question_text: string
+          sort_order?: number
+          step_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          criterion_rule?: Json | null
+          data_type?: string
+          field_name?: string
+          id?: string
+          is_criterion?: boolean
+          mapping_source?: string | null
+          options?: Json | null
+          partner_id?: string
+          question_text?: string
+          sort_order?: number
+          step_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_forms_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_forms_step_id_fkey"
+            columns: ["step_id"]
+            isOneToOne: false
+            referencedRelation: "partner_steps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      partner_steps: {
+        Row: {
+          created_at: string
+          id: string
+          partner_id: string
+          step_name: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          partner_id: string
+          step_name: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          partner_id?: string
+          step_name?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_steps_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       partner_solicitations: {
         Row: {
           contact_name: string
@@ -891,6 +989,35 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      partners_users: {
+        Row: {
+          created_at: string
+          id: string
+          partner_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          partner_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          partner_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partners_users_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       partners_click: {
         Row: {
@@ -1533,6 +1660,44 @@ export type Database = {
         }
         Relationships: []
       }
+      student_applications: {
+        Row: {
+          answers: Json
+          created_at: string
+          id: string
+          partner_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          answers?: Json
+          created_at?: string
+          id?: string
+          partner_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          answers?: Json
+          created_at?: string
+          id?: string
+          partner_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_applications_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       states: {
         Row: {
           name: string
@@ -1843,6 +2008,17 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      get_partner_users: {
+        Args: {
+          p_partner_id: string
+        }
+        Returns: {
+          id: string
+          user_id: string
+          email: string
+          created_at: string
+        }[]
       }
       get_unique_course_names: {
         Args: never
