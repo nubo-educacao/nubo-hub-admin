@@ -9,7 +9,9 @@ export default function PartnerForms() {
         queryFn: () => getPartners("name", "asc"),
     });
 
-    if (isLoading) {
+    const isInitialLoading = isLoading && partners.length === 0;
+
+    if (isInitialLoading) {
         return (
             <div className="flex h-[400px] items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />

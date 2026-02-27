@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Partner } from "@/services/partnersService";
@@ -136,8 +137,19 @@ interface PartnerFormsManagerProps {
 
 export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
     const queryClient = useQueryClient();
-    const [selectedPartnerId, setSelectedPartnerId] = useState<string>("");
-    
+    const [searchParams, setSearchParams] = useSearchParams();
+    const selectedPartnerId = searchParams.get("partnerId") || "";
+
+    const setSelectedPartnerId = (id: string) => {
+        const newParams = new URLSearchParams(searchParams);
+        if (id) {
+            newParams.set("partnerId", id);
+        } else {
+            newParams.delete("partnerId");
+        }
+        setSearchParams(newParams);
+    };
+
     // Field Modal State
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingField, setEditingField] = useState<PartnerFormField | null>(null);
@@ -350,7 +362,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
 
     const handleEdit = (field: PartnerFormField) => {
         setEditingField(field);
-        
+
         let optionsList = ["Opção 1", "Opção 2"];
         if (field.options && Array.isArray(field.options) && field.options.length > 0) {
             optionsList = field.options as string[];
@@ -375,7 +387,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
             toast.error("Nome do campo e texto da pergunta são obrigatórios.");
             return;
         }
-        
+
         // criterion_rule is now managed by the visual builder, 
         // but still validate if present
         try {
@@ -762,15 +774,15 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                 <div className="space-y-2">
                                     {formValues.optionsList.map((opt, i) => (
                                         <div key={i} className="flex gap-2 items-center">
-                                            <Input 
-                                                value={opt} 
+                                            <Input
+                                                value={opt}
                                                 onChange={(e) => updateOption(i, e.target.value)}
                                                 placeholder={`Opção ${i + 1}`}
                                                 className="bg-background"
                                             />
-                                            <Button 
-                                                variant="ghost" 
-                                                size="icon" 
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
                                                 onClick={() => removeOption(i)}
                                                 disabled={formValues.optionsList.length <= 1}
                                             >
@@ -779,9 +791,9 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                         </div>
                                     ))}
                                 </div>
-                                <Button 
-                                    variant="outline" 
-                                    size="sm" 
+                                <Button
+                                    variant="outline"
+                                    size="sm"
                                     className="w-full mt-2 border-dashed"
                                     onClick={addOption}
                                 >
