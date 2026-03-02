@@ -239,8 +239,11 @@ export function CriterionRuleBuilder({ fieldName, value, onChange }: CriterionRu
                         {/* Condition Row */}
                         <div className="flex items-center gap-2 rounded-md border bg-background p-2">
                             {/* Field name (read-only, auto from context) */}
-                            <div className="flex items-center h-9 px-3 rounded-md border bg-muted text-sm text-muted-foreground min-w-[80px] shrink-0">
-                                {fieldName || "campo"}
+                            <div
+                                title={fieldName || "campo"}
+                                className="flex items-center h-9 px-3 rounded-md border bg-muted text-sm text-muted-foreground w-32 shrink-0 overflow-hidden"
+                            >
+                                <span className="truncate">{fieldName || "campo"}</span>
                             </div>
 
                             {/* Operator */}
