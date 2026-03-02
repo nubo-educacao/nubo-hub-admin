@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
     Select,
     SelectContent,
@@ -9,7 +10,9 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, ChevronDown } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
+import { Plus, Trash2, ChevronDown, X, Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -26,6 +29,8 @@ interface CriterionRuleBuilderProps {
     fieldName: string;
     value: string; // JSON Logic string
     onChange: (jsonLogicString: string) => void;
+    dataType?: string;
+    optionsList?: string[];
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -127,7 +132,11 @@ function parseCondition(rule: Record<string, unknown>): Condition {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function CriterionRuleBuilder({ fieldName, value, onChange }: CriterionRuleBuilderProps) {
+export function CriterionRuleBuilder({ fieldName, value, onChange, dataType, optionsList = [] }: CriterionRuleBuilderProps) {
+    const isListType = dataType === "select" || dataType === "multiselect";
+    const availableOperators = isListType
+        ? OPERATORS
+        : OPERATORS.filter((op) => op.value !== "in");
     const [combinator, setCombinator] = useState<Combinator>("and");
     const [conditions, setConditions] = useState<Condition[]>([
         { id: generateId(), operator: "==", value: "" },
@@ -167,9 +176,29 @@ export function CriterionRuleBuilder({ fieldName, value, onChange }: CriterionRu
     }, [fieldName, initialized, emitChange, conditions, combinator]);
 
     const updateCondition = (id: string, updates: Partial<Condition>) => {
+        // Reset value when switching to/from "in" operator
+        if (updates.operator) {
+            const currentCondition = conditions.find((c) => c.id === id);
+            if (currentCondition && currentCondition.operator !== updates.operator) {
+                const switchingToIn = updates.operator === "in";
+                const switchingFromIn = currentCondition.operator === "in";
+                if (switchingToIn || switchingFromIn) {
+                    updates.value = "";
+                }
+            }
+        }
         const next = conditions.map((c) => (c.id === id ? { ...c, ...updates } : c));
         setConditions(next);
         emitChange(next, combinator);
+    };
+
+    const toggleInValue = (conditionId: string, option: string, currentValue: string) => {
+        const selected = currentValue ? currentValue.split(", ").filter(Boolean) : [];
+        const isSelected = selected.includes(option);
+        const next = isSelected
+            ? selected.filter((v) => v !== option)
+            : [...selected, option];
+        updateCondition(conditionId, { value: next.join(", ") });
     };
 
     const addCondition = () => {
@@ -241,7 +270,7 @@ export function CriterionRuleBuilder({ fieldName, value, onChange }: CriterionRu
                             {/* Field name (read-only, auto from context) */}
                             <div
                                 title={fieldName || "campo"}
-                                className="flex items-center h-9 px-3 rounded-md border bg-muted text-sm text-muted-foreground w-32 shrink-0 overflow-hidden"
+                                className="flex items-center h-9 px-3 rounded-md border bg-muted text-sm text-muted-foreground w-20 shrink-0 overflow-hidden"
                             >
                                 <span className="truncate">{fieldName || "campo"}</span>
                             </div>
@@ -255,7 +284,7 @@ export function CriterionRuleBuilder({ fieldName, value, onChange }: CriterionRu
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {OPERATORS.map((op) => (
+                                    {availableOperators.map((op) => (
                                         <SelectItem key={op.value} value={op.value}>
                                             {op.label}
                                         </SelectItem>
@@ -264,12 +293,69 @@ export function CriterionRuleBuilder({ fieldName, value, onChange }: CriterionRu
                             </Select>
 
                             {/* Value */}
-                            <Input
-                                placeholder={condition.operator === "in" ? "val1, val2, val3" : "Valor"}
-                                value={condition.value}
-                                onChange={(e) => updateCondition(condition.id, { value: e.target.value })}
-                                className="flex-1"
-                            />
+                            {condition.operator === "in" && isListType ? (
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            role="combobox"
+                                            className="flex-1 justify-between font-normal h-auto min-h-[36px] py-1"
+                                        >
+                                            <div className="flex flex-wrap gap-1">
+                                                {condition.value ? (
+                                                    condition.value.split(", ").filter(Boolean).map((v) => (
+                                                        <Badge key={v} variant="secondary" className="text-xs gap-1">
+                                                            {v}
+                                                            <X
+                                                                className="h-3 w-3 cursor-pointer"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    toggleInValue(condition.id, v, condition.value);
+                                                                }}
+                                                            />
+                                                        </Badge>
+                                                    ))
+                                                ) : (
+                                                    <span className="text-muted-foreground">Selecione...</span>
+                                                )}
+                                            </div>
+                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-[240px] p-0" align="start">
+                                        <Command>
+                                            <CommandList>
+                                                <CommandEmpty>Sem opções disponíveis.</CommandEmpty>
+                                                <CommandGroup>
+                                                    {optionsList.map((opt) => {
+                                                        const selected = condition.value ? condition.value.split(", ").filter(Boolean) : [];
+                                                        const isSelected = selected.includes(opt);
+                                                        return (
+                                                            <CommandItem
+                                                                key={opt}
+                                                                value={opt}
+                                                                onSelect={() => toggleInValue(condition.id, opt, condition.value)}
+                                                            >
+                                                                <div className={cn("flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border mr-2", isSelected ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/30")}>
+                                                                    {isSelected && <Check className="h-3 w-3" />}
+                                                                </div>
+                                                                {opt}
+                                                            </CommandItem>
+                                                        );
+                                                    })}
+                                                </CommandGroup>
+                                            </CommandList>
+                                        </Command>
+                                    </PopoverContent>
+                                </Popover>
+                            ) : (
+                                <Input
+                                    placeholder="Valor"
+                                    value={condition.value}
+                                    onChange={(e) => updateCondition(condition.id, { value: e.target.value })}
+                                    className="flex-1"
+                                />
+                            )}
 
                             {/* Remove */}
                             <Button

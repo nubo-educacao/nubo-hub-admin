@@ -821,6 +821,8 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                 fieldName={formValues.field_name}
                                 value={formValues.criterion_rule}
                                 onChange={(jsonStr) => setFormValues({ ...formValues, criterion_rule: jsonStr })}
+                                dataType={formValues.data_type}
+                                optionsList={formValues.optionsList}
                             />
                         )}
                     </div>
