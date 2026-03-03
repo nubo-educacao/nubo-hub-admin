@@ -704,7 +704,10 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
 
             {/* Add/Edit Step Dialog */}
             <Dialog open={isStepDialogOpen} onOpenChange={setIsStepDialogOpen}>
-                <DialogContent className="max-w-sm">
+                <DialogContent
+                    className="max-w-sm"
+                    onInteractOutside={(e) => e.preventDefault()}
+                >
                     <DialogHeader>
                         <DialogTitle>{editingStep ? "Editar Step" : "Novo Step"}</DialogTitle>
                     </DialogHeader>
@@ -738,7 +741,10 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
 
             {/* Add/Edit Field Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+                <DialogContent
+                    className="max-w-lg max-h-[90vh] overflow-y-auto"
+                    onInteractOutside={(e) => e.preventDefault()}
+                >
                     <DialogHeader>
                         <DialogTitle>
                             {editingField ? "Editar Campo" : "Novo Campo"}
