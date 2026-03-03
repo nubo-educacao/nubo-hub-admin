@@ -45,7 +45,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, Loader2, Code2, Check, ChevronsUpDown, X } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Code2, Check, ChevronsUpDown, X, Shield } from "lucide-react";
 import { toast } from "sonner";
 import { CriterionRuleBuilder } from "./CriterionRuleBuilder";
 
@@ -156,6 +156,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
     const [formValues, setFormValues] = useState<FormFieldValues>(EMPTY_FIELD);
     const [deleteFieldId, setDeleteFieldId] = useState<string | null>(null);
     const [mappingOpen, setMappingOpen] = useState(false);
+    const [isRulesDialogOpen, setIsRulesDialogOpen] = useState(false);
 
     // Step Modal State
     const [isStepDialogOpen, setIsStepDialogOpen] = useState(false);
@@ -261,8 +262,8 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                 data_type: values.data_type,
                 options: hasOptions ? values.optionsList.filter(o => o.trim() !== "") : null,
                 mapping_source: values.mapping_source || null,
-                is_criterion: values.is_criterion,
-                criterion_rule: values.criterion_rule ? JSON.parse(values.criterion_rule) : null,
+                is_criterion: values.is_criterion && !!values.criterion_rule,
+                criterion_rule: (values.is_criterion && values.criterion_rule) ? JSON.parse(values.criterion_rule) : null,
                 sort_order: values.sort_order,
             };
 
@@ -439,6 +440,101 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
 
             {selectedPartnerId && (
                 <>
+                    {/* Eligibility Rules Summary Button */}
+                    {(() => {
+                        const criterionFields = fields.filter((f) => f.is_criterion);
+                        return (
+                            <div className="flex items-center gap-3">
+                                <Button
+                                    variant="outline"
+                                    className="gap-2"
+                                    onClick={() => setIsRulesDialogOpen(true)}
+                                >
+                                    <Shield className="h-4 w-4" />
+                                    Critérios de Elegibilidade
+                                    {criterionFields.length > 0 && (
+                                        <Badge variant="secondary" className="ml-1">
+                                            {criterionFields.length}
+                                        </Badge>
+                                    )}
+                                </Button>
+                            </div>
+                        );
+                    })()}
+
+                    {/* Eligibility Rules Dialog */}
+                    <Dialog open={isRulesDialogOpen} onOpenChange={setIsRulesDialogOpen}>
+                        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                            <DialogHeader>
+                                <DialogTitle className="flex items-center gap-2">
+                                    <Shield className="h-5 w-5" />
+                                    Critérios de Elegibilidade
+                                </DialogTitle>
+                            </DialogHeader>
+                            <div className="py-2">
+                                {(() => {
+                                    const criterionFields = fields.filter((f) => f.is_criterion);
+                                    if (criterionFields.length === 0) {
+                                        return (
+                                            <div className="text-center py-8 text-muted-foreground border border-dashed rounded-md">
+                                                Nenhum campo com critério de elegibilidade configurado.
+                                            </div>
+                                        );
+                                    }
+                                    return (
+                                        <div className="rounded-md border overflow-auto">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Campo</TableHead>
+                                                        <TableHead>Etapa</TableHead>
+                                                        <TableHead>Regra</TableHead>
+                                                        <TableHead className="w-[60px]">Editar</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {criterionFields.map((field) => {
+                                                        const step = steps.find((s) => s.id === field.step_id);
+                                                        const rulePreview = field.criterion_rule
+                                                            ? JSON.stringify(field.criterion_rule)
+                                                            : "—";
+                                                        return (
+                                                            <TableRow key={field.id}>
+                                                                <TableCell className="font-mono text-sm">
+                                                                    {field.field_name}
+                                                                </TableCell>
+                                                                <TableCell className="text-sm text-muted-foreground">
+                                                                    {step ? step.step_name : "—"}
+                                                                </TableCell>
+                                                                <TableCell className="max-w-[300px]">
+                                                                    <code className="text-xs bg-muted px-2 py-1 rounded break-all">
+                                                                        {rulePreview}
+                                                                    </code>
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="icon"
+                                                                        onClick={() => {
+                                                                            setIsRulesDialogOpen(false);
+                                                                            handleEdit(field);
+                                                                        }}
+                                                                    >
+                                                                        <Pencil className="h-4 w-4" />
+                                                                    </Button>
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        );
+                                                    })}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        </DialogContent>
+                    </Dialog>
+
                     {/* Steps Table */}
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

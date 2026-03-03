@@ -208,7 +208,13 @@ export function CriterionRuleBuilder({ fieldName, value, onChange, dataType, opt
     };
 
     const removeCondition = (id: string) => {
-        if (conditions.length <= 1) return;
+        if (conditions.length <= 1) {
+            // Reset to empty default instead of blocking
+            const reset = [{ id: generateId(), operator: "==", value: "" }];
+            setConditions(reset);
+            emitChange(reset, combinator);
+            return;
+        }
         const next = conditions.filter((c) => c.id !== id);
         setConditions(next);
         emitChange(next, combinator);
@@ -364,7 +370,6 @@ export function CriterionRuleBuilder({ fieldName, value, onChange, dataType, opt
                                 size="icon"
                                 className="shrink-0 h-9 w-9"
                                 onClick={() => removeCondition(condition.id)}
-                                disabled={conditions.length <= 1}
                             >
                                 <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
