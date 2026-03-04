@@ -45,7 +45,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             setUserRole(session?.user?.role ?? null);
             if (session?.user) {
                 // We don't await here to avoid blocking the trigger flow
-                fetchPermissions(session.user.id);
+                // Do not block UI for background events like token refresh
+                const isBackground = event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED';
+                fetchPermissions(session.user.id, isBackground);
             } else {
                 setPermissions([]);
                 setLoading(false);
@@ -55,9 +57,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         return () => subscription.unsubscribe();
     }, []);
 
-    const fetchPermissions = async (userId: string) => {
-        console.log("AuthContext: Buscando permissões para", userId);
-        setLoading(true);
+    const fetchPermissions = async (userId: string, isBackground: boolean = false) => {
+        console.log("AuthContext: Buscando permissões para", userId, "background:", isBackground);
+        if (!isBackground) {
+            setLoading(true);
+        }
 
         try {
             // Add a timeout to prevent infinite hang
@@ -92,7 +96,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             toast.error("Erro ao carregar permissões");
         } finally {
             console.log("AuthContext: Finalizado carregamento");
-            setLoading(false);
+            if (!isBackground) {
+                setLoading(false);
+            }
         }
     };
 

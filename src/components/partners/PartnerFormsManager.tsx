@@ -464,7 +464,10 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
 
                     {/* Eligibility Rules Dialog */}
                     <Dialog open={isRulesDialogOpen} onOpenChange={setIsRulesDialogOpen}>
-                        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                        <DialogContent
+                            className="max-w-2xl max-h-[80vh] overflow-y-auto"
+                            onInteractOutside={(e) => e.preventDefault()}
+                        >
                             <DialogHeader>
                                 <DialogTitle className="flex items-center gap-2">
                                     <Shield className="h-5 w-5" />
