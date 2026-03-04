@@ -10,6 +10,7 @@ export interface StudentProfile {
     state: string | null;
     is_nubo_student: boolean;
     created_at: string;
+    whatsapp?: string | null;
 }
 
 export interface UserPreference {
@@ -92,7 +93,7 @@ export const getStudents = async (
         p_filter_age_max: filters?.ageMax || null
     };
 
-    const { data, error } = await supabase.rpc('get_students_paginated', paramFilters);
+    const { data, error } = await supabase.rpc('get_students_paginated' as any, paramFilters);
 
     if (error) {
         throw error;
@@ -150,7 +151,7 @@ export const getStudentDetails = async (userId: string): Promise<StudentDetails>
     if (favError) throw favError;
 
     return {
-        profile,
+        profile: profile as any as StudentProfile,
         preferences,
         enem_scores: enem_scores || [],
         favorites: favorites?.map((f: any) => ({
@@ -170,7 +171,7 @@ export interface StudentStats {
 
 export const getStudentStats = async (filters?: StudentFilters): Promise<StudentStats> => {
     const { data, error } = await supabase
-        .rpc('get_student_stats', {
+        .rpc('get_student_stats' as any, {
             filter_full_name: filters?.fullName || null,
             filter_city: filters?.city || null,
             filter_education: filters?.education || null,
@@ -189,7 +190,7 @@ export const getStudentStats = async (filters?: StudentFilters): Promise<Student
 
 export const importNuboStudents = async (students: any[]): Promise<{ imported_whitelist_entries: number, updated_existing_profiles: number }> => {
     const { data, error } = await supabase
-        .rpc('import_nubo_students', { students });
+        .rpc('import_nubo_students' as any, { students });
 
     if (error) throw error;
     return data as any;

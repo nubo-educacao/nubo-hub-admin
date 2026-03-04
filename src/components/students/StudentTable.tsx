@@ -63,13 +63,40 @@ export function StudentTable({ students, onViewDetails, sortBy, sortOrder, onSor
                                 {renderSortIcon("education")}
                             </div>
                         </TableHead>
+                        <TableHead
+                            className="cursor-pointer hover:bg-muted/50 transition-colors"
+                            onClick={() => onSort?.("whatsapp")}
+                        >
+                            <div className="flex items-center">
+                                Whatsapp
+                                {renderSortIcon("whatsapp")}
+                            </div>
+                        </TableHead>
+                        <TableHead
+                            className="cursor-pointer hover:bg-muted/50 transition-colors"
+                            onClick={() => onSort?.("is_nubo_student")}
+                        >
+                            <div className="flex items-center">
+                                Aluno Nubo
+                                {renderSortIcon("is_nubo_student")}
+                            </div>
+                        </TableHead>
+                        <TableHead
+                            className="cursor-pointer hover:bg-muted/50 transition-colors"
+                            onClick={() => onSort?.("created_at")}
+                        >
+                            <div className="flex items-center">
+                                Data de Cadastro
+                                {renderSortIcon("created_at")}
+                            </div>
+                        </TableHead>
                         <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {students.length === 0 ? (
                         <TableRow>
-                            <TableCell colSpan={5} className="h-24 text-center">
+                            <TableCell colSpan={8} className="h-24 text-center">
                                 Nenhum estudante encontrado.
                             </TableCell>
                         </TableRow>
@@ -80,6 +107,9 @@ export function StudentTable({ students, onViewDetails, sortBy, sortOrder, onSor
                                 <TableCell>{student.age || "N/A"}</TableCell>
                                 <TableCell>{student.city || "N/A"}</TableCell>
                                 <TableCell>{student.education || "N/A"}</TableCell>
+                                <TableCell>{student.whatsapp || "N/A"}</TableCell>
+                                <TableCell>{student.is_nubo_student ? "Sim" : "Não"}</TableCell>
+                                <TableCell>{student.created_at ? new Date(student.created_at).toLocaleDateString("pt-BR") : "N/A"}</TableCell>
                                 <TableCell className="text-right">
                                     <Button
                                         variant="ghost"
@@ -99,3 +129,44 @@ export function StudentTable({ students, onViewDetails, sortBy, sortOrder, onSor
         </div>
     );
 }
+
+// Helper function for exporting data (as implied by the instruction and code snippet)
+export const getStudentExportData = (students: StudentProfile[]) => {
+    const headers = [
+        "ID",
+        "Nome Completo",
+        "Idade",
+        "Cidade",
+        "Estado",
+        "Escolaridade",
+        "Whatsapp",
+        "Aluno Nubo",
+        "Data de Cadastro"
+    ];
+
+    const data = students.map(s => [
+        s.id,
+        s.full_name,
+        s.age,
+        s.city,
+        s.state,
+        s.education,
+        s.whatsapp || "-",
+        s.is_nubo_student ? "Sim" : "Não",
+        s.created_at ? new Date(s.created_at).toLocaleDateString("pt-BR") : "N/A"
+    ]);
+
+    const columnWidths = [
+        { wch: 36 }, // ID
+        { wch: 30 }, // Name
+        { wch: 10 }, // Age
+        { wch: 20 }, // City
+        { wch: 10 }, // State
+        { wch: 25 }, // Education
+        { wch: 15 }, // Whatsapp
+        { wch: 12 }, // Is Nubo
+        { wch: 15 }  // Date
+    ];
+
+    return { headers, data, columnWidths };
+};

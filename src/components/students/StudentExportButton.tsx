@@ -59,6 +59,7 @@ export function StudentExportButton({ filters }: StudentExportButtonProps) {
                 "Cidade",
                 "Estado",
                 "Escolaridade",
+                "Whatsapp",
                 "Aluno Nubo",
                 "Data de Cadastro"
             ];
@@ -70,6 +71,7 @@ export function StudentExportButton({ filters }: StudentExportButtonProps) {
                 s.city,
                 s.state,
                 s.education,
+                s.whatsapp || "-",
                 s.is_nubo_student ? "Sim" : "Não",
                 new Date(s.created_at).toLocaleDateString("pt-BR")
             ]);
@@ -89,6 +91,7 @@ export function StudentExportButton({ filters }: StudentExportButtonProps) {
                 { wch: 20 }, // City
                 { wch: 10 }, // State
                 { wch: 25 }, // Education
+                { wch: 15 }, // Whatsapp
                 { wch: 12 }, // Is Nubo
                 { wch: 15 }  // Date
             ];

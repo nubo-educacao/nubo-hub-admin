@@ -464,10 +464,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
 
                     {/* Eligibility Rules Dialog */}
                     <Dialog open={isRulesDialogOpen} onOpenChange={setIsRulesDialogOpen}>
-                        <DialogContent
-                            className="max-w-2xl max-h-[80vh] overflow-y-auto"
-                            onInteractOutside={(e) => e.preventDefault()}
-                        >
+                        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
                             <DialogHeader>
                                 <DialogTitle className="flex items-center gap-2">
                                     <Shield className="h-5 w-5" />
@@ -707,10 +704,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
 
             {/* Add/Edit Step Dialog */}
             <Dialog open={isStepDialogOpen} onOpenChange={setIsStepDialogOpen}>
-                <DialogContent
-                    className="max-w-sm"
-                    onInteractOutside={(e) => e.preventDefault()}
-                >
+                <DialogContent className="max-w-sm">
                     <DialogHeader>
                         <DialogTitle>{editingStep ? "Editar Step" : "Novo Step"}</DialogTitle>
                     </DialogHeader>
@@ -744,10 +738,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
 
             {/* Add/Edit Field Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent
-                    className="max-w-lg max-h-[90vh] overflow-y-auto"
-                    onInteractOutside={(e) => e.preventDefault()}
-                >
+                <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>
                             {editingField ? "Editar Campo" : "Novo Campo"}

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Session, User } from "@supabase/supabase-js";
 import { toast } from "sonner";
@@ -21,6 +21,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [permissions, setPermissions] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
 
+    // Track whether the initial permissions load has completed.
+    // Once true, we NEVER show the full-screen spinner again to avoid
+    // unmounting the entire layout (which destroys modals and unsaved state).
+    const hasInitiallyLoadedRef = useRef(false);
+
     useEffect(() => {
         console.log("AuthContext: Inicializando...");
 
@@ -33,6 +38,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             if (session?.user) {
                 fetchPermissions(session.user.id);
             } else {
+                hasInitiallyLoadedRef.current = true;
                 setLoading(false);
             }
         });
@@ -44,10 +50,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             setUser(session?.user ?? null);
             setUserRole(session?.user?.role ?? null);
             if (session?.user) {
-                // We don't await here to avoid blocking the trigger flow
-                // Do not block UI for background events like token refresh
-                const isBackground = event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED';
-                fetchPermissions(session.user.id, isBackground);
+                // After initial load, all subsequent fetches are silent background refreshes.
+                fetchPermissions(session.user.id);
             } else {
                 setPermissions([]);
                 setLoading(false);
@@ -57,9 +61,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         return () => subscription.unsubscribe();
     }, []);
 
-    const fetchPermissions = async (userId: string, isBackground: boolean = false) => {
-        console.log("AuthContext: Buscando permissões para", userId, "background:", isBackground);
-        if (!isBackground) {
+    const fetchPermissions = async (userId: string) => {
+        const isInitialLoad = !hasInitiallyLoadedRef.current;
+        console.log("AuthContext: Buscando permissões para", userId, "initial:", isInitialLoad);
+
+        // Only show the full-screen spinner on the very first load.
+        // After that, silently refresh in the background (no UI disruption).
+        if (isInitialLoad) {
             setLoading(true);
         }
 
@@ -96,9 +104,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             toast.error("Erro ao carregar permissões");
         } finally {
             console.log("AuthContext: Finalizado carregamento");
-            if (!isBackground) {
-                setLoading(false);
-            }
+            hasInitiallyLoadedRef.current = true;
+            setLoading(false);
         }
     };
 
