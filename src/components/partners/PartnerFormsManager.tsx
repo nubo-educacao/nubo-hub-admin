@@ -45,9 +45,26 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, Loader2, Code2, Check, ChevronsUpDown, X, Shield } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Code2, Check, ChevronsUpDown, X, Shield, Download, Copy, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { CriterionRuleBuilder } from "./CriterionRuleBuilder";
+import {
+    DndContext,
+    closestCenter,
+    KeyboardSensor,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    DragEndEvent
+} from '@dnd-kit/core';
+import {
+    arrayMove,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    verticalListSortingStrategy,
+    useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -56,6 +73,8 @@ interface PartnerStep {
     partner_id: string;
     step_name: string;
     sort_order: number;
+    introduction?: string | null;
+    secret_step?: boolean;
     created_at?: string;
     updated_at?: string;
 }
@@ -72,6 +91,7 @@ interface PartnerFormField {
     is_criterion: boolean;
     criterion_rule: any; // Using any for Json compatibility
     sort_order: number;
+    optional: boolean;
     created_at: string;
     updated_at: string;
 }
@@ -86,6 +106,7 @@ interface FormFieldValues {
     is_criterion: boolean;
     criterion_rule: string;
     sort_order: number;
+    optional: boolean;
 }
 
 const EMPTY_FIELD: FormFieldValues = {
@@ -98,6 +119,7 @@ const EMPTY_FIELD: FormFieldValues = {
     is_criterion: false,
     criterion_rule: "",
     sort_order: 0,
+    optional: false,
 };
 
 const DATA_TYPES = [
@@ -116,6 +138,13 @@ const MAPPING_SOURCES = [
     { value: "user_profiles.city", label: "Perfil: Cidade" },
     { value: "user_profiles.state", label: "Perfil: Estado" },
     { value: "user_profiles.education", label: "Perfil: Escolaridade" },
+    { value: "user_profiles.education_year", label: "Perfil: Ano Escolar" },
+    { value: "user_profiles.zip_code", label: "Perfil: CEP" },
+    { value: "user_profiles.street", label: "Perfil: Rua" },
+    { value: "user_profiles.street_number", label: "Perfil: Número" },
+    { value: "user_profiles.complement", label: "Perfil: Complemento" },
+    { value: "user_profiles.relationship", label: "Perfil: Parentesco" },
+    { value: "user_profiles.is_nubo_student", label: "Perfil: É Aluno Nubo" },
     { value: "user_profiles.referral_source", label: "Perfil: Como conheceu" },
     // user_preferences
     { value: "user_preferences.enem_score", label: "Prefs: Nota ENEM" },
@@ -128,6 +157,112 @@ const MAPPING_SOURCES = [
     { value: "user_preferences.state_preference", label: "Prefs: Estado de Preferência" },
     { value: "user_preferences.university_preference", label: "Prefs: Universidade de Preferência" },
 ];
+
+// ─── Sortable Components ───────────────────────────────────────────────────
+
+function SortableStepRow({ step, onEdit, onDelete }: { step: PartnerStep, onEdit: (s: PartnerStep) => void, onDelete: (id: string) => void }) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: step.id });
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+        position: isDragging ? "relative" as const : undefined,
+        zIndex: isDragging ? 10 : 1,
+    };
+    return (
+        <TableRow ref={setNodeRef} style={style} className={isDragging ? "bg-muted/50" : ""}>
+            <TableCell className="w-[40px] px-2 text-center">
+                <Button variant="ghost" size="icon" className="cursor-grab hover:bg-muted/50 h-8 w-8 focus:ring-0" {...attributes} {...listeners}>
+                    <GripVertical className="h-4 w-4 text-muted-foreground" />
+                </Button>
+            </TableCell>
+            <TableCell className="font-mono text-sm">{step.sort_order}</TableCell>
+            <TableCell>{step.step_name}</TableCell>
+            <TableCell>
+                <div className="flex gap-1" onPointerDown={(e) => e.stopPropagation()}>
+                    <Button variant="ghost" size="icon" onClick={() => onEdit(step)}>
+                        <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => onDelete(step.id)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                </div>
+            </TableCell>
+        </TableRow>
+    );
+}
+
+function SortableFieldRow({ field, index, onEdit, onDelete }: { field: PartnerFormField, index: number, onEdit: (f: PartnerFormField) => void, onDelete: (id: string) => void }) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: field.id });
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+        position: isDragging ? "relative" as const : undefined,
+        zIndex: isDragging ? 10 : 1,
+    };
+    return (
+        <TableRow ref={setNodeRef} style={style} className={isDragging ? "bg-muted/50" : ""}>
+            <TableCell className="w-[40px] px-2 text-center">
+                <Button variant="ghost" size="icon" className="cursor-grab hover:bg-muted/50 h-8 w-8 focus:ring-0" {...attributes} {...listeners}>
+                    <GripVertical className="h-4 w-4 text-muted-foreground" />
+                </Button>
+            </TableCell>
+            <TableCell className="text-muted-foreground">{index + 1}</TableCell>
+            <TableCell className="font-mono text-sm">{field.field_name}</TableCell>
+            <TableCell className="max-w-[250px] whitespace-normal break-words">
+                <div className="flex items-start gap-2">
+                    <span>{field.question_text}</span>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                            navigator.clipboard.writeText(field.question_text);
+                            toast.success("Copiado!");
+                        }}
+                        title="Copiar Pergunta"
+                    >
+                        <Copy className="h-4 w-4" />
+                    </Button>
+                </div>
+            </TableCell>
+            <TableCell>
+                <Badge variant="outline">
+                    {DATA_TYPES.find((d) => d.value === field.data_type)?.label || field.data_type}
+                </Badge>
+            </TableCell>
+            <TableCell className="text-xs text-muted-foreground">
+                {field.mapping_source || "—"}
+            </TableCell>
+            <TableCell>
+                {field.optional ? (
+                    <span className="text-muted-foreground">Opcional</span>
+                ) : (
+                    <Badge variant="default" className="bg-blue-500/80">Sim</Badge>
+                )}
+            </TableCell>
+            <TableCell>
+                {field.is_criterion ? (
+                    <Badge variant="default" className="bg-amber-500/80">Sim</Badge>
+                ) : (
+                    <span className="text-muted-foreground">Não</span>
+                )}
+            </TableCell>
+            <TableCell>
+                <div className="flex gap-1" onPointerDown={(e) => e.stopPropagation()}>
+                    <Button variant="ghost" size="icon" onClick={() => onEdit(field)}>
+                        <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => onDelete(field.id)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                </div>
+            </TableCell>
+        </TableRow>
+    );
+}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -156,6 +291,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
     const [formValues, setFormValues] = useState<FormFieldValues>(EMPTY_FIELD);
     const [deleteFieldId, setDeleteFieldId] = useState<string | null>(null);
     const [mappingOpen, setMappingOpen] = useState(false);
+    const [isLoadingOptions, setIsLoadingOptions] = useState(false);
     const [isRulesDialogOpen, setIsRulesDialogOpen] = useState(false);
 
     // Step Modal State
@@ -163,6 +299,8 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
     const [editingStep, setEditingStep] = useState<PartnerStep | null>(null);
     const [stepName, setStepName] = useState("");
     const [stepSortOrder, setStepSortOrder] = useState(0);
+    const [stepIntroduction, setStepIntroduction] = useState("");
+    const [stepSecret, setStepSecret] = useState(false);
     const [deleteStepId, setDeleteStepId] = useState<string | null>(null);
 
     // ─── Queries ─────────────────────────────────────────────────────────────
@@ -194,7 +332,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                 .eq("partner_id", selectedPartnerId)
                 .order("sort_order", { ascending: true });
             if (error) throw error;
-            return (data ?? []);
+            return (data ?? []) as unknown as PartnerFormField[];
         },
         enabled: !!selectedPartnerId,
     });
@@ -207,6 +345,8 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                 partner_id: selectedPartnerId,
                 step_name: stepName,
                 sort_order: stepSortOrder,
+                introduction: stepIntroduction || null,
+                secret_step: stepSecret,
             };
             if (editingStep) {
                 const { error } = await supabase
@@ -265,6 +405,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                 is_criterion: values.is_criterion && !!values.criterion_rule,
                 criterion_rule: (values.is_criterion && values.criterion_rule) ? JSON.parse(values.criterion_rule) : null,
                 sort_order: values.sort_order,
+                optional: values.optional,
             };
 
             if (editingField) {
@@ -308,12 +449,119 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
         onError: () => toast.error("Erro ao remover campo."),
     });
 
+    // ─── Handlers & Drag-and-Drop ─────────────────────────────────────────────
+
+    const reorderStepsMutation = useMutation({
+        mutationFn: async (orderedSteps: PartnerStep[]) => {
+            const updates = orderedSteps.map((s, index) => ({
+                id: s.id,
+                partner_id: s.partner_id,
+                step_name: s.step_name,
+                sort_order: index + 1,
+                introduction: s.introduction || null,
+                secret_step: s.secret_step || false,
+            }));
+            const { error } = await supabase
+                .from("partner_steps")
+                .upsert(updates, { onConflict: "id" });
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["partner-steps", selectedPartnerId] });
+        },
+        onError: (err: any) => {
+            toast.error(`Erro ao reordenar Steps: ${err.message}`);
+        }
+    });
+
+    const reorderFieldsMutation = useMutation({
+        mutationFn: async (orderedFields: PartnerFormField[]) => {
+            const updates = orderedFields.map((f, index) => ({
+                id: f.id,
+                partner_id: f.partner_id,
+                step_id: f.step_id,
+                field_name: f.field_name,
+                question_text: f.question_text,
+                data_type: f.data_type,
+                options: f.options,
+                mapping_source: f.mapping_source,
+                is_criterion: f.is_criterion,
+                criterion_rule: f.criterion_rule,
+                sort_order: index + 1,
+                optional: f.optional,
+            }));
+            const { error } = await supabase
+                .from("partner_forms")
+                .upsert(updates, { onConflict: "id" });
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["partner-forms", selectedPartnerId] });
+        },
+        onError: (err: any) => {
+            toast.error(`Erro ao reordenar Campos: ${err.message}`);
+        }
+    });
+
+    const sensors = useSensors(
+        useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
+
+    const handleDragEndSteps = (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (over && active.id !== over.id) {
+            const oldIndex = steps.findIndex(s => s.id === active.id);
+            const newIndex = steps.findIndex(s => s.id === over.id);
+            const newSteps = arrayMove(steps, oldIndex, newIndex);
+
+            // Re-assign sort_order locally for optimistic UI
+            const updatedLocal = newSteps.map((s, idx) => ({ ...s, sort_order: idx + 1 }));
+
+            queryClient.setQueryData(["partner-steps", selectedPartnerId], updatedLocal);
+            reorderStepsMutation.mutate(newSteps);
+        }
+    };
+
+    const handleDragEndFields = (groupId: string, event: DragEndEvent) => {
+        const { active, over } = event;
+        if (over && active.id !== over.id) {
+            const isOrphan = groupId === "orphan";
+            const groupFields = fields.filter((f) => {
+                if (isOrphan) return !f.step_id || !steps.find(s => s.id === f.step_id);
+                return f.step_id === groupId;
+            });
+
+            const oldIndex = groupFields.findIndex(f => f.id === active.id);
+            const newIndex = groupFields.findIndex(f => f.id === over.id);
+            const reorderedGroup = arrayMove(groupFields, oldIndex, newIndex);
+
+            let updatedFields = [...fields];
+            let gIdx = 0;
+            updatedFields = updatedFields.map((f) => {
+                const belongsToGroup = isOrphan ? (!f.step_id || !steps.find(s => s.id === f.step_id)) : (f.step_id === groupId);
+                if (belongsToGroup) {
+                    const newItem = reorderedGroup[gIdx++];
+                    return { ...newItem, sort_order: gIdx };
+                }
+                return f;
+            });
+
+            queryClient.setQueryData(["partner-forms", selectedPartnerId], updatedFields as any);
+            reorderFieldsMutation.mutate(reorderedGroup);
+        }
+    };
+
     // ─── Handlers (Steps) ────────────────────────────────────────────────────
 
     const handleAddStep = () => {
         setEditingStep(null);
         setStepName("");
         setStepSortOrder(steps.length + 1);
+        setStepIntroduction("");
+        setStepSecret(false);
         setIsStepDialogOpen(true);
     };
 
@@ -321,6 +569,8 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
         setEditingStep(step);
         setStepName(step.step_name);
         setStepSortOrder(step.sort_order);
+        setStepIntroduction(step.introduction || "");
+        setStepSecret(step.secret_step || false);
         setIsStepDialogOpen(true);
     };
 
@@ -379,6 +629,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
             is_criterion: field.is_criterion,
             criterion_rule: field.criterion_rule ? JSON.stringify(field.criterion_rule, null, 2) : "",
             sort_order: field.sort_order,
+            optional: field.optional ?? false,
         });
         setIsDialogOpen(true);
     };
@@ -413,6 +664,43 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
 
     const addOption = () => {
         setFormValues({ ...formValues, optionsList: [...formValues.optionsList, ""] });
+    };
+
+    const loadOptionsFromDB = async () => {
+        if (!formValues.mapping_source) return;
+        const [table, column] = formValues.mapping_source.split(".");
+        if (!table || !column) return;
+
+        setIsLoadingOptions(true);
+        try {
+            const { data, error } = await supabase
+                .from(table as any)
+                .select(column);
+
+            if (error) throw error;
+
+            const uniqueValues = [
+                ...new Set(
+                    (data || [])
+                        .map((row: any) => row[column])
+                        .filter((v: any) => v != null && v !== "")
+                        .flatMap((v: any) => (Array.isArray(v) ? v : [v]))
+                        .map((v: any) => String(v))
+                ),
+            ].sort();
+
+            if (uniqueValues.length === 0) {
+                toast.info("Nenhum valor encontrado no banco para esse campo.");
+                return;
+            }
+
+            setFormValues((prev) => ({ ...prev, optionsList: uniqueValues }));
+            toast.success(`${uniqueValues.length} opções carregadas do banco!`);
+        } catch (err: any) {
+            toast.error(`Erro ao carregar opções: ${err.message}`);
+        } finally {
+            setIsLoadingOptions(false);
+        }
     };
 
     // ─── Render ──────────────────────────────────────────────────────────────
@@ -563,28 +851,25 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
+                                                <TableHead className="w-[40px] px-2"></TableHead>
                                                 <TableHead className="w-[80px]">Ordem</TableHead>
                                                 <TableHead>Nome do Step</TableHead>
                                                 <TableHead className="w-[100px]">Ações</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {steps.map((step) => (
-                                                <TableRow key={step.id}>
-                                                    <TableCell className="font-mono text-sm">{step.sort_order}</TableCell>
-                                                    <TableCell>{step.step_name}</TableCell>
-                                                    <TableCell>
-                                                        <div className="flex gap-1">
-                                                            <Button variant="ghost" size="icon" onClick={() => handleEditStep(step)}>
-                                                                <Pencil className="h-4 w-4" />
-                                                            </Button>
-                                                            <Button variant="ghost" size="icon" onClick={() => setDeleteStepId(step.id)}>
-                                                                <Trash2 className="h-4 w-4 text-destructive" />
-                                                            </Button>
-                                                        </div>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
+                                            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEndSteps}>
+                                                <SortableContext items={steps.map(s => s.id)} strategy={verticalListSortingStrategy}>
+                                                    {steps.map((step) => (
+                                                        <SortableStepRow
+                                                            key={step.id}
+                                                            step={step}
+                                                            onEdit={handleEditStep}
+                                                            onDelete={setDeleteStepId}
+                                                        />
+                                                    ))}
+                                                </SortableContext>
+                                            </DndContext>
                                         </TableBody>
                                     </Table>
                                 </div>
@@ -636,48 +921,31 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                                             <Table>
                                                                 <TableHeader>
                                                                     <TableRow>
+                                                                        <TableHead className="w-[40px] px-2"></TableHead>
                                                                         <TableHead className="w-[40px]">#</TableHead>
                                                                         <TableHead>Campo</TableHead>
                                                                         <TableHead>Pergunta</TableHead>
                                                                         <TableHead>Tipo</TableHead>
                                                                         <TableHead>Auto-Fill</TableHead>
+                                                                        <TableHead>Obrigatório</TableHead>
                                                                         <TableHead>Critério</TableHead>
                                                                         <TableHead className="w-[100px]">Ações</TableHead>
                                                                     </TableRow>
                                                                 </TableHeader>
                                                                 <TableBody>
-                                                                    {group.fields.map((field, idx) => (
-                                                                        <TableRow key={field.id}>
-                                                                            <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
-                                                                            <TableCell className="font-mono text-sm">{field.field_name}</TableCell>
-                                                                            <TableCell className="max-w-[200px] truncate">{field.question_text}</TableCell>
-                                                                            <TableCell>
-                                                                                <Badge variant="outline">
-                                                                                    {DATA_TYPES.find((d) => d.value === field.data_type)?.label || field.data_type}
-                                                                                </Badge>
-                                                                            </TableCell>
-                                                                            <TableCell className="text-xs text-muted-foreground">
-                                                                                {field.mapping_source || "—"}
-                                                                            </TableCell>
-                                                                            <TableCell>
-                                                                                {field.is_criterion ? (
-                                                                                    <Badge variant="default" className="bg-amber-500/80">Sim</Badge>
-                                                                                ) : (
-                                                                                    <span className="text-muted-foreground">Não</span>
-                                                                                )}
-                                                                            </TableCell>
-                                                                            <TableCell>
-                                                                                <div className="flex gap-1">
-                                                                                    <Button variant="ghost" size="icon" onClick={() => handleEdit(field)}>
-                                                                                        <Pencil className="h-4 w-4" />
-                                                                                    </Button>
-                                                                                    <Button variant="ghost" size="icon" onClick={() => setDeleteFieldId(field.id)}>
-                                                                                        <Trash2 className="h-4 w-4 text-destructive" />
-                                                                                    </Button>
-                                                                                </div>
-                                                                            </TableCell>
-                                                                        </TableRow>
-                                                                    ))}
+                                                                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleDragEndFields(group.step?.id || "orphan", e)}>
+                                                                        <SortableContext items={group.fields.map(f => f.id)} strategy={verticalListSortingStrategy}>
+                                                                            {group.fields.map((field, idx) => (
+                                                                                <SortableFieldRow
+                                                                                    key={field.id}
+                                                                                    field={field}
+                                                                                    index={idx}
+                                                                                    onEdit={handleEdit}
+                                                                                    onDelete={setDeleteFieldId}
+                                                                                />
+                                                                            ))}
+                                                                        </SortableContext>
+                                                                    </DndContext>
                                                                 </TableBody>
                                                             </Table>
                                                         </div>
@@ -725,6 +993,26 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                 onChange={(e) => setStepSortOrder(parseInt(e.target.value) || 0)}
                             />
                         </div>
+                        <div className="space-y-2">
+                            <Label>Introdução (opcional)</Label>
+                            <Input
+                                placeholder="Texto exibido antes das perguntas"
+                                value={stepIntroduction}
+                                onChange={(e) => setStepIntroduction(e.target.value)}
+                            />
+                        </div>
+                        <div className="flex items-center gap-3 rounded-lg border p-3">
+                            <Switch
+                                checked={stepSecret}
+                                onCheckedChange={setStepSecret}
+                            />
+                            <div>
+                                <Label>Secret Step?</Label>
+                                <p className="text-xs text-muted-foreground">
+                                    Se ativo, o estudante não verá as perguntas deste step. Usado para critérios de elegibilidade extraídos do perfil.
+                                </p>
+                            </div>
+                        </div>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsStepDialogOpen(false)}>Cancelar</Button>
@@ -738,7 +1026,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
 
             {/* Add/Edit Field Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>
                             {editingField ? "Editar Campo" : "Novo Campo"}
@@ -887,17 +1175,48 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                         </div>
                                     ))}
                                 </div>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="w-full mt-2 border-dashed"
-                                    onClick={addOption}
-                                >
-                                    <Plus className="h-4 w-4 mr-2" />
-                                    Adicionar Opção
-                                </Button>
+                                <div className="flex gap-2 mt-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="flex-1 border-dashed"
+                                        onClick={addOption}
+                                    >
+                                        <Plus className="h-4 w-4 mr-2" />
+                                        Adicionar Opção
+                                    </Button>
+                                    {formValues.mapping_source && (
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            className="flex-1 gap-2"
+                                            onClick={loadOptionsFromDB}
+                                            disabled={isLoadingOptions}
+                                        >
+                                            {isLoadingOptions ? (
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                            ) : (
+                                                <Download className="h-4 w-4" />
+                                            )}
+                                            Carregar do banco
+                                        </Button>
+                                    )}
+                                </div>
                             </div>
                         )}
+
+                        <div className="flex items-center gap-3 rounded-lg border p-3">
+                            <Switch
+                                checked={formValues.optional}
+                                onCheckedChange={(val) => setFormValues({ ...formValues, optional: val })}
+                            />
+                            <div>
+                                <Label>Este campo é opcional?</Label>
+                                <p className="text-xs text-muted-foreground">
+                                    Se sim, o estudante poderá pular esta pergunta no formulário.
+                                </p>
+                            </div>
+                        </div>
 
                         <div className="flex items-center gap-3 rounded-lg border p-3">
                             <Switch
