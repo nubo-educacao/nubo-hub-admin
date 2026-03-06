@@ -1,5 +1,8 @@
--- Add relationship column
+-- Add relationship and family columns
 ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS relationship text;
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS isdependent boolean DEFAULT false;
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS parent_user_id uuid REFERENCES public.user_profiles(id);
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS current_dependent_id uuid REFERENCES public.user_profiles(id);
 
 -- 1. Drop old function signatures to prevent overloading issues
 DROP FUNCTION IF EXISTS public.update_own_profile(p_full_name text, p_age integer, p_city text, p_education text);

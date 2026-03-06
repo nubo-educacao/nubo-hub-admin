@@ -1,3 +1,7 @@
+-- 0. Ensure missing columns exist
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS passport_phase TEXT;
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS workflow_data JSONB;
+
 -- 1. Add CHECK constraint on user_profiles.passport_phase
 ALTER TABLE public.user_profiles 
 ADD CONSTRAINT user_profiles_passport_phase_check 

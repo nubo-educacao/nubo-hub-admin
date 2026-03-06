@@ -88,6 +88,7 @@ interface PartnerFormField {
     data_type: string;
     options: any; // Using any for Json compatibility
     mapping_source: string | null;
+    maskking: string | null;
     is_criterion: boolean;
     criterion_rule: any; // Using any for Json compatibility
     sort_order: number;
@@ -103,6 +104,7 @@ interface FormFieldValues {
     data_type: string;
     optionsList: string[];
     mapping_source: string;
+    maskking: string;
     is_criterion: boolean;
     criterion_rule: string;
     sort_order: number;
@@ -116,6 +118,7 @@ const EMPTY_FIELD: FormFieldValues = {
     data_type: "text",
     optionsList: ["Opção 1", "Opção 2"],
     mapping_source: "",
+    maskking: "",
     is_criterion: false,
     criterion_rule: "",
     sort_order: 0,
@@ -156,6 +159,21 @@ const MAPPING_SOURCES = [
     { value: "user_preferences.quota_types", label: "Prefs: Tipos de Cota" },
     { value: "user_preferences.state_preference", label: "Prefs: Estado de Preferência" },
     { value: "user_preferences.university_preference", label: "Prefs: Universidade de Preferência" },
+];
+
+const MASK_TYPES_TEXT = [
+    { value: "none", label: "Nenhuma" },
+    { value: "email", label: "E-mail" },
+    { value: "textarea", label: "Texto Longo (Textarea)" },
+];
+
+const MASK_TYPES_NUMBER = [
+    { value: "none", label: "Nenhuma" },
+    { value: "cpf", label: "CPF" },
+    { value: "cnpj", label: "CNPJ" },
+    { value: "phone", label: "Telefone" },
+    { value: "brl", label: "Moeda (BRL)" },
+    { value: "date", label: "Data" },
 ];
 
 // ─── Sortable Components ───────────────────────────────────────────────────
@@ -402,6 +420,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                 data_type: values.data_type,
                 options: hasOptions ? values.optionsList.filter(o => o.trim() !== "") : null,
                 mapping_source: values.mapping_source || null,
+                maskking: values.maskking || null,
                 is_criterion: values.is_criterion && !!values.criterion_rule,
                 criterion_rule: (values.is_criterion && values.criterion_rule) ? JSON.parse(values.criterion_rule) : null,
                 sort_order: values.sort_order,
@@ -485,6 +504,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                 data_type: f.data_type,
                 options: f.options,
                 mapping_source: f.mapping_source,
+                maskking: f.maskking,
                 is_criterion: f.is_criterion,
                 criterion_rule: f.criterion_rule,
                 sort_order: index + 1,
@@ -626,6 +646,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
             data_type: field.data_type,
             optionsList: optionsList,
             mapping_source: field.mapping_source || "",
+            maskking: field.maskking || "",
             is_criterion: field.is_criterion,
             criterion_rule: field.criterion_rule ? JSON.stringify(field.criterion_rule, null, 2) : "",
             sort_order: field.sort_order,
@@ -1087,7 +1108,18 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                 <Label>Tipo de Dado</Label>
                                 <Select
                                     value={formValues.data_type}
-                                    onValueChange={(val) => setFormValues({ ...formValues, data_type: val })}
+                                    onValueChange={(val) => {
+                                        // Reset mask if incompatible with new data type
+                                        let newMask = formValues.maskking;
+                                        if (val === "text") {
+                                            if (!MASK_TYPES_TEXT.find(m => m.value === newMask)) newMask = "none";
+                                        } else if (val === "number") {
+                                            if (!MASK_TYPES_NUMBER.find(m => m.value === newMask)) newMask = "none";
+                                        } else {
+                                            newMask = "none";
+                                        }
+                                        setFormValues({ ...formValues, data_type: val, maskking: newMask });
+                                    }}
                                 >
                                     <SelectTrigger>
                                         <SelectValue />
@@ -1148,6 +1180,27 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                 </Popover>
                             </div>
                         </div>
+
+                        {(formValues.data_type === "text" || formValues.data_type === "number") && (
+                            <div className="space-y-2">
+                                <Label>Máscara / Validação</Label>
+                                <Select
+                                    value={formValues.maskking || "none"}
+                                    onValueChange={(val) => setFormValues({ ...formValues, maskking: val === "none" ? "" : val })}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Selecione uma máscara..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {(formValues.data_type === "text" ? MASK_TYPES_TEXT : MASK_TYPES_NUMBER).map((mt) => (
+                                            <SelectItem key={mt.value} value={mt.value}>
+                                                {mt.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
 
                         {(formValues.data_type === "select" || formValues.data_type === "multiselect") && (
                             <div className="space-y-3 bg-muted/50 p-4 rounded-md border">
