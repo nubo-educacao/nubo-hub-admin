@@ -182,6 +182,7 @@ const MASK_TYPES_NUMBER = [
     { value: "cpf", label: "CPF" },
     { value: "cnpj", label: "CNPJ" },
     { value: "phone", label: "Telefone" },
+    { value: "cep", label: "CEP" },
     { value: "brl", label: "Moeda (BRL)" },
     { value: "date", label: "Data" },
 ];
