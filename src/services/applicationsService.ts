@@ -9,7 +9,7 @@ export interface ApplicationWithDetails {
     partner_name: string | null;
     full_name: string | null;
     phone: string | null;
-    status: "started" | "eligible" | "ineligible" | "submitted";
+    status: "started" | "eligible" | "ineligible" | "submitted" | "DRAFT" | "SUBMITTED";
     answers: Record<string, unknown>;
     created_at: string;
 }

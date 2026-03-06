@@ -34,9 +34,13 @@ const STATUS_CONFIG: Record<
     { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType }
 > = {
     started: { label: "Em Andamento", variant: "outline", icon: Clock },
+    DRAFT: { label: "Rascunho", variant: "outline", icon: Clock },
     eligible: { label: "Elegível", variant: "default", icon: CheckCircle2 },
+    ELIGIBLE: { label: "Elegível", variant: "default", icon: CheckCircle2 },
     ineligible: { label: "Inelegível", variant: "destructive", icon: XCircle },
+    INELIGIBLE: { label: "Inelegível", variant: "destructive", icon: XCircle },
     submitted: { label: "Enviado", variant: "secondary", icon: FileSpreadsheet },
+    SUBMITTED: { label: "Enviado", variant: "secondary", icon: FileSpreadsheet },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -148,6 +152,7 @@ export default function ApplicationsTable({
                     <SelectContent>
                         <SelectItem value="all">Todos os Status</SelectItem>
                         <SelectItem value="started">Em Andamento</SelectItem>
+                        <SelectItem value="DRAFT">Rascunho</SelectItem>
                         <SelectItem value="eligible">Elegível</SelectItem>
                         <SelectItem value="ineligible">Inelegível</SelectItem>
                         <SelectItem value="submitted">Enviado</SelectItem>

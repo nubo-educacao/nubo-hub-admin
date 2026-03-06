@@ -55,7 +55,11 @@ import {
     PointerSensor,
     useSensor,
     useSensors,
-    DragEndEvent
+    DragEndEvent,
+    DragStartEvent,
+    DragOverEvent,
+    DragOverlay,
+    defaultDropAnimationSideEffects
 } from '@dnd-kit/core';
 import {
     arrayMove,
@@ -75,6 +79,9 @@ interface PartnerStep {
     sort_order: number;
     introduction?: string | null;
     secret_step?: boolean;
+    is_iterable?: boolean;
+    repeat_limit?: number | null;
+    conditional_rule?: any; // JSONB storage: { field_id: string, operator: string, value: any }
     created_at?: string;
     updated_at?: string;
 }
@@ -91,6 +98,7 @@ interface PartnerFormField {
     maskking: string | null;
     is_criterion: boolean;
     criterion_rule: any; // Using any for Json compatibility
+    conditional_rule: any; // JSONB storage: { field_id: string, operator: string, value: any }
     sort_order: number;
     optional: boolean;
     created_at: string;
@@ -107,6 +115,7 @@ interface FormFieldValues {
     maskking: string;
     is_criterion: boolean;
     criterion_rule: string;
+    conditional_rule: string; // JSON string in form
     sort_order: number;
     optional: boolean;
 }
@@ -121,6 +130,7 @@ const EMPTY_FIELD: FormFieldValues = {
     maskking: "",
     is_criterion: false,
     criterion_rule: "",
+    conditional_rule: "",
     sort_order: 0,
     optional: false,
 };
@@ -210,24 +220,38 @@ function SortableStepRow({ step, onEdit, onDelete }: { step: PartnerStep, onEdit
     );
 }
 
-function SortableFieldRow({ field, index, onEdit, onDelete }: { field: PartnerFormField, index: number, onEdit: (f: PartnerFormField) => void, onDelete: (id: string) => void }) {
-    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: field.id });
-    const style = {
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.5 : 1,
-        position: isDragging ? "relative" as const : undefined,
-        zIndex: isDragging ? 10 : 1,
-    };
+function FieldRow({ 
+    field, 
+    index, 
+    onEdit, 
+    onDelete, 
+    isDragging, 
+    style, 
+    attributes, 
+    listeners, 
+    setNodeRef,
+    onClone
+}: { 
+    field: PartnerFormField, 
+    index: number, 
+    onEdit: (f: PartnerFormField) => void, 
+    onDelete: (id: string) => void,
+    onClone: (f: PartnerFormField) => void,
+    isDragging?: boolean,
+    style?: React.CSSProperties,
+    attributes?: any,
+    listeners?: any,
+    setNodeRef?: (node: HTMLElement | null) => void
+}) {
     return (
-        <TableRow ref={setNodeRef} style={style} className={isDragging ? "bg-muted/50" : ""}>
+        <TableRow ref={setNodeRef} style={style} className={isDragging ? "bg-muted/30 opacity-0" : ""}>
             <TableCell className="w-[40px] px-2 text-center">
                 <Button variant="ghost" size="icon" className="cursor-grab hover:bg-muted/50 h-8 w-8 focus:ring-0" {...attributes} {...listeners}>
                     <GripVertical className="h-4 w-4 text-muted-foreground" />
                 </Button>
             </TableCell>
-            <TableCell className="text-muted-foreground">{index + 1}</TableCell>
-            <TableCell className="font-mono text-sm">{field.field_name}</TableCell>
+            <TableCell className="text-muted-foreground w-[40px]">{index + 1}</TableCell>
+            <TableCell className="font-mono text-[11px] w-[120px] truncate" title={field.field_name}>{field.field_name}</TableCell>
             <TableCell className="max-w-[250px] whitespace-normal break-words">
                 <div className="flex items-start gap-2">
                     <span>{field.question_text}</span>
@@ -246,10 +270,19 @@ function SortableFieldRow({ field, index, onEdit, onDelete }: { field: PartnerFo
                     </Button>
                 </div>
             </TableCell>
-            <TableCell>
+            <TableCell className="w-[100px]">
                 <Badge variant="outline">
                     {DATA_TYPES.find((d) => d.value === field.data_type)?.label || field.data_type}
                 </Badge>
+            </TableCell>
+            <TableCell className="w-[120px]">
+                {field.maskking && field.maskking !== "none" ? (
+                    <Badge variant="secondary" className="text-[10px] bg-purple-50 text-purple-700 border-purple-200">
+                        {([...MASK_TYPES_TEXT, ...MASK_TYPES_NUMBER]).find(m => m.value === field.maskking)?.label || field.maskking}
+                    </Badge>
+                ) : (
+                    <span className="text-muted-foreground">—</span>
+                )}
             </TableCell>
             <TableCell className="text-xs text-muted-foreground">
                 {field.mapping_source || "—"}
@@ -270,6 +303,14 @@ function SortableFieldRow({ field, index, onEdit, onDelete }: { field: PartnerFo
             </TableCell>
             <TableCell>
                 <div className="flex gap-1" onPointerDown={(e) => e.stopPropagation()}>
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => onClone(field)}
+                        title="Clonar este campo para outro step/parceiro"
+                    >
+                        <Copy className="h-4 w-4" />
+                    </Button>
                     <Button variant="ghost" size="icon" onClick={() => onEdit(field)}>
                         <Pencil className="h-4 w-4" />
                     </Button>
@@ -279,6 +320,28 @@ function SortableFieldRow({ field, index, onEdit, onDelete }: { field: PartnerFo
                 </div>
             </TableCell>
         </TableRow>
+    );
+}
+
+function SortableFieldRow({ field, index, onEdit, onDelete, onClone }: { field: PartnerFormField, index: number, onEdit: (f: PartnerFormField) => void, onDelete: (id: string) => void, onClone: (f: PartnerFormField) => void }) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: field.id });
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+    };
+    return (
+        <FieldRow 
+            field={field}
+            index={index}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onClone={onClone}
+            isDragging={isDragging}
+            style={style}
+            attributes={attributes}
+            listeners={listeners}
+            setNodeRef={setNodeRef}
+        />
     );
 }
 
@@ -319,7 +382,53 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
     const [stepSortOrder, setStepSortOrder] = useState(0);
     const [stepIntroduction, setStepIntroduction] = useState("");
     const [stepSecret, setStepSecret] = useState(false);
+    const [stepIsIterable, setStepIsIterable] = useState(false);
+    const [stepRepeatLimit, setStepRepeatLimit] = useState<number | null>(null);
+    const [stepConditionalRule, setStepConditionalRule] = useState("");
     const [deleteStepId, setDeleteStepId] = useState<string | null>(null);
+    const [isImportFieldsDialogOpen, setIsImportFieldsDialogOpen] = useState(false);
+    const [importSourcePartnerId, setImportSourcePartnerId] = useState<string>("");
+    const [importSourceStepId, setImportSourceStepId] = useState<string>("");
+    const [importTargetStepId, setImportTargetStepId] = useState<string>("");
+    const [isImporting, setIsImporting] = useState(false);
+    const [activeId, setActiveId] = useState<string | null>(null);
+
+    const [isCloneFieldDialogOpen, setIsCloneFieldDialogOpen] = useState(false);
+    const [cloneFieldTargetPartnerId, setCloneFieldTargetPartnerId] = useState<string>("");
+    const [cloneFieldTargetStepId, setCloneFieldTargetStepId] = useState<string>("");
+    const [cloningFieldSource, setCloningFieldSource] = useState<PartnerFormField | null>(null);
+    const [isCloningSingle, setIsCloningSingle] = useState(false);
+
+    // Conditional Logic State for steps
+    const [stepHasCondition, setStepHasCondition] = useState(false);
+    const [stepTriggerField, setStepTriggerField] = useState("");
+    const [stepTriggerOperator, setStepTriggerOperator] = useState("==");
+    const [stepTriggerValue, setStepTriggerValue] = useState("");
+
+    // Conditional Logic State for fields
+    const [fieldHasCondition, setFieldHasCondition] = useState(false);
+    const [fieldTriggerField, setFieldTriggerField] = useState("");
+    const [fieldTriggerOperator, setFieldTriggerOperator] = useState("==");
+    const [fieldTriggerValue, setFieldTriggerValue] = useState("");
+
+    const parseRule = (jsonLogic: any) => {
+        if (!jsonLogic || typeof jsonLogic !== 'object') return null;
+        const operator = Object.keys(jsonLogic)[0];
+        const args = jsonLogic[operator];
+        if (Array.isArray(args) && args.length === 2 && args[0].var) {
+            return {
+                field: args[0].var,
+                operator,
+                value: String(args[1])
+            };
+        }
+        return null;
+    };
+
+    const serializeRule = (field: string, operator: string, value: string) => {
+        if (!field) return null;
+        return { [operator]: [{ var: field }, value] };
+    };
 
     // ─── Queries ─────────────────────────────────────────────────────────────
 
@@ -365,6 +474,9 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                 sort_order: stepSortOrder,
                 introduction: stepIntroduction || null,
                 secret_step: stepSecret,
+                is_iterable: stepIsIterable,
+                repeat_limit: stepIsIterable ? stepRepeatLimit : null,
+                conditional_rule: stepHasCondition ? serializeRule(stepTriggerField, stepTriggerOperator, stepTriggerValue) : null,
             };
             if (editingStep) {
                 const { error } = await supabase
@@ -385,6 +497,16 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
             setIsStepDialogOpen(false);
             setEditingStep(null);
             setStepName("");
+            setStepSortOrder(0);
+            setStepIntroduction("");
+            setStepSecret(false);
+            setStepIsIterable(false);
+            setStepRepeatLimit(null);
+            setStepHasCondition(false);
+            setStepTriggerField("");
+            setStepTriggerOperator("==");
+            setStepTriggerValue("");
+            setStepConditionalRule("");
         },
         onError: (err: any) => {
             toast.error(`Erro: ${err.message}`);
@@ -423,6 +545,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                 maskking: values.maskking || null,
                 is_criterion: values.is_criterion && !!values.criterion_rule,
                 criterion_rule: (values.is_criterion && values.criterion_rule) ? JSON.parse(values.criterion_rule) : null,
+                conditional_rule: values.conditional_rule ? JSON.parse(values.conditional_rule) : null,
                 sort_order: values.sort_order,
                 optional: values.optional,
             };
@@ -479,6 +602,9 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                 sort_order: index + 1,
                 introduction: s.introduction || null,
                 secret_step: s.secret_step || false,
+                is_iterable: s.is_iterable || false,
+                repeat_limit: s.repeat_limit || null,
+                conditional_rule: s.conditional_rule || null,
             }));
             const { error } = await supabase
                 .from("partner_steps")
@@ -495,7 +621,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
 
     const reorderFieldsMutation = useMutation({
         mutationFn: async (orderedFields: PartnerFormField[]) => {
-            const updates = orderedFields.map((f, index) => ({
+            const updates = orderedFields.map((f) => ({
                 id: f.id,
                 partner_id: f.partner_id,
                 step_id: f.step_id,
@@ -507,7 +633,8 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                 maskking: f.maskking,
                 is_criterion: f.is_criterion,
                 criterion_rule: f.criterion_rule,
-                sort_order: index + 1,
+                conditional_rule: f.conditional_rule,
+                sort_order: f.sort_order,
                 optional: f.optional,
             }));
             const { error } = await supabase
@@ -522,6 +649,40 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
             toast.error(`Erro ao reordenar Campos: ${err.message}`);
         }
     });
+
+    const getRuleDependencies = (rule: any): string[] => {
+        if (!rule || typeof rule !== 'object') return [];
+        const deps: string[] = [];
+        if (rule.var && typeof rule.var === 'string') {
+            deps.push(rule.var);
+        } else {
+            Object.values(rule).forEach(v => {
+                if (Array.isArray(v)) {
+                    v.forEach(item => deps.push(...getRuleDependencies(item)));
+                } else if (v && typeof v === 'object') {
+                    deps.push(...getRuleDependencies(v));
+                }
+            });
+        }
+        return [...new Set(deps)];
+    };
+
+    const validateReorder = (newFields: PartnerFormField[]) => {
+        for (let i = 0; i < newFields.length; i++) {
+            const field = newFields[i];
+            if (field.conditional_rule) {
+                const triggerNames = getRuleDependencies(field.conditional_rule);
+                for (const triggerName of triggerNames) {
+                    const triggerIndex = newFields.findIndex(f => f.field_name === triggerName);
+                    if (triggerIndex !== -1 && triggerIndex >= i) {
+                        toast.error(`Violação de dependência: O campo "${field.field_name}" depende de "${triggerName}", que está posicionado depois dele.`);
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    };
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -545,32 +706,124 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
         }
     };
 
-    const handleDragEndFields = (groupId: string, event: DragEndEvent) => {
+    const handleDragStart = (event: DragStartEvent) => {
+        setActiveId(event.active.id as string);
+    };
+
+    const handleDragOver = (event: DragOverEvent) => {
         const { active, over } = event;
-        if (over && active.id !== over.id) {
-            const isOrphan = groupId === "orphan";
-            const groupFields = fields.filter((f) => {
-                if (isOrphan) return !f.step_id || !steps.find(s => s.id === f.step_id);
-                return f.step_id === groupId;
+        if (!over) return;
+
+        const activeId = active.id as string;
+        const overId = over.id as string;
+
+        if (activeId === overId) return;
+
+        const activeField = fields.find(f => f.id === activeId);
+        const overField = fields.find(f => f.id === overId);
+
+        if (!activeField || !overField) return;
+
+        // If moving between different steps, we can optimistically update the UI
+        // This makes the transition smoother as the item jumps to the new list
+        if (activeField.step_id !== overField.step_id) {
+            const updatedFields = fields.map(f => {
+                if (f.id === activeId) {
+                    return { ...f, step_id: overField.step_id };
+                }
+                return f;
             });
+            queryClient.setQueryData(["partner-forms", selectedPartnerId], updatedFields);
+        }
+    };
 
-            const oldIndex = groupFields.findIndex(f => f.id === active.id);
-            const newIndex = groupFields.findIndex(f => f.id === over.id);
-            const reorderedGroup = arrayMove(groupFields, oldIndex, newIndex);
+    const handleDragEndFields = (event: DragEndEvent) => {
+        setActiveId(null);
+        const { active, over } = event;
+        if (!over || active.id === over.id) return;
 
-            let updatedFields = [...fields];
-            let gIdx = 0;
-            updatedFields = updatedFields.map((f) => {
-                const belongsToGroup = isOrphan ? (!f.step_id || !steps.find(s => s.id === f.step_id)) : (f.step_id === groupId);
-                if (belongsToGroup) {
-                    const newItem = reorderedGroup[gIdx++];
-                    return { ...newItem, sort_order: gIdx };
+        const activeFieldId = active.id as string;
+        const overFieldId = over.id as string;
+
+        const activeField = fields.find(f => f.id === activeFieldId);
+        const overField = fields.find(f => f.id === overFieldId);
+
+        if (!activeField || !overField) return;
+
+        // If they are in the same step, just reorder within the group
+        if (activeField.step_id === overField.step_id) {
+            const groupFields = fields.filter(f => f.step_id === activeField.step_id);
+            const oldIndex = groupFields.findIndex(f => f.id === activeFieldId);
+            const newIndex = groupFields.findIndex(f => f.id === overFieldId);
+            
+            const reorderedGroup = arrayMove(groupFields, oldIndex, newIndex)
+                .map((f, idx) => ({ ...f, sort_order: idx + 1 }));
+            
+            // Update local state and DB
+            const updatedFields = fields.map(f => {
+                if (f.step_id === activeField.step_id) {
+                    const idx = reorderedGroup.findIndex(rg => rg.id === f.id);
+                    return reorderedGroup[idx];
                 }
                 return f;
             });
 
-            queryClient.setQueryData(["partner-forms", selectedPartnerId], updatedFields as any);
+            queryClient.setQueryData(["partner-forms", selectedPartnerId], updatedFields);
+
+            if (!validateReorder(updatedFields)) {
+                queryClient.invalidateQueries({ queryKey: ["partner-forms", selectedPartnerId] });
+                return;
+            }
+
             reorderFieldsMutation.mutate(reorderedGroup);
+        } else {
+            // Cross-step move
+            const sourceStepId = activeField.step_id;
+            const destStepId = overField.step_id;
+
+            const updatedActiveField = { ...activeField, step_id: destStepId };
+            
+            // Re-order destination step
+            const destFields = fields.filter(f => f.step_id === destStepId);
+            const overIndex = destFields.findIndex(f => f.id === overFieldId);
+            
+            const newDestFields = [...destFields];
+            newDestFields.splice(overIndex, 0, updatedActiveField);
+            
+            // Re-index both source and destination
+            const newSourceFields = fields.filter(f => f.step_id === sourceStepId && f.id !== activeFieldId);
+            
+            const finalFields = fields.map(f => {
+                if (f.id === activeFieldId) return { ...updatedActiveField, sort_order: overIndex + 1 };
+                
+                if (f.step_id === sourceStepId) {
+                    const idx = newSourceFields.findIndex(ns => ns.id === f.id);
+                    return { ...f, sort_order: idx + 1 };
+                }
+                
+                if (f.step_id === destStepId) {
+                    const idx = newDestFields.findIndex(nd => nd.id === f.id);
+                    return { ...f, sort_order: idx + 1 };
+                }
+                
+                return f;
+            });
+
+            queryClient.setQueryData(["partner-forms", selectedPartnerId], finalFields);
+            
+            // Validate cross-step move
+            if (!validateReorder(finalFields)) {
+                // Revert on error
+                queryClient.invalidateQueries({ queryKey: ["partner-forms", selectedPartnerId] });
+                return;
+            }
+
+            // Persist all fields in source and destination
+            const toUpdate = [
+                ...newSourceFields.map((f, i) => ({ ...f, sort_order: i + 1 })),
+                ...newDestFields.map((f, i) => ({ ...f, sort_order: i + 1 }))
+            ];
+            reorderFieldsMutation.mutate(toUpdate);
         }
     };
 
@@ -582,6 +835,9 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
         setStepSortOrder(steps.length + 1);
         setStepIntroduction("");
         setStepSecret(false);
+        setStepIsIterable(false);
+        setStepRepeatLimit(null);
+        setStepConditionalRule("");
         setIsStepDialogOpen(true);
     };
 
@@ -591,6 +847,20 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
         setStepSortOrder(step.sort_order);
         setStepIntroduction(step.introduction || "");
         setStepSecret(step.secret_step || false);
+        setStepIsIterable(step.is_iterable || false);
+        setStepRepeatLimit(step.repeat_limit || null);
+        
+        const rule = parseRule(step.conditional_rule);
+        if (rule) {
+            setStepHasCondition(true);
+            setStepTriggerField(rule.field);
+            setStepTriggerOperator(rule.operator);
+            setStepTriggerValue(rule.value);
+        } else {
+            setStepHasCondition(false);
+            setStepTriggerField("");
+        }
+        setStepConditionalRule(step.conditional_rule ? JSON.stringify(step.conditional_rule, null, 2) : "");
         setIsStepDialogOpen(true);
     };
 
@@ -601,6 +871,147 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
         }
         saveStepMutation.mutate();
     };
+
+    const handleImportFields = async () => {
+        if (!importSourceStepId || !importTargetStepId) {
+            toast.error("Selecione a origem e o destino.");
+            return;
+        }
+
+        setIsImporting(true);
+        try {
+            // Fetch fields from source step
+            const { data, error: fetchError } = await supabase
+                .from("partner_forms")
+                .select("*")
+                .eq("step_id", importSourceStepId)
+                .order("sort_order", { ascending: true });
+
+            if (fetchError) throw fetchError;
+            const sourceFields = (data || []) as unknown as PartnerFormField[];
+            if (sourceFields.length === 0) {
+                toast.info("A etapa de origem não possui campos.");
+                return;
+            }
+
+            // Prepare new fields
+            const newFields = sourceFields.map((f, idx) => ({
+                partner_id: selectedPartnerId,
+                step_id: importTargetStepId === "orphan" ? null : importTargetStepId,
+                field_name: f.field_name,
+                question_text: f.question_text,
+                data_type: f.data_type,
+                options: f.options,
+                mapping_source: f.mapping_source,
+                maskking: f.maskking,
+                is_criterion: f.is_criterion,
+                criterion_rule: f.criterion_rule,
+                sort_order: fields.length + idx + 1,
+                optional: f.optional ?? false,
+            }));
+
+            const { error: insertError } = await supabase
+                .from("partner_forms")
+                .insert(newFields);
+
+            if (insertError) throw insertError;
+
+            toast.success(`${newFields.length} campos importados com sucesso!`);
+            queryClient.invalidateQueries({ queryKey: ["partner-forms", selectedPartnerId] });
+            setIsImportFieldsDialogOpen(false);
+            setImportSourceStepId("");
+        } catch (err: any) {
+            toast.error(`Erro ao importar: ${err.message}`);
+        } finally {
+            setIsImporting(false);
+        }
+    };
+
+    const handleCloneSingleField = async () => {
+        if (!cloningFieldSource || !cloneFieldTargetPartnerId || !cloneFieldTargetStepId) {
+            toast.error("Selecione o destino.");
+            return;
+        }
+
+        setIsCloningSingle(true);
+        try {
+            // Calculate sort order for target step
+            const { data: targetFields } = await supabase
+                .from("partner_forms")
+                .select("sort_order")
+                .eq("partner_id", cloneFieldTargetPartnerId)
+                .eq("step_id", cloneFieldTargetStepId === "orphan" ? null : cloneFieldTargetStepId)
+                .order("sort_order", { ascending: false })
+                .limit(1);
+
+            const nextOrder = (targetFields?.[0]?.sort_order || 0) + 1;
+
+            const newField = {
+                partner_id: cloneFieldTargetPartnerId,
+                step_id: cloneFieldTargetStepId === "orphan" ? null : cloneFieldTargetStepId,
+                field_name: cloningFieldSource.field_name,
+                question_text: cloningFieldSource.question_text,
+                data_type: cloningFieldSource.data_type,
+                options: cloningFieldSource.options,
+                mapping_source: cloningFieldSource.mapping_source,
+                maskking: cloningFieldSource.maskking,
+                is_criterion: cloningFieldSource.is_criterion,
+                criterion_rule: cloningFieldSource.criterion_rule,
+                sort_order: nextOrder,
+                optional: cloningFieldSource.optional ?? false,
+            };
+
+            const { error: insertError } = await supabase
+                .from("partner_forms")
+                .insert(newField);
+
+            if (insertError) throw insertError;
+
+            toast.success(`Campo "${cloningFieldSource.field_name}" clonado com sucesso!`);
+            
+            // Only invalidate if current partner matches target
+            if (cloneFieldTargetPartnerId === selectedPartnerId) {
+                queryClient.invalidateQueries({ queryKey: ["partner-forms", selectedPartnerId] });
+            }
+            
+            setIsCloneFieldDialogOpen(false);
+            setCloningFieldSource(null);
+        } catch (err: any) {
+            toast.error(`Erro ao clonar: ${err.message}`);
+        } finally {
+            setIsCloningSingle(false);
+        }
+    };
+
+    const { data: importSourceSteps = [], isLoading: isLoadingImportSteps } = useQuery({
+        queryKey: ["import-source-steps", importSourcePartnerId],
+        queryFn: async () => {
+            if (!importSourcePartnerId) return [];
+            const { data, error } = await supabase
+                .from("partner_steps")
+                .select("*")
+                .eq("partner_id", importSourcePartnerId)
+                .order("sort_order", { ascending: true });
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: isImportFieldsDialogOpen && !!importSourcePartnerId,
+    });
+
+    const { data: cloneTargetSteps = [], isLoading: isLoadingCloneTargetSteps } = useQuery({
+        queryKey: ["clone-target-steps", cloneFieldTargetPartnerId],
+        queryFn: async () => {
+            if (!cloneFieldTargetPartnerId) return [];
+            const { data, error } = await supabase
+                .from("partner_steps")
+                .select("*")
+                .eq("partner_id", cloneFieldTargetPartnerId)
+                .order("sort_order", { ascending: true });
+            if (error) throw error;
+            return data || [];
+        },
+        enabled: isCloneFieldDialogOpen && !!cloneFieldTargetPartnerId,
+    });
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -639,6 +1050,17 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
             optionsList = field.options as string[];
         }
 
+        const rule = parseRule(field.conditional_rule);
+        if (rule) {
+            setFieldHasCondition(true);
+            setFieldTriggerField(rule.field);
+            setFieldTriggerOperator(rule.operator);
+            setFieldTriggerValue(rule.value);
+        } else {
+            setFieldHasCondition(false);
+            setFieldTriggerField("");
+        }
+
         setFormValues({
             step_id: field.step_id || "",
             field_name: field.field_name,
@@ -649,6 +1071,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
             maskking: field.maskking || "",
             is_criterion: field.is_criterion,
             criterion_rule: field.criterion_rule ? JSON.stringify(field.criterion_rule, null, 2) : "",
+            conditional_rule: field.conditional_rule ? JSON.stringify(field.conditional_rule, null, 2) : "",
             sort_order: field.sort_order,
             optional: field.optional ?? false,
         });
@@ -661,15 +1084,12 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
             return;
         }
 
-        // criterion_rule is now managed by the visual builder, 
-        // but still validate if present
-        try {
-            if (formValues.criterion_rule) JSON.parse(formValues.criterion_rule);
-        } catch {
-            toast.error("Regra de critério inválida.");
-            return;
-        }
-        saveMutation.mutate(formValues);
+        const condRule = fieldHasCondition ? serializeRule(fieldTriggerField, fieldTriggerOperator, fieldTriggerValue) : null;
+
+        saveMutation.mutate({
+            ...formValues,
+            conditional_rule: condRule as any
+        });
     };
 
     const updateOption = (index: number, val: string) => {
@@ -918,7 +1338,14 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                     Nenhum campo configurado. Crie steps e adicione campos a eles.
                                 </div>
                             ) : (
-                                <Accordion type="multiple" defaultValue={fieldsByStep.map((_, i) => `step-${i}`)} className="w-full">
+                                <DndContext 
+                                    sensors={sensors} 
+                                    collisionDetection={closestCenter} 
+                                    onDragStart={handleDragStart}
+                                    onDragOver={handleDragOver}
+                                    onDragEnd={handleDragEndFields}
+                                >
+                                    <Accordion type="multiple" defaultValue={fieldsByStep.map((_, i) => `step-${i}`)} className="w-full">
                                     {fieldsByStep.map((group, groupIdx) => (
                                         <AccordionItem key={group.step?.id || "orphan"} value={`step-${groupIdx}`}>
                                             <AccordionTrigger className="hover:no-underline px-1">
@@ -944,9 +1371,10 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                                                     <TableRow>
                                                                         <TableHead className="w-[40px] px-2"></TableHead>
                                                                         <TableHead className="w-[40px]">#</TableHead>
-                                                                        <TableHead>Campo</TableHead>
+                                                                        <TableHead className="w-[120px]">Campo</TableHead>
                                                                         <TableHead>Pergunta</TableHead>
-                                                                        <TableHead>Tipo</TableHead>
+                                                                        <TableHead className="w-[100px]">Tipo</TableHead>
+                                                                        <TableHead className="w-[120px]">Máscara</TableHead>
                                                                         <TableHead>Auto-Fill</TableHead>
                                                                         <TableHead>Obrigatório</TableHead>
                                                                         <TableHead>Critério</TableHead>
@@ -954,38 +1382,83 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                                                     </TableRow>
                                                                 </TableHeader>
                                                                 <TableBody>
-                                                                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => handleDragEndFields(group.step?.id || "orphan", e)}>
-                                                                        <SortableContext items={group.fields.map(f => f.id)} strategy={verticalListSortingStrategy}>
-                                                                            {group.fields.map((field, idx) => (
+                                                                    <SortableContext items={group.fields.map(f => f.id)} strategy={verticalListSortingStrategy}>
+                                                                        {group.fields.map((field, idx) => (
                                                                                 <SortableFieldRow
                                                                                     key={field.id}
                                                                                     field={field}
                                                                                     index={idx}
                                                                                     onEdit={handleEdit}
                                                                                     onDelete={setDeleteFieldId}
+                                                                                    onClone={(f) => {
+                                                                                        setCloningFieldSource(f);
+                                                                                        setCloneFieldTargetPartnerId(f.partner_id);
+                                                                                        setCloneFieldTargetStepId(f.step_id || "orphan");
+                                                                                        setIsCloneFieldDialogOpen(true);
+                                                                                    }}
                                                                                 />
                                                                             ))}
-                                                                        </SortableContext>
-                                                                    </DndContext>
+                                                                    </SortableContext>
                                                                 </TableBody>
                                                             </Table>
                                                         </div>
                                                     )}
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="w-full border-dashed gap-2"
-                                                        onClick={() => handleAdd(group.step?.id)}
-                                                    >
-                                                        <Plus className="h-4 w-4" />
-                                                        Novo Campo {group.step ? `em "${group.step.step_name}"` : ""}
-                                                    </Button>
+                                                    <div className="flex gap-2">
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="flex-1 border-dashed gap-2"
+                                                            onClick={() => handleAdd(group.step?.id)}
+                                                        >
+                                                            <Plus className="h-4 w-4" />
+                                                            Novo Campo
+                                                        </Button>
+                                                        <Button
+                                                            variant="secondary"
+                                                            size="sm"
+                                                            className="gap-2"
+                                                            onClick={() => {
+                                                                setImportTargetStepId(group.step?.id || "orphan");
+                                                                setIsImportFieldsDialogOpen(true);
+                                                            }}
+                                                        >
+                                                            <Download className="h-4 w-4" />
+                                                            Importar campos
+                                                        </Button>
+                                                    </div>
                                                 </div>
                                             </AccordionContent>
                                         </AccordionItem>
                                     ))}
                                 </Accordion>
-                            )}
+
+                                <DragOverlay dropAnimation={{
+                                    sideEffects: defaultDropAnimationSideEffects({
+                                        styles: {
+                                            active: {
+                                                opacity: '0.4',
+                                            },
+                                        },
+                                    }),
+                                }}>
+                                    {activeId ? (
+                                        <div className="rounded-md border bg-white shadow-xl opacity-90 overflow-hidden">
+                                            <Table>
+                                                <TableBody>
+                                                    <FieldRow 
+                                                        field={fields.find(f => f.id === activeId)!} 
+                                                        index={fields.findIndex(f => f.id === activeId)}
+                                                        onEdit={() => {}}
+                                                        onDelete={() => {}}
+                                                        onClone={() => {}}
+                                                    />
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    ) : null}
+                                </DragOverlay>
+                            </DndContext>
+                        )}
                         </CardContent>
                     </Card>
                 </>
@@ -1022,16 +1495,116 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                 onChange={(e) => setStepIntroduction(e.target.value)}
                             />
                         </div>
-                        <div className="flex items-center gap-3 rounded-lg border p-3">
-                            <Switch
-                                checked={stepSecret}
-                                onCheckedChange={setStepSecret}
-                            />
-                            <div>
-                                <Label>Secret Step?</Label>
-                                <p className="text-xs text-muted-foreground">
-                                    Se ativo, o estudante não verá as perguntas deste step. Usado para critérios de elegibilidade extraídos do perfil.
-                                </p>
+
+                        <div className="space-y-4 pt-4 border-t mt-4">
+                             <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                                <Shield className="h-4 w-4" />
+                                Comportamento e Lógica
+                            </h3>
+
+                            <div className="grid gap-3">
+                                <div className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/30 transition-colors">
+                                    <Switch
+                                        checked={stepSecret}
+                                        onCheckedChange={setStepSecret}
+                                    />
+                                    <div className="space-y-0.5">
+                                        <Label>Secret Step?</Label>
+                                        <p className="text-xs text-muted-foreground">
+                                            Se ativo, o estudante não verá as perguntas deste step.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/30 transition-colors">
+                                    <Switch
+                                        checked={stepIsIterable}
+                                        onCheckedChange={setStepIsIterable}
+                                    />
+                                    <div className="space-y-0.5">
+                                        <Label>Step Iterável?</Label>
+                                        <p className="text-xs text-muted-foreground">
+                                            Permite que o usuário preencha este bloco múltiplas vezes.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {stepIsIterable && (
+                                    <div className="ml-6 space-y-2 border-l-2 border-primary/20 pl-4 animate-in slide-in-from-left-2 fade-in duration-200">
+                                        <Label>Limite de repetições (opcional)</Label>
+                                        <Input
+                                            type="number"
+                                            placeholder="Ex: 5"
+                                            value={stepRepeatLimit || ""}
+                                            onChange={(e) => setStepRepeatLimit(parseInt(e.target.value) || null)}
+                                        />
+                                    </div>
+                                )}
+
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/30 transition-colors">
+                                        <Switch
+                                            checked={stepHasCondition}
+                                            onCheckedChange={setStepHasCondition}
+                                        />
+                                        <div className="space-y-0.5">
+                                            <Label>Exibição Condicional?</Label>
+                                            <p className="text-xs text-muted-foreground">
+                                                Define se este step deve aparecer apenas sob certas condições.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    
+                                    {stepHasCondition && (
+                                        <div className="ml-6 space-y-3 bg-muted/50 p-4 rounded-lg border border-dashed animate-in slide-in-from-left-2 fade-in duration-200">
+                                            <div className="space-y-1.5">
+                                                <Label className="text-xs font-semibold">Se a pergunta:</Label>
+                                                <Select value={stepTriggerField} onValueChange={setStepTriggerField}>
+                                                    <SelectTrigger className="bg-background">
+                                                        <SelectValue placeholder="Selecione uma pergunta..." />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {fields
+                                                            .filter(f => {
+                                                                const triggerStep = steps.find(s => s.id === f.step_id);
+                                                                return triggerStep && triggerStep.sort_order < stepSortOrder;
+                                                            })
+                                                            .map(f => (
+                                                                <SelectItem key={f.id} value={f.field_name}>
+                                                                    {f.question_text} ({f.field_name})
+                                                                </SelectItem>
+                                                            ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            <div className="grid grid-cols-[1fr,2fr] gap-2">
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-xs font-semibold">For:</Label>
+                                                    <Select value={stepTriggerOperator} onValueChange={setStepTriggerOperator}>
+                                                        <SelectTrigger className="bg-background">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="==">Igual a</SelectItem>
+                                                            <SelectItem value="!=">Diferente de</SelectItem>
+                                                            <SelectItem value="in">Incluso em</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-xs font-semibold">Este Valor:</Label>
+                                                    <Input
+                                                        className="bg-background"
+                                                        value={stepTriggerValue}
+                                                        onChange={(e) => setStepTriggerValue(e.target.value)}
+                                                        placeholder="Valor esperado"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1258,41 +1831,129 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                             </div>
                         )}
 
-                        <div className="flex items-center gap-3 rounded-lg border p-3">
-                            <Switch
-                                checked={formValues.optional}
-                                onCheckedChange={(val) => setFormValues({ ...formValues, optional: val })}
-                            />
-                            <div>
-                                <Label>Este campo é opcional?</Label>
-                                <p className="text-xs text-muted-foreground">
-                                    Se sim, o estudante poderá pular esta pergunta no formulário.
-                                </p>
+                        <div className="space-y-4 pt-4 border-t mt-4">
+                            <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                                <Shield className="h-4 w-4" />
+                                Comportamento e Lógica
+                            </h3>
+                            
+                            <div className="grid gap-3">
+                                {/* Opcional? */}
+                                <div className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/30 transition-colors">
+                                    <Switch
+                                        checked={formValues.optional}
+                                        onCheckedChange={(val) => setFormValues({ ...formValues, optional: val })}
+                                    />
+                                    <div className="space-y-0.5">
+                                        <Label>Este campo é opcional?</Label>
+                                        <p className="text-xs text-muted-foreground">
+                                            Se sim, o estudante poderá pular esta pergunta.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Exibição Condicional? */}
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/30 transition-colors">
+                                        <Switch
+                                            checked={fieldHasCondition}
+                                            onCheckedChange={setFieldHasCondition}
+                                        />
+                                        <div className="space-y-0.5">
+                                            <Label>Exibição Condicional?</Label>
+                                            <p className="text-xs text-muted-foreground">
+                                                Define se este campo deve aparecer apenas sob certas condições.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {fieldHasCondition && (
+                                        <div className="ml-6 space-y-3 bg-muted/50 p-4 rounded-lg border border-dashed animate-in slide-in-from-left-2 fade-in duration-200">
+                                            <div className="space-y-1.5">
+                                                <Label className="text-xs font-semibold">Se a pergunta:</Label>
+                                                <Select value={fieldTriggerField} onValueChange={setFieldTriggerField}>
+                                                    <SelectTrigger className="bg-background">
+                                                        <SelectValue placeholder="Selecione uma pergunta..." />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {fields
+                                                            .filter(f => {
+                                                                const currentStepObj = steps.find(s => s.id === formValues.step_id);
+                                                                const triggerStepObj = steps.find(s => s.id === f.step_id);
+                                                                
+                                                                if (!currentStepObj || !triggerStepObj) return false;
+                                                                
+                                                                if (triggerStepObj.sort_order < currentStepObj.sort_order) return true;
+                                                                if (f.step_id === formValues.step_id && f.sort_order < formValues.sort_order) return true;
+                                                                
+                                                                return false;
+                                                            })
+                                                            .map(f => (
+                                                                <SelectItem key={f.id} value={f.field_name}>
+                                                                    {f.question_text} ({f.field_name})
+                                                                </SelectItem>
+                                                            ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            <div className="grid grid-cols-[1fr,2fr] gap-2">
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-xs font-semibold">For:</Label>
+                                                    <Select value={fieldTriggerOperator} onValueChange={setFieldTriggerOperator}>
+                                                        <SelectTrigger className="bg-background">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="==">Igual a</SelectItem>
+                                                            <SelectItem value="!=">Diferente de</SelectItem>
+                                                            <SelectItem value="in">Incluso em</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-xs font-semibold">Este Valor:</Label>
+                                                    <Input
+                                                        className="bg-background"
+                                                        value={fieldTriggerValue}
+                                                        onChange={(e) => setFieldTriggerValue(e.target.value)}
+                                                        placeholder="Valor esperado"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Elegibilidade? */}
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/30 transition-colors">
+                                        <Switch
+                                            checked={formValues.is_criterion}
+                                            onCheckedChange={(val) => setFormValues({ ...formValues, is_criterion: val })}
+                                        />
+                                        <div className="space-y-0.5">
+                                            <Label>Critério de Elegibilidade?</Label>
+                                            <p className="text-xs text-muted-foreground">
+                                                Se sim, a resposta será avaliada para determinar a aprovação.
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {formValues.is_criterion && (
+                                        <div className="ml-6 animate-in slide-in-from-left-2 fade-in duration-200">
+                                            <CriterionRuleBuilder
+                                                fieldName={formValues.field_name}
+                                                value={formValues.criterion_rule}
+                                                onChange={(jsonStr) => setFormValues({ ...formValues, criterion_rule: jsonStr })}
+                                                dataType={formValues.data_type}
+                                                optionsList={formValues.optionsList}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
-
-                        <div className="flex items-center gap-3 rounded-lg border p-3">
-                            <Switch
-                                checked={formValues.is_criterion}
-                                onCheckedChange={(val) => setFormValues({ ...formValues, is_criterion: val })}
-                            />
-                            <div>
-                                <Label>Este campo é um critério de elegibilidade?</Label>
-                                <p className="text-xs text-muted-foreground">
-                                    Se sim, a resposta será avaliada pela regra abaixo.
-                                </p>
-                            </div>
-                        </div>
-
-                        {formValues.is_criterion && (
-                            <CriterionRuleBuilder
-                                fieldName={formValues.field_name}
-                                value={formValues.criterion_rule}
-                                onChange={(jsonStr) => setFormValues({ ...formValues, criterion_rule: jsonStr })}
-                                dataType={formValues.data_type}
-                                optionsList={formValues.optionsList}
-                            />
-                        )}
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
@@ -1345,6 +2006,128 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            {/* Import Fields Dialog */}
+            <Dialog open={isImportFieldsDialogOpen} onOpenChange={setIsImportFieldsDialogOpen}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Importar campos de outra etapa</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Parceiro de Origem</Label>
+                            <Select value={importSourcePartnerId} onValueChange={setImportSourcePartnerId}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecione o parceiro..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {partners.map((p) => (
+                                        <SelectItem key={p.id} value={p.id}>
+                                            {p.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Etapa de Origem</Label>
+                            <Select value={importSourceStepId} onValueChange={setImportSourceStepId} disabled={!importSourcePartnerId || isLoadingImportSteps}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder={isLoadingImportSteps ? "Carregando..." : "Selecione a etapa..."} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {importSourceSteps.map((s) => (
+                                        <SelectItem key={s.id} value={s.id}>
+                                            {s.sort_order}. {s.step_name}
+                                        </SelectItem>
+                                    ))}
+                                    {importSourceSteps.length === 0 && !isLoadingImportSteps && importSourcePartnerId && (
+                                        <div className="p-2 text-xs text-muted-foreground text-center">Nenhuma etapa encontrada.</div>
+                                    )}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsImportFieldsDialogOpen(false)}>Cancelar</Button>
+                        <Button
+                            onClick={handleImportFields}
+                            disabled={!importSourceStepId || isImporting}
+                        >
+                            {isImporting ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Importando...
+                                </>
+                            ) : "Importar Agora"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Individual Field Clone Dialog */}
+            <Dialog open={isCloneFieldDialogOpen} onOpenChange={setIsCloneFieldDialogOpen}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Clonar Pergunta</DialogTitle>
+                    </DialogHeader>
+                    {cloningFieldSource && (
+                        <div className="p-3 bg-muted rounded-md text-sm mb-2 border border-dashed">
+                             <div className="font-semibold text-xs text-muted-foreground mb-1 uppercase tracking-wider">Pergunta:</div>
+                             {cloningFieldSource.question_text}
+                        </div>
+                    )}
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Parceiro de Destino</Label>
+                            <Select value={cloneFieldTargetPartnerId} onValueChange={setCloneFieldTargetPartnerId}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecione o parceiro..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {partners.map((p) => (
+                                        <SelectItem key={p.id} value={p.id}>
+                                            {p.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Etapa de Destino</Label>
+                            <Select value={cloneFieldTargetStepId} onValueChange={setCloneFieldTargetStepId} disabled={!cloneFieldTargetPartnerId || isLoadingCloneTargetSteps}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder={isLoadingCloneTargetSteps ? "Carregando..." : "Selecione a etapa..."} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="orphan">Sem Step (Órfão)</SelectItem>
+                                    {cloneTargetSteps.map((s) => (
+                                        <SelectItem key={s.id} value={s.id}>
+                                            {s.sort_order}. {s.step_name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsCloneFieldDialogOpen(false)}>Cancelar</Button>
+                        <Button
+                            onClick={handleCloneSingleField}
+                            disabled={!cloneFieldTargetStepId || isCloningSingle}
+                        >
+                            {isCloningSingle ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Clonando...
+                                </>
+                            ) : "Confirmar Clone"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
