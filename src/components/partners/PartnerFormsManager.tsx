@@ -430,6 +430,27 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
         return { [operator]: [{ var: field }, value] };
     };
 
+    const getUniqueFieldName = async (baseName: string, partnerId: string) => {
+        const { data: existingFields } = await supabase
+            .from("partner_forms")
+            .select("field_name")
+            .eq("partner_id", partnerId);
+        
+        const existingNames = new Set((existingFields || []).map(f => f.field_name.toLowerCase()));
+        
+        if (!existingNames.has(baseName.toLowerCase())) {
+            return baseName;
+        }
+
+        let counter = 2;
+        let newName = `${baseName}_${counter}`;
+        while (existingNames.has(newName.toLowerCase())) {
+            counter++;
+            newName = `${baseName}_${counter}`;
+        }
+        return newName;
+    };
+
     // ─── Queries ─────────────────────────────────────────────────────────────
 
     // Fetch Steps
@@ -534,6 +555,17 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
     const saveMutation = useMutation({
         mutationFn: async (values: FormFieldValues) => {
             const hasOptions = values.data_type === "select" || values.data_type === "multiselect";
+            
+            // Check for duplicate field_name within the same partner (excluding the field being edited)
+            const isDuplicate = fields.some(f => 
+                f.field_name.toLowerCase() === values.field_name.toLowerCase() && 
+                (!editingField || f.id !== editingField.id)
+            );
+
+            if (isDuplicate) {
+                throw new Error(`O nome do campo "${values.field_name}" já está em uso por outro campo deste parceiro. Escolha um nome único.`);
+            }
+
             const payload: any = {
                 partner_id: selectedPartnerId,
                 step_id: values.step_id || null,
@@ -894,21 +926,45 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                 return;
             }
 
-            // Prepare new fields
-            const newFields = sourceFields.map((f, idx) => ({
-                partner_id: selectedPartnerId,
-                step_id: importTargetStepId === "orphan" ? null : importTargetStepId,
-                field_name: f.field_name,
-                question_text: f.question_text,
-                data_type: f.data_type,
-                options: f.options,
-                mapping_source: f.mapping_source,
-                maskking: f.maskking,
-                is_criterion: f.is_criterion,
-                criterion_rule: f.criterion_rule,
-                sort_order: fields.length + idx + 1,
-                optional: f.optional ?? false,
-            }));
+            // Prepare new fields with unique names
+            const { data: destFields } = await supabase
+                .from("partner_forms")
+                .select("field_name")
+                .eq("partner_id", selectedPartnerId);
+            
+            const existingNames = new Set((destFields || []).map(f => f.field_name.toLowerCase()));
+            
+            const newFields = sourceFields.map((f, idx) => {
+                let baseName = f.field_name;
+                let finalName = baseName;
+                
+                if (existingNames.has(finalName.toLowerCase())) {
+                    let counter = 2;
+                    finalName = `${baseName}_${counter}`;
+                    while (existingNames.has(finalName.toLowerCase())) {
+                        counter++;
+                        finalName = `${baseName}_${counter}`;
+                    }
+                }
+                
+                // Add to set to prevent internal collisions within the imported batch
+                existingNames.add(finalName.toLowerCase());
+
+                return {
+                    partner_id: selectedPartnerId,
+                    step_id: importTargetStepId === "orphan" ? null : importTargetStepId,
+                    field_name: finalName,
+                    question_text: f.question_text,
+                    data_type: f.data_type,
+                    options: f.options,
+                    mapping_source: f.mapping_source,
+                    maskking: f.maskking,
+                    is_criterion: f.is_criterion,
+                    criterion_rule: f.criterion_rule,
+                    sort_order: fields.length + idx + 1,
+                    optional: f.optional ?? false,
+                };
+            });
 
             const { error: insertError } = await supabase
                 .from("partner_forms")
@@ -946,10 +1002,12 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
 
             const nextOrder = (targetFields?.[0]?.sort_order || 0) + 1;
 
+            const uniqueName = await getUniqueFieldName(cloningFieldSource.field_name, cloneFieldTargetPartnerId);
+
             const newField = {
                 partner_id: cloneFieldTargetPartnerId,
                 step_id: cloneFieldTargetStepId === "orphan" ? null : cloneFieldTargetStepId,
-                field_name: cloningFieldSource.field_name,
+                field_name: uniqueName,
                 question_text: cloningFieldSource.question_text,
                 data_type: cloningFieldSource.data_type,
                 options: cloningFieldSource.options,
