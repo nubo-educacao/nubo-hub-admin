@@ -6,6 +6,7 @@ import { Partner } from "@/services/partnersService";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
@@ -174,6 +175,7 @@ const MAPPING_SOURCES = [
 const MASK_TYPES_TEXT = [
     { value: "none", label: "Nenhuma" },
     { value: "email", label: "E-mail" },
+    { value: "link", label: "Link/URL" },
     { value: "textarea", label: "Texto Longo (Textarea)" },
 ];
 
@@ -186,6 +188,47 @@ const MASK_TYPES_NUMBER = [
     { value: "brl", label: "Moeda (BRL)" },
     { value: "date", label: "Data" },
 ];
+
+// ─── Rule Helpers ──────────────────────────────────────────────────────────
+
+const parseRule = (jsonLogic: any) => {
+    if (!jsonLogic || typeof jsonLogic !== 'object') return null;
+    const operator = Object.keys(jsonLogic)[0];
+    const args = jsonLogic[operator];
+    if (Array.isArray(args) && args.length === 2 && args[0].var) {
+        return {
+            field: args[0].var,
+            operator,
+            value: String(args[1])
+        };
+    }
+    return null;
+};
+
+const formatRuleDisplay = (rule: any, allFields: PartnerFormField[]) => {
+    const parsed = parseRule(rule);
+    if (!parsed) return null;
+
+    let opLabel = parsed.operator;
+    if (parsed.operator === "==") opLabel = "for igual a";
+    if (parsed.operator === "!=") opLabel = "for diferente de";
+    if (parsed.operator === "in") opLabel = "estiver em";
+
+    if (parsed.field === "_iteration_index") {
+        const val = parsed.value === "0" ? "Primeira iteração" : `Iteração ${parsed.value}`;
+        return `Exibir se iteração ${opLabel} "${val}"`;
+    }
+
+    const triggerField = allFields.find(f => f.field_name === parsed.field);
+    const fieldLabel = triggerField ? triggerField.question_text : parsed.field;
+
+    return `Exibir se [${fieldLabel}] ${opLabel} "${parsed.value}"`;
+};
+
+const serializeRule = (field: string, operator: string, value: string) => {
+    if (!field) return null;
+    return { [operator]: [{ var: field }, value] };
+};
 
 // ─── Sortable Components ───────────────────────────────────────────────────
 
@@ -231,19 +274,22 @@ function FieldRow({
     attributes, 
     listeners, 
     setNodeRef,
-    onClone
+    onClone,
+    allFields
 }: { 
     field: PartnerFormField, 
     index: number, 
     onEdit: (f: PartnerFormField) => void, 
     onDelete: (id: string) => void,
     onClone: (f: PartnerFormField) => void,
+    allFields: PartnerFormField[],
     isDragging?: boolean,
     style?: React.CSSProperties,
     attributes?: any,
     listeners?: any,
     setNodeRef?: (node: HTMLElement | null) => void
 }) {
+    const ruleDisplay = formatRuleDisplay(field.conditional_rule, allFields);
     return (
         <TableRow ref={setNodeRef} style={style} className={isDragging ? "bg-muted/30 opacity-0" : ""}>
             <TableCell className="w-[40px] px-2 text-center">
@@ -270,6 +316,12 @@ function FieldRow({
                         <Copy className="h-4 w-4" />
                     </Button>
                 </div>
+                {ruleDisplay && (
+                    <div className="text-[10px] text-orange-600 font-medium mt-0.5 flex items-center gap-1 italic">
+                        <Shield className="h-3 w-3" />
+                        {ruleDisplay}
+                    </div>
+                )}
             </TableCell>
             <TableCell className="w-[100px]">
                 <Badge variant="outline">
@@ -324,7 +376,7 @@ function FieldRow({
     );
 }
 
-function SortableFieldRow({ field, index, onEdit, onDelete, onClone }: { field: PartnerFormField, index: number, onEdit: (f: PartnerFormField) => void, onDelete: (id: string) => void, onClone: (f: PartnerFormField) => void }) {
+function SortableFieldRow({ field, index, onEdit, onDelete, onClone, allFields }: { field: PartnerFormField, index: number, onEdit: (f: PartnerFormField) => void, onDelete: (id: string) => void, onClone: (f: PartnerFormField) => void, allFields: PartnerFormField[] }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: field.id });
     const style = {
         transform: CSS.Transform.toString(transform),
@@ -337,6 +389,7 @@ function SortableFieldRow({ field, index, onEdit, onDelete, onClone }: { field: 
             onEdit={onEdit}
             onDelete={onDelete}
             onClone={onClone}
+            allFields={allFields}
             isDragging={isDragging}
             style={style}
             attributes={attributes}
@@ -412,25 +465,6 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
     const [fieldTriggerOperator, setFieldTriggerOperator] = useState("==");
     const [fieldTriggerValue, setFieldTriggerValue] = useState("");
 
-    const parseRule = (jsonLogic: any) => {
-        if (!jsonLogic || typeof jsonLogic !== 'object') return null;
-        const operator = Object.keys(jsonLogic)[0];
-        const args = jsonLogic[operator];
-        if (Array.isArray(args) && args.length === 2 && args[0].var) {
-            return {
-                field: args[0].var,
-                operator,
-                value: String(args[1])
-            };
-        }
-        return null;
-    };
-
-    const serializeRule = (field: string, operator: string, value: string) => {
-        if (!field) return null;
-        return { [operator]: [{ var: field }, value] };
-    };
-
     const getUniqueFieldName = async (baseName: string, partnerId: string) => {
         const { data: existingFields } = await supabase
             .from("partner_forms")
@@ -465,7 +499,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                 .eq("partner_id", selectedPartnerId)
                 .order("sort_order", { ascending: true });
             if (error) throw error;
-            return (data ?? []);
+            return (data ?? []) as PartnerStep[];
         },
         enabled: !!selectedPartnerId,
     });
@@ -577,8 +611,12 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                 mapping_source: values.mapping_source || null,
                 maskking: values.maskking || null,
                 is_criterion: values.is_criterion && !!values.criterion_rule,
-                criterion_rule: (values.is_criterion && values.criterion_rule) ? JSON.parse(values.criterion_rule) : null,
-                conditional_rule: values.conditional_rule ? JSON.parse(values.conditional_rule) : null,
+                criterion_rule: (values.is_criterion && values.criterion_rule) 
+                    ? (typeof values.criterion_rule === 'string' ? JSON.parse(values.criterion_rule) : values.criterion_rule) 
+                    : null,
+                conditional_rule: values.conditional_rule 
+                    ? (typeof values.conditional_rule === 'string' ? JSON.parse(values.conditional_rule) : values.conditional_rule) 
+                    : null,
                 sort_order: values.sort_order,
                 optional: values.optional,
             };
@@ -1412,6 +1450,19 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                                     <Badge variant={group.step ? "default" : "secondary"} className="text-sm">
                                                         {group.step ? `${group.step.sort_order}. ${group.step.step_name}` : "Sem Step Associado"}
                                                     </Badge>
+                                                    {group.step && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-6 w-6"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleEditStep(group.step!);
+                                                            }}
+                                                        >
+                                                            <Pencil className="h-3 w-3" />
+                                                        </Button>
+                                                    )}
                                                     <span className="text-xs text-muted-foreground">
                                                         {group.fields.length} campo(s)
                                                     </span>
@@ -1455,6 +1506,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                                                                         setCloneFieldTargetStepId(f.step_id || "orphan");
                                                                                         setIsCloneFieldDialogOpen(true);
                                                                                     }}
+                                                                                    allFields={fields}
                                                                                 />
                                                                             ))}
                                                                     </SortableContext>
@@ -1510,6 +1562,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                                         onEdit={() => {}}
                                                         onDelete={() => {}}
                                                         onClone={() => {}}
+                                                        allFields={fields}
                                                     />
                                                 </TableBody>
                                             </Table>
@@ -1523,9 +1576,8 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                 </>
             )}
 
-            {/* Add/Edit Step Dialog */}
             <Dialog open={isStepDialogOpen} onOpenChange={setIsStepDialogOpen}>
-                <DialogContent className="max-w-sm">
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>{editingStep ? "Editar Step" : "Novo Step"}</DialogTitle>
                     </DialogHeader>
@@ -1548,10 +1600,11 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                         </div>
                         <div className="space-y-2">
                             <Label>Introdução (opcional)</Label>
-                            <Input
+                            <Textarea
                                 placeholder="Texto exibido antes das perguntas"
                                 value={stepIntroduction}
                                 onChange={(e) => setStepIntroduction(e.target.value)}
+                                className="min-h-[100px]"
                             />
                         </div>
 
@@ -1653,12 +1706,34 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                                 </div>
                                                 <div className="space-y-1.5">
                                                     <Label className="text-xs font-semibold">Este Valor:</Label>
-                                                    <Input
-                                                        className="bg-background"
-                                                        value={stepTriggerValue}
-                                                        onChange={(e) => setStepTriggerValue(e.target.value)}
-                                                        placeholder="Valor esperado"
-                                                    />
+                                                    {(() => {
+                                                        const triggerField = fields.find(f => f.field_name === stepTriggerField);
+                                                        const options = triggerField?.options as string[] | null;
+                                                        
+                                                        if (options && options.length > 0 && (stepTriggerOperator === "==" || stepTriggerOperator === "!=")) {
+                                                            return (
+                                                                <Select value={stepTriggerValue} onValueChange={setStepTriggerValue}>
+                                                                    <SelectTrigger className="bg-background">
+                                                                        <SelectValue placeholder="Selecione o valor..." />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        {options.map((opt, i) => (
+                                                                            <SelectItem key={i} value={opt}>{opt}</SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            );
+                                                        }
+
+                                                        return (
+                                                            <Input
+                                                                className="bg-background"
+                                                                value={stepTriggerValue}
+                                                                onChange={(e) => setStepTriggerValue(e.target.value)}
+                                                                placeholder="Valor esperado"
+                                                            />
+                                                        );
+                                                    })()}
                                                 </div>
                                             </div>
                                         </div>
@@ -1935,6 +2010,18 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                                         <SelectValue placeholder="Selecione uma pergunta..." />
                                                     </SelectTrigger>
                                                     <SelectContent>
+                                                        {/* Opção especial para iteração se o step for iterável */}
+                                                        {(() => {
+                                                            const currentStepObj = steps.find(s => s.id === formValues.step_id);
+                                                            if (currentStepObj?.is_iterable) {
+                                                                return (
+                                                                    <SelectItem value="_iteration_index">
+                                                                        🔄 Iteração do Bloco (Atual)
+                                                                    </SelectItem>
+                                                                );
+                                                            }
+                                                            return null;
+                                                        })()}
                                                         {fields
                                                             .filter(f => {
                                                                 const currentStepObj = steps.find(s => s.id === formValues.step_id);
@@ -1972,12 +2059,47 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                                 </div>
                                                 <div className="space-y-1.5">
                                                     <Label className="text-xs font-semibold">Este Valor:</Label>
-                                                    <Input
-                                                        className="bg-background"
-                                                        value={fieldTriggerValue}
-                                                        onChange={(e) => setFieldTriggerValue(e.target.value)}
-                                                        placeholder="Valor esperado"
-                                                    />
+                                                    {(() => {
+                                                        if (fieldTriggerField === "_iteration_index") {
+                                                            return (
+                                                                <Select value={fieldTriggerValue} onValueChange={setFieldTriggerValue}>
+                                                                    <SelectTrigger className="bg-background">
+                                                                        <SelectValue placeholder="Selecione..." />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="0">Primeira iteração (index 0)</SelectItem>
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            );
+                                                        }
+
+                                                        const triggerField = fields.find(f => f.field_name === fieldTriggerField);
+                                                        const options = triggerField?.options as string[] | null;
+                                                        
+                                                        if (options && options.length > 0 && (fieldTriggerOperator === "==" || fieldTriggerOperator === "!=")) {
+                                                            return (
+                                                                <Select value={fieldTriggerValue} onValueChange={setFieldTriggerValue}>
+                                                                    <SelectTrigger className="bg-background">
+                                                                        <SelectValue placeholder="Selecione o valor..." />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        {options.map((opt, i) => (
+                                                                            <SelectItem key={i} value={opt}>{opt}</SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            );
+                                                        }
+
+                                                        return (
+                                                            <Input
+                                                                className="bg-background"
+                                                                value={fieldTriggerValue}
+                                                                onChange={(e) => setFieldTriggerValue(e.target.value)}
+                                                                placeholder="Valor esperado"
+                                                            />
+                                                        );
+                                                    })()}
                                                 </div>
                                             </div>
                                         </div>

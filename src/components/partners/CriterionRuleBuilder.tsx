@@ -299,69 +299,83 @@ export function CriterionRuleBuilder({ fieldName, value, onChange, dataType, opt
                             </Select>
 
                             {/* Value */}
-                            {condition.operator === "in" && isListType ? (
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                        <Button
-                                            variant="outline"
-                                            role="combobox"
-                                            className="flex-1 justify-between font-normal h-auto min-h-[36px] py-1"
-                                        >
-                                            <div className="flex flex-wrap gap-1">
-                                                {condition.value ? (
-                                                    condition.value.split(", ").filter(Boolean).map((v) => (
-                                                        <Badge key={v} variant="secondary" className="text-xs gap-1">
-                                                            {v}
-                                                            <X
-                                                                className="h-3 w-3 cursor-pointer"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    toggleInValue(condition.id, v, condition.value);
-                                                                }}
-                                                            />
-                                                        </Badge>
-                                                    ))
-                                                ) : (
-                                                    <span className="text-muted-foreground">Selecione...</span>
-                                                )}
-                                            </div>
-                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-[240px] p-0" align="start">
-                                        <Command>
-                                            <CommandList>
-                                                <CommandEmpty>Sem opções disponíveis.</CommandEmpty>
-                                                <CommandGroup>
-                                                    {optionsList.map((opt) => {
-                                                        const selected = condition.value ? condition.value.split(", ").filter(Boolean) : [];
-                                                        const isSelected = selected.includes(opt);
-                                                        return (
-                                                            <CommandItem
-                                                                key={opt}
-                                                                value={opt}
-                                                                onSelect={() => toggleInValue(condition.id, opt, condition.value)}
-                                                            >
-                                                                <div className={cn("flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border mr-2", isSelected ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/30")}>
-                                                                    {isSelected && <Check className="h-3 w-3" />}
-                                                                </div>
-                                                                {opt}
-                                                            </CommandItem>
-                                                        );
-                                                    })}
-                                                </CommandGroup>
-                                            </CommandList>
-                                        </Command>
-                                    </PopoverContent>
-                                </Popover>
-                            ) : (
-                                <Input
-                                    placeholder="Valor"
-                                    value={condition.value}
-                                    onChange={(e) => updateCondition(condition.id, { value: e.target.value })}
-                                    className="flex-1"
-                                />
-                            )}
+                                {condition.operator === "in" && isListType ? (
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button
+                                                variant="outline"
+                                                role="combobox"
+                                                className="flex-1 justify-between font-normal h-auto min-h-[36px] py-1"
+                                            >
+                                                <div className="flex flex-wrap gap-1">
+                                                    {condition.value ? (
+                                                        condition.value.split(", ").filter(Boolean).map((v) => (
+                                                            <Badge key={v} variant="secondary" className="text-xs gap-1">
+                                                                {v}
+                                                                <X
+                                                                    className="h-3 w-3 cursor-pointer"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        toggleInValue(condition.id, v, condition.value);
+                                                                    }}
+                                                                />
+                                                            </Badge>
+                                                        ))
+                                                    ) : (
+                                                        <span className="text-muted-foreground">Selecione...</span>
+                                                    )}
+                                                </div>
+                                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-[240px] p-0" align="start">
+                                            <Command>
+                                                <CommandList>
+                                                    <CommandEmpty>Sem opções disponíveis.</CommandEmpty>
+                                                    <CommandGroup>
+                                                        {optionsList.map((opt) => {
+                                                            const selected = condition.value ? condition.value.split(", ").filter(Boolean) : [];
+                                                            const isSelected = selected.includes(opt);
+                                                            return (
+                                                                <CommandItem
+                                                                    key={opt}
+                                                                    value={opt}
+                                                                    onSelect={() => toggleInValue(condition.id, opt, condition.value)}
+                                                                >
+                                                                    <div className={cn("flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border mr-2", isSelected ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/30")}>
+                                                                        {isSelected && <Check className="h-3 w-3" />}
+                                                                    </div>
+                                                                    {opt}
+                                                                </CommandItem>
+                                                            );
+                                                        })}
+                                                    </CommandGroup>
+                                                </CommandList>
+                                            </Command>
+                                        </PopoverContent>
+                                    </Popover>
+                                ) : (optionsList.length > 0 && (condition.operator === "==" || condition.operator === "!=")) ? (
+                                    <Select
+                                        value={condition.value}
+                                        onValueChange={(val) => updateCondition(condition.id, { value: val })}
+                                    >
+                                        <SelectTrigger className="flex-1">
+                                            <SelectValue placeholder="Selecione o valor..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {optionsList.map((opt, i) => (
+                                                <SelectItem key={i} value={opt}>{opt}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                ) : (
+                                    <Input
+                                        placeholder="Valor"
+                                        value={condition.value}
+                                        onChange={(e) => updateCondition(condition.id, { value: e.target.value })}
+                                        className="flex-1"
+                                    />
+                                )}
 
                             {/* Remove */}
                             <Button
