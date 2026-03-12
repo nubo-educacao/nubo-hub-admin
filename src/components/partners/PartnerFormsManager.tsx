@@ -46,9 +46,11 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, Loader2, Code2, Check, ChevronsUpDown, X, Shield, Download, Copy, GripVertical } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Code2, Check, ChevronsUpDown, X, Shield, Download, Copy, GripVertical, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { CriterionRuleBuilder } from "./CriterionRuleBuilder";
+import * as XLSX from "xlsx";
+import Papa from "papaparse";
 import {
     DndContext,
     closestCenter,
@@ -141,6 +143,7 @@ const DATA_TYPES = [
     { value: "number", label: "Número" },
     { value: "boolean", label: "Sim/Não" },
     { value: "select", label: "Seleção" },
+    { value: "searchable_select", label: "Seleção com Busca (Autocomplete)" },
     { value: "multiselect", label: "Multiseleção" },
 ];
 
@@ -157,6 +160,7 @@ const MAPPING_SOURCES = [
     { value: "user_profiles.street", label: "Perfil: Rua" },
     { value: "user_profiles.street_number", label: "Perfil: Número" },
     { value: "user_profiles.complement", label: "Perfil: Complemento" },
+    { value: "user_profiles.phone", label: "Perfil: Telefone" },
     { value: "user_profiles.relationship", label: "Perfil: Parentesco" },
     { value: "user_profiles.is_nubo_student", label: "Perfil: É Aluno Nubo" },
     { value: "user_profiles.referral_source", label: "Perfil: Como conheceu" },
@@ -170,6 +174,9 @@ const MAPPING_SOURCES = [
     { value: "user_preferences.quota_types", label: "Prefs: Tipos de Cota" },
     { value: "user_preferences.state_preference", label: "Prefs: Estado de Preferência" },
     { value: "user_preferences.university_preference", label: "Prefs: Universidade de Preferência" },
+    // auth.users
+    { value: "auth.users.phone", label: "Usuário: Telefone" },
+    { value: "auth.users.email", label: "Usuário: E-mail" },
 ];
 
 const MASK_TYPES_TEXT = [
@@ -589,7 +596,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
 
     const saveMutation = useMutation({
         mutationFn: async (values: FormFieldValues) => {
-            const hasOptions = values.data_type === "select" || values.data_type === "multiselect";
+            const hasOptions = values.data_type === "select" || values.data_type === "multiselect" || values.data_type === "searchable_select";
             
             // Check for duplicate field_name within the same partner (excluding the field being edited)
             const isDuplicate = fields.some(f => 
@@ -1202,6 +1209,51 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
 
     const addOption = () => {
         setFormValues({ ...formValues, optionsList: [...formValues.optionsList, ""] });
+    };
+
+    const handleImportOptions = () => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".csv,.xlsx,.xls";
+        input.onchange = async (e) => {
+            const file = (e.target as HTMLInputElement).files?.[0];
+            if (!file) return;
+
+            try {
+                let importedValues: string[] = [];
+
+                if (file.name.endsWith(".csv")) {
+                    const text = await file.text();
+                    const result = Papa.parse(text, { header: false, skipEmptyLines: true });
+                    importedValues = (result.data as string[][])
+                        .map((row) => (row[0] ?? "").toString().trim())
+                        .filter((v) => v !== "");
+                } else {
+                    const buffer = await file.arrayBuffer();
+                    const workbook = XLSX.read(buffer, { type: "array" });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const rows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1 });
+                    importedValues = rows
+                        .map((row) => (row[0] ?? "").toString().trim())
+                        .filter((v) => v !== "");
+                }
+
+                if (importedValues.length === 0) {
+                    toast.info("Nenhum valor encontrado na coluna A do arquivo.");
+                    return;
+                }
+
+                const existingSet = new Set(formValues.optionsList.filter((o) => o.trim() !== ""));
+                const newValues = importedValues.filter((v) => !existingSet.has(v));
+                const merged = [...formValues.optionsList.filter((o) => o.trim() !== ""), ...newValues];
+
+                setFormValues((prev) => ({ ...prev, optionsList: merged }));
+                toast.success(`${newValues.length} nova(s) opção(ões) importada(s)!`);
+            } catch (err: any) {
+                toast.error(`Erro ao importar arquivo: ${err.message}`);
+            }
+        };
+        input.click();
     };
 
     const loadOptionsFromDB = async () => {
@@ -1909,13 +1961,35 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                             </div>
                         )}
 
-                        {(formValues.data_type === "select" || formValues.data_type === "multiselect") && (
+                        {(formValues.data_type === "select" || formValues.data_type === "multiselect" || formValues.data_type === "searchable_select") && (
                             <div className="space-y-3 bg-muted/50 p-4 rounded-md border">
-                                <Label className="flex items-center gap-2">
-                                    <Code2 className="h-4 w-4" />
-                                    Opções de Escolha
-                                </Label>
-                                <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <Label className="flex items-center gap-2">
+                                        <Code2 className="h-4 w-4" />
+                                        Opções de Escolha
+                                    </Label>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="gap-1.5 h-7 text-xs"
+                                            onClick={handleImportOptions}
+                                        >
+                                            <Upload className="h-3.5 w-3.5" />
+                                            Importar
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="gap-1.5 h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                                            onClick={() => setFormValues({ ...formValues, optionsList: [""] })}
+                                        >
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                            Limpar
+                                        </Button>
+                                    </div>
+                                </div>
+                                <div className={cn("space-y-2", formValues.optionsList.length > 10 && "max-h-[320px] overflow-y-auto pr-1")}>
                                     {formValues.optionsList.map((opt, i) => (
                                         <div key={i} className="flex gap-2 items-center">
                                             <Input

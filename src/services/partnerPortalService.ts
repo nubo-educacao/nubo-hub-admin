@@ -6,7 +6,7 @@ export interface StudentApplication {
     id: string;
     user_id: string;
     partner_id: string;
-    status: "started" | "eligible" | "ineligible" | "submitted";
+    status: "DRAFT" | "SUBMITTED";
     answers: Record<string, unknown>;
     created_at: string;
     updated_at: string;

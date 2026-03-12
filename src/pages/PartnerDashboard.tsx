@@ -8,6 +8,7 @@ import {
 } from "@/services/partnerPortalService";
 import {
     getApplicationsWithDetails,
+    getEligibleCountForPartner,
     type ApplicationWithDetails,
 } from "@/services/applicationsService";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -30,22 +31,52 @@ function exportToExcel(
     formFields: PartnerFormField[],
     partnerName: string
 ) {
-    const fixedHeaders = ["Nome", "Whatsapp", "Status", "Data"];
+    const fixedHeaders = ["Nome", "Whatsapp", "Status", "Elegibilidade", "Data"];
+    
+    // Identified fields from partner_forms
+    const formFieldNames = new Set(formFields.map((f) => f.field_name));
     const dynamicHeaders = formFields.map((f) => f.question_text || f.field_name);
-    const allHeaders = [...fixedHeaders, ...dynamicHeaders];
+    
+    // Collect all other keys present in any application's answers
+    const otherKeys = new Set<string>();
+    applications.forEach((app) => {
+        const ans = (app.answers as Record<string, unknown>) || {};
+        Object.keys(ans).forEach((key) => {
+            if (!formFieldNames.has(key)) {
+                otherKeys.add(key);
+            }
+        });
+    });
+    const extraHeaders = Array.from(otherKeys);
+    
+    const allHeaders = [...fixedHeaders, ...dynamicHeaders, ...extraHeaders];
+
+    const getEligibilityStr = (app: ApplicationWithDetails): string => {
+        if (!app.eligibility_results || !Array.isArray(app.eligibility_results)) return "—";
+        const res = app.eligibility_results.find((r: any) => r.partner_id === app.partner_id);
+        if (!res) return "—";
+        const met = Number(res.met_criteria) || 0;
+        const total = Number(res.total_criteria) || 0;
+        return `${met}/${total}`;
+    };
 
     const rows = applications.map((app) => {
         const fixedCols = [
             app.full_name || "—",
             app.phone || "—",
             STATUS_CONFIG[app.status]?.label || app.status,
+            getEligibilityStr(app),
             new Date(app.created_at).toLocaleDateString("pt-BR"),
         ];
         const dynamicCols = formFields.map((f) => {
             const val = (app.answers as Record<string, unknown>)?.[f.field_name];
             return val != null ? String(val) : "—";
         });
-        return [...fixedCols, ...dynamicCols];
+        const extraCols = extraHeaders.map((k) => {
+            const val = (app.answers as Record<string, unknown>)?.[k];
+            return val != null ? String(val) : "—";
+        });
+        return [...fixedCols, ...dynamicCols, ...extraCols];
     });
 
     const BOM = "\uFEFF";
@@ -98,14 +129,21 @@ export default function PartnerDashboard() {
         enabled: !!partnerId,
     });
 
+    // 5. Fetch eligible count for this partner
+    const { data: eligibleCount = 0 } = useQuery({
+        queryKey: ["eligibleCount", partnerId],
+        queryFn: () => getEligibleCountForPartner(partnerId!),
+        enabled: !!partnerId,
+    });
+
     // ─── Stats ───────────────────────────────────────────────────────────────
 
     const stats = useMemo(() => {
         const total = applications.length;
-        const eligible = applications.filter((a) => a.status === "eligible" || a.status === "submitted").length;
-        const submitted = applications.filter((a) => a.status === "submitted").length;
+        const eligible = eligibleCount;
+        const submitted = applications.filter((a) => a.status === "SUBMITTED").length;
         return { total, eligible, submitted };
-    }, [applications]);
+    }, [applications, eligibleCount]);
 
     // ─── Handlers ────────────────────────────────────────────────────────────
 
@@ -217,6 +255,7 @@ export default function PartnerDashboard() {
             {/* Answers Modal */}
             <ApplicationAnswersModal
                 application={selectedApp}
+                formFields={formFields}
                 open={modalOpen}
                 onOpenChange={setModalOpen}
             />

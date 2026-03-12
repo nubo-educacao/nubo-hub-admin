@@ -9,8 +9,9 @@ export interface ApplicationWithDetails {
     partner_name: string | null;
     full_name: string | null;
     phone: string | null;
-    status: "started" | "eligible" | "ineligible" | "submitted" | "DRAFT" | "SUBMITTED";
+    status: "DRAFT" | "SUBMITTED";
     answers: Record<string, unknown>;
+    eligibility_results: any;
     created_at: string;
 }
 
@@ -61,4 +62,20 @@ export async function getPartnersList(): Promise<PartnerOption[]> {
     }
 
     return (data ?? []) as PartnerOption[];
+}
+/**
+ * Gets the count of eligible students for a specific partner.
+ * Uses the calculate_passport_eligibility results stored in user_profiles.
+ */
+export async function getEligibleCountForPartner(partnerId: string): Promise<number> {
+    const { data, error } = await (supabase.rpc as any)("get_eligible_count_for_partner", {
+        p_partner_id: partnerId,
+    });
+
+    if (error) {
+        console.error("Error fetching eligible count:", error);
+        return 0;
+    }
+
+    return (data as number) || 0;
 }

@@ -3,8 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import {
     getApplicationsWithDetails,
     getPartnersList,
+    getEligibleCountForPartner,
     type ApplicationWithDetails,
 } from "@/services/applicationsService";
+import { getPartnerFormFields, type PartnerFormField } from "@/services/partnerPortalService";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,21 +21,64 @@ import ApplicationAnswersModal from "@/components/applications/ApplicationAnswer
 
 // ─── Excel Export ────────────────────────────────────────────────────────────
 
-function exportToExcel(applications: ApplicationWithDetails[]) {
-    const headers = ["Nome", "Whatsapp", "Parceiro", "Status", "Data"];
+function exportToExcel(
+    applications: ApplicationWithDetails[],
+    formFields: PartnerFormField[],
+    partnerName: string
+) {
+    const fixedHeaders = ["Nome", "Whatsapp", "Parceiro", "Status", "Elegibilidade", "Data"];
+    
+    // Identified fields from partner_forms
+    const formFieldNames = new Set(formFields.map((f) => f.field_name));
+    const dynamicHeaders = formFields.map((f) => f.question_text || f.field_name);
+    
+    // Collect all other keys present in any application's answers
+    const otherKeys = new Set<string>();
+    applications.forEach((app) => {
+        const ans = (app.answers as Record<string, unknown>) || {};
+        Object.keys(ans).forEach((key) => {
+            if (!formFieldNames.has(key)) {
+                otherKeys.add(key);
+            }
+        });
+    });
+    const extraHeaders = Array.from(otherKeys);
+    
+    const allHeaders = [...fixedHeaders, ...dynamicHeaders, ...extraHeaders];
 
-    const rows = applications.map((app) => [
-        app.full_name || "—",
-        app.phone || "—",
-        app.partner_name || "—",
-        STATUS_CONFIG[app.status]?.label || app.status,
-        new Date(app.created_at).toLocaleDateString("pt-BR"),
-    ]);
+    const getEligibilityStr = (app: ApplicationWithDetails): string => {
+        if (!app.eligibility_results || !Array.isArray(app.eligibility_results)) return "—";
+        const res = app.eligibility_results.find((r: any) => r.partner_id === app.partner_id);
+        if (!res) return "—";
+        const met = Number(res.met_criteria) || 0;
+        const total = Number(res.total_criteria) || 0;
+        return `${met}/${total}`;
+    };
+
+    const rows = applications.map((app) => {
+        const fixedCols = [
+            app.full_name || "—",
+            app.phone || "—",
+            app.partner_name || "—",
+            STATUS_CONFIG[app.status]?.label || app.status,
+            getEligibilityStr(app),
+            new Date(app.created_at).toLocaleDateString("pt-BR"),
+        ];
+        const dynamicCols = formFields.map((f) => {
+            const val = (app.answers as Record<string, unknown>)?.[f.field_name];
+            return val != null ? String(val) : "—";
+        });
+        const extraCols = extraHeaders.map((k) => {
+            const val = (app.answers as Record<string, unknown>)?.[k];
+            return val != null ? String(val) : "—";
+        });
+        return [...fixedCols, ...dynamicCols, ...extraCols];
+    });
 
     const BOM = "\uFEFF";
     const csvContent =
         BOM +
-        [headers.join(";"), ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";"))].join(
+        [allHeaders.join(";"), ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";"))].join(
             "\n"
         );
 
@@ -41,7 +86,7 @@ function exportToExcel(applications: ApplicationWithDetails[]) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `candidaturas_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `candidaturas_${partnerName.replace(/\s+/g, "_").toLowerCase()}_${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
     toast.success("Arquivo exportado com sucesso!");
@@ -68,14 +113,28 @@ export default function PartnerApplications() {
         queryFn: () => getApplicationsWithDetails(effectivePartnerId),
     });
 
+    // 3. Fetch form fields for the filtered partner
+    const { data: formFields = [] } = useQuery({
+        queryKey: ["partnerFormFields", effectivePartnerId],
+        queryFn: () => getPartnerFormFields(effectivePartnerId!),
+        enabled: !!effectivePartnerId,
+    });
+
+    // 4. Fetch eligible count for the filtered partner
+    const { data: eligibleCount = 0 } = useQuery({
+        queryKey: ["eligibleCount", effectivePartnerId],
+        queryFn: () => getEligibleCountForPartner(effectivePartnerId!),
+        enabled: !!effectivePartnerId,
+    });
+
     // ─── Stats ───────────────────────────────────────────────────────────────
 
     const stats = useMemo(() => {
         const total = applications.length;
-        const eligible = applications.filter((a) => a.status === "eligible" || a.status === "submitted").length;
-        const submitted = applications.filter((a) => a.status === "submitted").length;
+        const eligible = effectivePartnerId ? eligibleCount : applications.filter(a => a.status === "SUBMITTED").length; // Fallback if no partner selected
+        const submitted = applications.filter((a) => a.status === "SUBMITTED").length;
         return { total, eligible, submitted };
-    }, [applications]);
+    }, [applications, eligibleCount, effectivePartnerId]);
 
     // ─── Handlers ────────────────────────────────────────────────────────────
 
@@ -95,7 +154,7 @@ export default function PartnerApplications() {
                     </p>
                 </div>
                 <Button
-                    onClick={() => exportToExcel(applications)}
+                    onClick={() => exportToExcel(applications, formFields, partners.find(p => p.id === partnerFilter)?.name || "Geral")}
                     disabled={applications.length === 0}
                     className="flex items-center gap-2"
                 >
@@ -164,6 +223,7 @@ export default function PartnerApplications() {
             {/* Answers Modal */}
             <ApplicationAnswersModal
                 application={selectedApp}
+                formFields={formFields}
                 open={modalOpen}
                 onOpenChange={setModalOpen}
             />

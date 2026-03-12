@@ -133,7 +133,7 @@ function parseCondition(rule: Record<string, unknown>): Condition {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function CriterionRuleBuilder({ fieldName, value, onChange, dataType, optionsList = [] }: CriterionRuleBuilderProps) {
-    const isListType = dataType === "select" || dataType === "multiselect";
+    const isListType = dataType === "select" || dataType === "multiselect" || dataType === "searchable_select";
     const availableOperators = isListType
         ? OPERATORS
         : OPERATORS.filter((op) => op.value !== "in");

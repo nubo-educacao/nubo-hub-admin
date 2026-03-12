@@ -33,18 +33,12 @@ const STATUS_CONFIG: Record<
     string,
     { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ElementType }
 > = {
-    started: { label: "Em Andamento", variant: "outline", icon: Clock },
     DRAFT: { label: "Rascunho", variant: "outline", icon: Clock },
-    eligible: { label: "Elegível", variant: "default", icon: CheckCircle2 },
-    ELIGIBLE: { label: "Elegível", variant: "default", icon: CheckCircle2 },
-    ineligible: { label: "Inelegível", variant: "destructive", icon: XCircle },
-    INELIGIBLE: { label: "Inelegível", variant: "destructive", icon: XCircle },
-    submitted: { label: "Enviado", variant: "secondary", icon: FileSpreadsheet },
     SUBMITTED: { label: "Enviado", variant: "secondary", icon: FileSpreadsheet },
 };
 
 function StatusBadge({ status }: { status: string }) {
-    const config = STATUS_CONFIG[status] || STATUS_CONFIG.started;
+    const config = STATUS_CONFIG[status] || STATUS_CONFIG.DRAFT;
     const Icon = config.icon;
     return (
         <Badge variant={config.variant} className="flex items-center gap-1 whitespace-nowrap">
@@ -81,6 +75,29 @@ interface ApplicationsTableProps {
     partners?: PartnerOption[];
     partnerFilter?: string;
     onPartnerFilterChange?: (value: string) => void;
+}
+
+// ─── Eligibility formatter ─────────────────────────────────────────────────────
+
+function EligibilityCell({ eligibilityResults, partnerId }: { eligibilityResults: any, partnerId: string }) {
+    if (!eligibilityResults || !Array.isArray(eligibilityResults) || !partnerId) {
+        return <span className="text-muted-foreground">—</span>;
+    }
+    const res = eligibilityResults.find((r: any) => r.partner_id === partnerId);
+    if (!res) {
+        return <span className="text-muted-foreground">—</span>;
+    }
+    
+    const met = Number(res.met_criteria) || 0;
+    const total = Number(res.total_criteria) || 0;
+    const isEligible = met === total && total > 0;
+    
+    return (
+        <div className="flex items-center gap-2 whitespace-nowrap">
+            <span className="font-medium" title="Totalmente elegível">{met} / {total}</span>
+            {isEligible && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+        </div>
+    );
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -151,11 +168,8 @@ export default function ApplicationsTable({
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="all">Todos os Status</SelectItem>
-                        <SelectItem value="started">Em Andamento</SelectItem>
                         <SelectItem value="DRAFT">Rascunho</SelectItem>
-                        <SelectItem value="eligible">Elegível</SelectItem>
-                        <SelectItem value="ineligible">Inelegível</SelectItem>
-                        <SelectItem value="submitted">Enviado</SelectItem>
+                        <SelectItem value="SUBMITTED">Enviado</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
@@ -169,6 +183,7 @@ export default function ApplicationsTable({
                             <TableHead>Whatsapp</TableHead>
                             {showPartnerColumn && <TableHead>Parceiro</TableHead>}
                             <TableHead>Status</TableHead>
+                            <TableHead>Elegibilidade</TableHead>
                             <TableHead>Data</TableHead>
                             <TableHead className="text-right">Ações</TableHead>
                         </TableRow>
@@ -176,7 +191,7 @@ export default function ApplicationsTable({
                     <TableBody>
                         {filteredApplications.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={showPartnerColumn ? 6 : 5} className="text-center py-8 text-muted-foreground">
+                                <TableCell colSpan={showPartnerColumn ? 7 : 6} className="text-center py-8 text-muted-foreground">
                                     Nenhuma candidatura encontrada.
                                 </TableCell>
                             </TableRow>
@@ -196,6 +211,9 @@ export default function ApplicationsTable({
                                     )}
                                     <TableCell>
                                         <StatusBadge status={app.status} />
+                                    </TableCell>
+                                    <TableCell>
+                                        <EligibilityCell eligibilityResults={app.eligibility_results} partnerId={app.partner_id} />
                                     </TableCell>
                                     <TableCell className="whitespace-nowrap text-muted-foreground">
                                         {new Date(app.created_at).toLocaleDateString("pt-BR")}
