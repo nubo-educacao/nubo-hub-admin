@@ -46,7 +46,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, Loader2, Code2, Check, ChevronsUpDown, X, Shield, Download, Copy, GripVertical, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Code2, Check, ChevronsUpDown, X, Shield, Download, Copy, GripVertical, Upload, Grid3X3 } from "lucide-react";
 import { toast } from "sonner";
 import { CriterionRuleBuilder } from "./CriterionRuleBuilder";
 import * as XLSX from "xlsx";
@@ -114,6 +114,8 @@ interface FormFieldValues {
     question_text: string;
     data_type: string;
     optionsList: string[];
+    gridRows: string[];
+    gridColumns: string[];
     mapping_source: string;
     maskking: string;
     is_criterion: boolean;
@@ -129,6 +131,8 @@ const EMPTY_FIELD: FormFieldValues = {
     question_text: "",
     data_type: "text",
     optionsList: ["Opção 1", "Opção 2"],
+    gridRows: ["Linha 1"],
+    gridColumns: ["Coluna 1"],
     mapping_source: "",
     maskking: "",
     is_criterion: false,
@@ -145,6 +149,8 @@ const DATA_TYPES = [
     { value: "select", label: "Seleção" },
     { value: "searchable_select", label: "Seleção com Busca (Autocomplete)" },
     { value: "multiselect", label: "Multiseleção" },
+    { value: "grid_select", label: "Grade de Seleção" },
+    { value: "grid_multiselect", label: "Grade de Múltipla Escolha" },
 ];
 
 const MAPPING_SOURCES = [
@@ -597,6 +603,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
     const saveMutation = useMutation({
         mutationFn: async (values: FormFieldValues) => {
             const hasOptions = values.data_type === "select" || values.data_type === "multiselect" || values.data_type === "searchable_select";
+            const isGrid = values.data_type === "grid_select" || values.data_type === "grid_multiselect";
             
             // Check for duplicate field_name within the same partner (excluding the field being edited)
             const isDuplicate = fields.some(f => 
@@ -614,7 +621,9 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                 field_name: values.field_name,
                 question_text: values.question_text,
                 data_type: values.data_type,
-                options: hasOptions ? values.optionsList.filter(o => o.trim() !== "") : null,
+                options: isGrid
+                    ? { rows: values.gridRows.filter(r => r.trim() !== ""), columns: values.gridColumns.filter(c => c.trim() !== "") }
+                    : hasOptions ? values.optionsList.filter(o => o.trim() !== "") : null,
                 mapping_source: values.mapping_source || null,
                 maskking: values.maskking || null,
                 is_criterion: values.is_criterion && !!values.criterion_rule,
@@ -1150,7 +1159,16 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
         setEditingField(field);
 
         let optionsList = ["Opção 1", "Opção 2"];
-        if (field.options && Array.isArray(field.options) && field.options.length > 0) {
+        let gridRows = ["Linha 1"];
+        let gridColumns = ["Coluna 1"];
+
+        const isGrid = field.data_type === "grid_select" || field.data_type === "grid_multiselect";
+
+        if (isGrid && field.options && typeof field.options === "object" && !Array.isArray(field.options)) {
+            const gridOpts = field.options as { rows?: string[]; columns?: string[] };
+            gridRows = gridOpts.rows || ["Linha 1"];
+            gridColumns = gridOpts.columns || ["Coluna 1"];
+        } else if (field.options && Array.isArray(field.options) && field.options.length > 0) {
             optionsList = field.options as string[];
         }
 
@@ -1171,6 +1189,8 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
             question_text: field.question_text,
             data_type: field.data_type,
             optionsList: optionsList,
+            gridRows: gridRows,
+            gridColumns: gridColumns,
             mapping_source: field.mapping_source || "",
             maskking: field.maskking || "",
             is_criterion: field.is_criterion,
@@ -2036,6 +2056,140 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                         </Button>
                                     )}
                                 </div>
+                            </div>
+                        )}
+
+                        {(formValues.data_type === "grid_select" || formValues.data_type === "grid_multiselect") && (
+                            <div className="space-y-4 bg-muted/50 p-4 rounded-md border">
+                                <div className="flex items-center gap-2">
+                                    <Grid3X3 className="h-4 w-4" />
+                                    <Label>Configuração da Grade</Label>
+                                    <Badge variant="outline" className="text-[10px]">
+                                        {formValues.data_type === "grid_select" ? "1 resposta por linha" : "Múltiplas respostas por linha"}
+                                    </Badge>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    {/* Linhas */}
+                                    <div className="space-y-2">
+                                        <Label className="text-xs font-semibold text-muted-foreground">Linhas (afirmações/itens)</Label>
+                                        <div className={cn("space-y-2", formValues.gridRows.length > 8 && "max-h-[280px] overflow-y-auto pr-1")}>
+                                            {formValues.gridRows.map((row, i) => (
+                                                <div key={i} className="flex gap-1.5 items-center">
+                                                    <span className="text-xs text-muted-foreground w-5 shrink-0">{i + 1}.</span>
+                                                    <Input
+                                                        value={row}
+                                                        onChange={(e) => {
+                                                            const newRows = [...formValues.gridRows];
+                                                            newRows[i] = e.target.value;
+                                                            setFormValues({ ...formValues, gridRows: newRows });
+                                                        }}
+                                                        placeholder={`Linha ${i + 1}`}
+                                                        className="bg-background h-8 text-sm"
+                                                    />
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-7 w-7 shrink-0"
+                                                        onClick={() => {
+                                                            const newRows = formValues.gridRows.filter((_, idx) => idx !== i);
+                                                            setFormValues({ ...formValues, gridRows: newRows });
+                                                        }}
+                                                        disabled={formValues.gridRows.length <= 1}
+                                                    >
+                                                        <X className="h-3.5 w-3.5 text-muted-foreground" />
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="w-full border-dashed h-7 text-xs"
+                                            onClick={() => setFormValues({ ...formValues, gridRows: [...formValues.gridRows, ""] })}
+                                        >
+                                            <Plus className="h-3.5 w-3.5 mr-1" />
+                                            Adicionar linha
+                                        </Button>
+                                    </div>
+
+                                    {/* Colunas */}
+                                    <div className="space-y-2">
+                                        <Label className="text-xs font-semibold text-muted-foreground">Colunas (opções de resposta)</Label>
+                                        <div className={cn("space-y-2", formValues.gridColumns.length > 8 && "max-h-[280px] overflow-y-auto pr-1")}>
+                                            {formValues.gridColumns.map((col, i) => (
+                                                <div key={i} className="flex gap-1.5 items-center">
+                                                    <Input
+                                                        value={col}
+                                                        onChange={(e) => {
+                                                            const newCols = [...formValues.gridColumns];
+                                                            newCols[i] = e.target.value;
+                                                            setFormValues({ ...formValues, gridColumns: newCols });
+                                                        }}
+                                                        placeholder={`Coluna ${i + 1}`}
+                                                        className="bg-background h-8 text-sm"
+                                                    />
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-7 w-7 shrink-0"
+                                                        onClick={() => {
+                                                            const newCols = formValues.gridColumns.filter((_, idx) => idx !== i);
+                                                            setFormValues({ ...formValues, gridColumns: newCols });
+                                                        }}
+                                                        disabled={formValues.gridColumns.length <= 1}
+                                                    >
+                                                        <X className="h-3.5 w-3.5 text-muted-foreground" />
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="w-full border-dashed h-7 text-xs"
+                                            onClick={() => setFormValues({ ...formValues, gridColumns: [...formValues.gridColumns, ""] })}
+                                        >
+                                            <Plus className="h-3.5 w-3.5 mr-1" />
+                                            Adicionar coluna
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                {/* Preview */}
+                                {formValues.gridRows.filter(r => r.trim()).length > 0 && formValues.gridColumns.filter(c => c.trim()).length > 0 && (
+                                    <div className="mt-3 pt-3 border-t">
+                                        <Label className="text-xs text-muted-foreground mb-2 block">Pré-visualização</Label>
+                                        <div className="rounded-md border overflow-auto max-h-[200px]">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead className="text-xs min-w-[150px]"></TableHead>
+                                                        {formValues.gridColumns.filter(c => c.trim()).map((col, i) => (
+                                                            <TableHead key={i} className="text-xs text-center min-w-[80px]">{col}</TableHead>
+                                                        ))}
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {formValues.gridRows.filter(r => r.trim()).map((row, i) => (
+                                                        <TableRow key={i}>
+                                                            <TableCell className="text-xs font-medium">{row}</TableCell>
+                                                            {formValues.gridColumns.filter(c => c.trim()).map((_, j) => (
+                                                                <TableCell key={j} className="text-center">
+                                                                    {formValues.data_type === "grid_select" ? (
+                                                                        <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/30 mx-auto" />
+                                                                    ) : (
+                                                                        <div className="h-4 w-4 rounded border-2 border-muted-foreground/30 mx-auto" />
+                                                                    )}
+                                                                </TableCell>
+                                                            ))}
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
 
