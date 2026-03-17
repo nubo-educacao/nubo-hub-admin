@@ -34,7 +34,8 @@ const AVAILABLE_PERMISSIONS = [
     "Estudantes",
     "Controle de usuários",
     "Sean Ellis Score",
-    "Calendário"
+    "Calendário",
+    "Conhecimento"
 ];
 
 export default function UserModal({ open, onOpenChange, user, onSuccess }: UserModalProps) {

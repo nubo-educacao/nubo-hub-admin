@@ -21,6 +21,7 @@ import PartnerApplications from "./pages/PartnerApplications";
 import Students from "./pages/Students";
 import SeanEllis from "./pages/SeanEllis";
 import Calendar from "./pages/Calendar";
+import KnowledgeBase from "./pages/KnowledgeBase";
 import PartnerDashboard from "./pages/PartnerDashboard";
 import NotFound from "./pages/NotFound";
 
@@ -53,6 +54,7 @@ const App = () => (
               <Route path="/students" element={<Students />} />
               <Route path="/sean-ellis" element={<SeanEllis />} />
               <Route path="/calendar" element={<Calendar />} />
+              <Route path="/knowledge" element={<KnowledgeBase />} />
             </Route>
 
             {/* Partner Portal Routes */}

@@ -1,35 +1,36 @@
--- View to make it easier to query for applications with reversed text inputs
-CREATE OR REPLACE VIEW reversed_student_applications AS
+-- View para identificar aplicações de estudantes com texto invertido (bug de input)
+DROP VIEW IF EXISTS reversed_student_applications;
+CREATE VIEW reversed_student_applications AS
 SELECT 
-    id AS application_id, 
-    user_id, 
-    partner_id,
-    created_at,
+    sa.id AS application_id, 
+    sa.user_id, 
+    sa.partner_id,
+    sa.status,
+    sa.created_at,
+    u.phone AS user_phone,
     -- Campos comuns que ajudam a bater o olho rápido no erro:
-    answers->>'Nome Completo' AS nome_completo,
-    answers->>'Nome de preferência' AS nome_preferencia,
-    COALESCE(answers->>'Email candidato', answers->>'Email') AS email,
-    answers->>'Profissão do pai' AS profissao_pai,
-    answers->>'Nome responsável' AS nome_responsavel,
-    answers AS formato_original_json
-FROM student_applications
+    sa.answers->>'Nome Completo' AS nome_completo,
+    sa.answers->>'Nome de preferência' AS nome_preferencia,
+    COALESCE(sa.answers->>'Email candidato', sa.answers->>'Email') AS email,
+    sa.answers->>'Profissão do pai' AS profissao_pai,
+    sa.answers->>'Nome responsável' AS nome_responsavel,
+    sa.answers AS formato_original_json
+FROM student_applications sa
+LEFT JOIN auth.users u ON u.id = sa.user_id
 WHERE 
     -- 1. E-mails preenchidos incorretamente devido à inversão (texto extra após o ".com"). 
     (
-        COALESCE(answers->>'Email candidato', answers->>'Email') ~ '@.+\.(com|br|net|org)[a-zA-Z0-9]+' 
+        COALESCE(sa.answers->>'Email candidato', sa.answers->>'Email') ~ '@.+\.(com|br|net|org)[a-zA-Z0-9]+' 
         AND 
-        COALESCE(answers->>'Email candidato', answers->>'Email') !~ '@.+\.(com|br|net|org)$'
+        COALESCE(sa.answers->>'Email candidato', sa.answers->>'Email') !~ '@.+\.(com|br|net|org)$'
     )
     
     -- 2. Padrão de Nomes Invertidos diretos nas chaves principais
-    OR (answers->>'Nome de preferência' ~ '^[a-z].*[A-Z]$') 
-    OR (answers->>'Nome Completo' ~ '^[a-z].*[A-Z]$')
+    OR (sa.answers->>'Nome de preferência' ~ '^[a-z].*[A-Z]$') 
+    OR (sa.answers->>'Nome Completo' ~ '^[a-z].*[A-Z]$')
     
     -- 3. Palavras comuns nas respostas que claramente estão invertidas.
-    OR answers::text ILIKE ANY (ARRAY['%margatsnI%', '%ipazstahW%', '%koobecaF%', '%eniwodniL%', '%rotlucirGA%', '%oriehnegnE%'])
+    OR sa.answers::text ILIKE ANY (ARRAY['%margatsnI%', '%ipazstahW%', '%koobecaF%', '%eniwodniL%', '%rotlucirGA%', '%oriehnegnE%'])
 
     -- 4. Qualquer letra Maiúscula que apareça no MEIO ou FIM de uma palavra.
-    -- O regex '[a-zçáàâãéêíóôõú][A-ZÇÁÀÂÃÉÊÍÓÔÕÚ]' procura por qualquer letra 
-    -- minúscula que seja seguida imediatamente por uma letra maiúscula.
-    -- (Ex: "n" minúsculo seguido de "A" maiúsculo no caso de "anA").
-    OR answers::text ~ '[a-zçáàâãéêíóôõú][A-ZÇÁÀÂÃÉÊÍÓÔÕÚ]';
+    OR sa.answers::text ~ '[a-zçáàâãéêíóôõú][A-ZÇÁÀÂÃÉÊÍÓÔÕÚ]';
