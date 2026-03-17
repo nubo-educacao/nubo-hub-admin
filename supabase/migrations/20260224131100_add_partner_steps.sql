@@ -15,13 +15,18 @@ CREATE TABLE IF NOT EXISTS public.partner_steps (
 );
 
 ALTER TABLE public.partner_forms
-    ADD COLUMN step_id uuid;
+    ADD COLUMN IF NOT EXISTS step_id uuid;
 
-ALTER TABLE public.partner_forms
-    ADD CONSTRAINT partner_forms_step_id_fkey FOREIGN KEY (step_id)
-    REFERENCES public.partner_steps (id) MATCH SIMPLE
-    ON UPDATE NO ACTION
-    ON DELETE SET NULL;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'partner_forms_step_id_fkey') THEN
+        ALTER TABLE public.partner_forms
+            ADD CONSTRAINT partner_forms_step_id_fkey FOREIGN KEY (step_id)
+            REFERENCES public.partner_steps (id) MATCH SIMPLE
+            ON UPDATE NO ACTION
+            ON DELETE SET NULL;
+    END IF;
+END $$;
 
 -- Enable RLS
 ALTER TABLE public.partner_steps ENABLE ROW LEVEL SECURITY;

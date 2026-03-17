@@ -1,5 +1,5 @@
 -- Create table for caching AI insights
-CREATE TABLE public.ai_insights (
+CREATE TABLE IF NOT EXISTS public.ai_insights (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   insights JSONB NOT NULL,
   data_context JSONB NOT NULL,
