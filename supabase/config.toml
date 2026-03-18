@@ -58,3 +58,9 @@ verify_jwt = false
 
 [functions.analytics-power-users-export]
 verify_jwt = false
+
+[functions.pdf-to-markdown]
+verify_jwt = false
+
+[functions.test-knowledge]
+verify_jwt = false
