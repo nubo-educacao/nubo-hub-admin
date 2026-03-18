@@ -20,7 +20,8 @@ import {
     Ticket,
     ClipboardList,
     FileText,
-    FolderOpen
+    FolderOpen,
+    BookOpen,
 } from "lucide-react";
 
 
@@ -90,6 +91,12 @@ export default function Sidebar() {
                     icon: AlertCircle,
                     label: "Erros",
                     permission: "Erros",
+                },
+                {
+                    to: "/knowledge",
+                    icon: BookOpen,
+                    label: "Conhecimento",
+                    permission: "Conhecimento",
                 },
             ]
         },
