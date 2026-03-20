@@ -16,6 +16,83 @@ import { Pencil, Check, X, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+// ─── Complex Data Renderer Helper ──────────────────────────────────────────
+
+function ComplexDataRenderer({ value, field }: { value: unknown; field?: PartnerFormField | null }) {
+    if (value == null || value === "") return <span className="text-muted-foreground italic">Não preenchido</span>;
+    if (typeof value !== "object") return <span className="text-sm break-words whitespace-pre-wrap">{String(value)}</span>;
+
+    // Pattern 1 & 3: Array
+    if (Array.isArray(value)) {
+        if (value.length === 0) return <span className="text-muted-foreground italic">Vazio</span>;
+
+        // Check if array of objects (Pattern 3)
+        const isObjectArray = value.some(v => typeof v === "object" && v !== null && !Array.isArray(v));
+
+        if (isObjectArray) {
+            return (
+                <div className="flex flex-col gap-3 mt-2">
+                    {value.map((item, idx) => (
+                        <div key={idx} className="border rounded-md p-3 bg-slate-50/50 shadow-sm relative pt-6">
+                            <span className="absolute top-0 left-0 bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-600 rounded-br-md rounded-tl-md uppercase tracking-wide">
+                                Item {idx + 1}
+                            </span>
+                            <ComplexDataRenderer value={item} field={field} />
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+
+        // Pattern 1: Array of Strings/Primitives
+        return (
+            <div className="flex flex-wrap gap-1.5 mt-1">
+                {value.map((item, idx) => (
+                    <span key={idx} className="inline-flex bg-slate-100 border border-slate-200 text-slate-700 px-2.5 py-1 rounded-md text-xs font-medium break-words">
+                        {String(item)}
+                    </span>
+                ))}
+            </div>
+        );
+    }
+
+    // Pattern 2: Object Dictionary
+    const entries = Object.entries(value);
+    if (entries.length === 0) return <span className="text-muted-foreground italic">Vazio</span>;
+
+    // Se for grid_select, tenta ler os "rows" do field.options
+    const hasRows = field?.data_type === "grid_select" && field.options && Array.isArray((field.options as any).rows);
+    const rows = hasRows ? (field.options as any).rows : null;
+
+    return (
+        <div className="flex flex-col gap-2 mt-1">
+            {entries.map(([k, v], idx) => {
+                let label = isNaN(Number(k)) ? `${k}:` : `#${k}:`;
+                if (rows && !isNaN(Number(k)) && rows[Number(k)]) {
+                    label = rows[Number(k)];
+                }
+                
+                return (
+                    <div key={idx} className="flex gap-2 items-start text-sm border-l-2 border-slate-200 pl-3 py-0.5">
+                        <span className="font-semibold text-slate-600 shrink-0 mt-0.5 text-xs w-1/2">
+                            {label}
+                        </span>
+                        <div className="w-1/2 break-words text-slate-800">
+                            {typeof v === "object" && v !== null ? (
+                                <ComplexDataRenderer value={v} field={field} />
+                            ) : (
+                                <span className="whitespace-pre-wrap">{String(v)}</span>
+                            )}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+// ─── Component ──────────────────────────────────────────────────────────────
+
 interface ApplicationAnswersModalProps {
     application: ApplicationWithDetails | null;
     formFields: PartnerFormField[];
@@ -93,7 +170,8 @@ export default function ApplicationAnswersModal({
     const structuredAnswers = formFields.map(field => ({
         label: field.question_text || field.field_name,
         value: localAnswers[field.field_name],
-        fieldName: field.field_name
+        fieldName: field.field_name,
+        field: field
     }));
 
     // Fields in answers that are NOT in partner_forms
@@ -153,14 +231,10 @@ export default function ApplicationAnswersModal({
                                                 </div>
                                             </div>
                                         ) : (
-                                            <div className="flex justify-between items-start mt-1">
-                                                <p className="text-sm">
-                                                    {item.value != null ? (
-                                                        isComplex ? <span className="font-mono text-xs bg-muted p-1 rounded break-all">{displayValue}</span> : displayValue
-                                                    ) : (
-                                                        <span className="text-muted-foreground italic">Não preenchido</span>
-                                                    )}
-                                                </p>
+                                            <div className="flex justify-between items-start mt-1 relative">
+                                                <div className="w-[85%]">
+                                                    <ComplexDataRenderer value={item.value} field={item.field} />
+                                                </div>
                                                 
                                                 <Button
                                                     variant="ghost"
@@ -219,14 +293,10 @@ export default function ApplicationAnswersModal({
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                    <div className="flex justify-between items-start mt-1">
-                                                        <p className="text-sm">
-                                                            {value != null ? (
-                                                                isComplex ? <span className="font-mono text-xs bg-muted p-1 rounded break-all">{displayValue}</span> : displayValue
-                                                            ) : (
-                                                                "—"
-                                                            )}
-                                                        </p>
+                                                    <div className="flex justify-between items-start mt-1 relative">
+                                                        <div className="w-[85%]">
+                                                            <ComplexDataRenderer value={value} />
+                                                        </div>
                                                         
                                                         <Button
                                                             variant="ghost"

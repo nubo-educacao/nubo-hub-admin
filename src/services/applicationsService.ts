@@ -79,3 +79,19 @@ export async function getEligibleCountForPartner(partnerId: string): Promise<num
 
     return (data as number) || 0;
 }
+
+/**
+ * Gets the count of fields per partner to calculate application completion percentage.
+ */
+export async function getPartnerFormCounts(): Promise<Record<string, number>> {
+    const { data, error } = await supabase.from('partner_forms').select('partner_id');
+    if (error) {
+        console.error("Error fetching partner forms count:", error);
+        return {};
+    }
+    const counts: Record<string, number> = {};
+    for (const row of (data || [])) {
+        counts[row.partner_id] = (counts[row.partner_id] || 0) + 1;
+    }
+    return counts;
+}

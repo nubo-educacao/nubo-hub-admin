@@ -22,6 +22,7 @@ import {
     FileText,
     FolderOpen,
     BookOpen,
+    Library
 } from "lucide-react";
 
 
@@ -57,6 +58,7 @@ export default function Sidebar() {
     const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
         Cloudinha: false,
         Passaporte: false,
+        "Dados Educacionais": false,
     });
     const { permissions, signOut } = useAuth();
     const location = useLocation();
@@ -106,6 +108,12 @@ export default function Sidebar() {
             permission: "Parceiros",
             isGroup: true,
             items: [
+                {
+                    to: "/passport-dashboard",
+                    icon: LayoutDashboard,
+                    label: "Dashboard",
+                    permission: "Parceiros",
+                },
                 {
                     to: "/partners",
                     icon: Handshake,
@@ -161,6 +169,38 @@ export default function Sidebar() {
             icon: PieChart,
             label: "Sean Ellis Score",
             permission: "Sean Ellis Score",
+        },
+        {
+            label: "Dados Educacionais",
+            icon: Library,
+            permission: "Dashboard", // Usamos Dashboard ou criamos uma no futuro. Como admin tem acesso total, deve funcionar provisoriamente.
+            isGroup: true,
+            items: [
+                {
+                    to: "/educational/institutions",
+                    icon: GraduationCap,
+                    label: "Instituições",
+                    permission: "Dashboard",
+                },
+                {
+                    to: "/educational/campus",
+                    icon: LayoutDashboard,
+                    label: "Campus",
+                    permission: "Dashboard",
+                },
+                {
+                    to: "/educational/courses",
+                    icon: BookOpen,
+                    label: "Cursos",
+                    permission: "Dashboard",
+                },
+                {
+                    to: "/educational/opportunities",
+                    icon: ClipboardList,
+                    label: "Oportunidades",
+                    permission: "Dashboard",
+                },
+            ]
         },
         {
             to: "/users",

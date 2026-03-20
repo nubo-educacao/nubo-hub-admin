@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +25,9 @@ import {
     FileSpreadsheet,
     Eye,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import type { ApplicationWithDetails, PartnerOption } from "@/services/applicationsService";
+import { getPartnerFormCounts } from "@/services/applicationsService";
 
 // ─── Status helpers ──────────────────────────────────────────────────────────
 
@@ -75,6 +77,7 @@ interface ApplicationsTableProps {
     partners?: PartnerOption[];
     partnerFilter?: string;
     onPartnerFilterChange?: (value: string) => void;
+    onFilteredDataChange?: (applications: ApplicationWithDetails[]) => void;
 }
 
 // ─── Eligibility formatter ─────────────────────────────────────────────────────
@@ -109,10 +112,16 @@ export default function ApplicationsTable({
     partners,
     partnerFilter,
     onPartnerFilterChange,
+    onFilteredDataChange,
 }: ApplicationsTableProps) {
     const showPartnerColumn = !!partners;
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState<string>("all");
+
+    const { data: formCounts = {} } = useQuery({
+        queryKey: ["partnerFormCountsTable"],
+        queryFn: getPartnerFormCounts,
+    });
 
     const filteredApplications = useMemo(() => {
         return applications.filter((app) => {
@@ -125,6 +134,13 @@ export default function ApplicationsTable({
             return true;
         });
     }, [applications, statusFilter, search]);
+
+    // Report filtered applications to parent
+    useEffect(() => {
+        if (onFilteredDataChange) {
+            onFilteredDataChange(filteredApplications);
+        }
+    }, [filteredApplications, onFilteredDataChange]);
 
     if (isLoading) {
         return (
@@ -184,6 +200,7 @@ export default function ApplicationsTable({
                             {showPartnerColumn && <TableHead>Parceiro</TableHead>}
                             <TableHead>Status</TableHead>
                             <TableHead>Elegibilidade</TableHead>
+                            <TableHead className="text-center">Progresso</TableHead>
                             <TableHead>Data</TableHead>
                             <TableHead className="text-right">Ações</TableHead>
                         </TableRow>
@@ -191,7 +208,7 @@ export default function ApplicationsTable({
                     <TableBody>
                         {filteredApplications.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={showPartnerColumn ? 7 : 6} className="text-center py-8 text-muted-foreground">
+                                <TableCell colSpan={showPartnerColumn ? 8 : 7} className="text-center py-8 text-muted-foreground">
                                     Nenhuma candidatura encontrada.
                                 </TableCell>
                             </TableRow>
@@ -214,6 +231,24 @@ export default function ApplicationsTable({
                                     </TableCell>
                                     <TableCell>
                                         <EligibilityCell eligibilityResults={app.eligibility_results} partnerId={app.partner_id} />
+                                    </TableCell>
+                                    <TableCell className="text-center">
+                                        {(() => {
+                                            const filled = Object.keys(app.answers || {}).length;
+                                            const totalForms = formCounts[app.partner_id] || 0;
+                                            let percent = 0;
+                                            if (app.status === 'SUBMITTED') {
+                                                percent = 100;
+                                            } else if (totalForms > 0) {
+                                                percent = Math.min(100, Math.round((filled * 100) / totalForms));
+                                            }
+                                            return (
+                                                <div className="flex flex-col items-center">
+                                                    <span className="font-medium text-primary">{percent}%</span>
+                                                    <span className="text-[10px] text-muted-foreground">{filled} / {totalForms || '?'} resps</span>
+                                                </div>
+                                            );
+                                        })()}
                                     </TableCell>
                                     <TableCell className="whitespace-nowrap text-muted-foreground">
                                         {new Date(app.created_at).toLocaleDateString("pt-BR")}

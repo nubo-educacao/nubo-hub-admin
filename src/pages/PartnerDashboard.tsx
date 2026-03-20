@@ -9,8 +9,10 @@ import {
 import {
     getApplicationsWithDetails,
     getEligibleCountForPartner,
+    getPartnerFormCounts,
     type ApplicationWithDetails,
 } from "@/services/applicationsService";
+import { getPartnerFunnel } from "@/services/passportDashboardService";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,10 +21,12 @@ import {
     CheckCircle2,
     XCircle,
     FileSpreadsheet,
+    MousePointerClick,
 } from "lucide-react";
 import { toast } from "sonner";
 import ApplicationsTable, { STATUS_CONFIG } from "@/components/applications/ApplicationsTable";
 import ApplicationAnswersModal from "@/components/applications/ApplicationAnswersModal";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 
 // ─── Excel Export ────────────────────────────────────────────────────────────
 
@@ -101,6 +105,7 @@ function exportToExcel(
 export default function PartnerDashboard() {
     const [selectedApp, setSelectedApp] = useState<ApplicationWithDetails | null>(null);
     const [modalOpen, setModalOpen] = useState(false);
+    const [filteredApps, setFilteredApps] = useState<ApplicationWithDetails[]>([]);
 
     // 1. Resolve the partner_id for this user
     const { data: partnerId, isLoading: loadingPartnerId } = useQuery({
@@ -136,14 +141,67 @@ export default function PartnerDashboard() {
         enabled: !!partnerId,
     });
 
+    // 6. Fetch form counts for calculating completion on the fly
+    const { data: formCounts = {} } = useQuery({
+        queryKey: ["partnerFormCountsTable"],
+        queryFn: getPartnerFormCounts,
+    });
+
+    const completionChartData = useMemo(() => {
+        const buckets = {
+            "1. Até 25%": 0,
+            "2. Até 50%": 0,
+            "3. Até 75%": 0,
+            "4. Até 100%": 0
+        };
+
+        filteredApps.forEach(app => {
+            const filled = Object.keys(app.answers || {}).length;
+            const totalForms = formCounts[app.partner_id] || 0;
+            let percent = 0;
+            if (app.status === 'SUBMITTED') {
+                percent = 100;
+            } else if (totalForms > 0) {
+                percent = Math.min(100, Math.round((filled * 100) / totalForms));
+            }
+            
+            if (percent <= 25) buckets["1. Até 25%"]++;
+            else if (percent <= 50) buckets["2. Até 50%"]++;
+            else if (percent <= 75) buckets["3. Até 75%"]++;
+            else buckets["4. Até 100%"]++;
+        });
+
+        return Object.keys(buckets).sort().map(bucket => ({
+            name: bucket,
+            count: buckets[bucket as keyof typeof buckets]
+        }));
+    }, [filteredApps, formCounts]);
+
+    // 7. Fetch partner funnel
+    const { data: funnelData } = useQuery({
+        queryKey: ["partnerFunnel"],
+        queryFn: getPartnerFunnel,
+    });
+
     // ─── Stats ───────────────────────────────────────────────────────────────
 
     const stats = useMemo(() => {
-        const total = applications.length;
-        const eligible = eligibleCount;
-        const submitted = applications.filter((a) => a.status === "SUBMITTED").length;
-        return { total, eligible, submitted };
-    }, [applications, eligibleCount]);
+        const total = filteredApps.length;
+        
+        const eligible = filteredApps.filter((app) => {
+            if (!app.eligibility_results || !Array.isArray(app.eligibility_results)) return false;
+            const res = app.eligibility_results.find((r: any) => r.partner_id === app.partner_id);
+            if (!res) return false;
+            const met = Number(res.met_criteria) || 0;
+            const totalFields = Number(res.total_criteria) || 0;
+            return met === totalFields && totalFields > 0;
+        }).length;
+
+        const submitted = filteredApps.filter((a) => a.status === "SUBMITTED").length;
+        const myFunnel = funnelData?.find(f => f.partner_id === partnerId);
+        const clicks = myFunnel?.total_unique_clicks || 0;
+        return { total, eligible, submitted, clicks };
+    }, [filteredApps, funnelData, partnerId]);
 
     // ─── Handlers ────────────────────────────────────────────────────────────
 
@@ -189,8 +247,8 @@ export default function PartnerDashboard() {
                     </p>
                 </div>
                 <Button
-                    onClick={() => exportToExcel(applications, formFields, partner?.name || "parceiro")}
-                    disabled={applications.length === 0}
+                    onClick={() => exportToExcel(filteredApps, formFields, partner?.name || "parceiro")}
+                    disabled={filteredApps.length === 0}
                     className="flex items-center gap-2"
                 >
                     <Download className="h-4 w-4" />
@@ -199,7 +257,18 @@ export default function PartnerDashboard() {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <Card>
+                    <CardContent className="pt-6 flex items-center gap-4">
+                        <div className="p-3 rounded-full bg-orange-500/10">
+                            <MousePointerClick className="h-5 w-5 text-orange-500" />
+                        </div>
+                        <div>
+                            <p className="text-2xl font-bold">{stats.clicks}</p>
+                            <p className="text-xs text-muted-foreground">Cliques no Perfil</p>
+                        </div>
+                    </CardContent>
+                </Card>
                 <Card>
                     <CardContent className="pt-6 flex items-center gap-4">
                         <div className="p-3 rounded-full bg-primary/10">
@@ -235,6 +304,27 @@ export default function PartnerDashboard() {
                 </Card>
             </div>
 
+            {/* Progression Chart */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-lg">Progresso das Candidaturas</CardTitle>
+                    <CardDescription>
+                        Distribuição do percentual de preenchimento do seu formulário.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="h-[250px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={completionChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                            <XAxis dataKey="name" fontSize={12} />
+                            <YAxis fontSize={12} allowDecimals={false} />
+                            <RechartsTooltip cursor={{ fill: 'transparent' }} />
+                            <Bar dataKey="count" fill="#10b981" radius={[4, 4, 0, 0]} name="Candidaturas" />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </CardContent>
+            </Card>
+
             {/* Applications Table */}
             <Card>
                 <CardHeader>
@@ -248,6 +338,7 @@ export default function PartnerDashboard() {
                         applications={applications}
                         isLoading={loadingApps}
                         onViewAnswers={handleViewAnswers}
+                        onFilteredDataChange={setFilteredApps}
                     />
                 </CardContent>
             </Card>

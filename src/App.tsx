@@ -23,7 +23,12 @@ import SeanEllis from "./pages/SeanEllis";
 import Calendar from "./pages/Calendar";
 import KnowledgeBase from "./pages/KnowledgeBase";
 import PartnerDashboard from "./pages/PartnerDashboard";
+import PassportDashboard from "./pages/PassportDashboard";
 import NotFound from "./pages/NotFound";
+import Institutions from "./pages/educational-data/Institutions";
+import Campus from "./pages/educational-data/Campus";
+import Courses from "./pages/educational-data/Courses";
+import Opportunities from "./pages/educational-data/Opportunities";
 
 const queryClient = new QueryClient();
 
@@ -51,10 +56,15 @@ const App = () => (
               <Route path="/forms" element={<PartnerForms />} />
               <Route path="/partners-users" element={<PartnerUsers />} />
               <Route path="/applications" element={<PartnerApplications />} />
+              <Route path="/passport-dashboard" element={<PassportDashboard />} />
               <Route path="/students" element={<Students />} />
               <Route path="/sean-ellis" element={<SeanEllis />} />
               <Route path="/calendar" element={<Calendar />} />
               <Route path="/knowledge" element={<KnowledgeBase />} />
+              <Route path="/educational/institutions" element={<Institutions />} />
+              <Route path="/educational/campus" element={<Campus />} />
+              <Route path="/educational/courses" element={<Courses />} />
+              <Route path="/educational/opportunities" element={<Opportunities />} />
             </Route>
 
             {/* Partner Portal Routes */}
