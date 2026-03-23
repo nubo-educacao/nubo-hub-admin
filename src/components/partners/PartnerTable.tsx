@@ -2,6 +2,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Edit, Image as ImageIcon, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Partner } from "@/services/partnersService";
+import { Badge } from "@/components/ui/badge";
 
 interface PartnerTableProps {
     partners: Partner[];
@@ -76,6 +77,7 @@ export function PartnerTable({
                             </div>
                         </TableHead>
                         <TableHead>Período</TableHead>
+                        <TableHead>Status</TableHead>
                         <TableHead className="text-right">Total de Cliques</TableHead>
                         <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
@@ -106,6 +108,11 @@ export function PartnerTable({
                                 <TableCell className="font-medium">{partner.name}</TableCell>
                                 <TableCell>{partner.type || "N/A"}</TableCell>
                                 <TableCell>{formatDateRange(partner.dates)}</TableCell>
+                                <TableCell>
+                                    <Badge variant={partner.applications_open ? "default" : "secondary"}>
+                                        {partner.applications_open ? "Abertas" : "Encerradas"}
+                                    </Badge>
+                                </TableCell>
                                 <TableCell className="text-right">
                                     {clicksMap[partner.id] || 0}
                                 </TableCell>

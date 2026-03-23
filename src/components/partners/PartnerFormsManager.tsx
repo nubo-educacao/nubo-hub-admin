@@ -1334,6 +1334,17 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                         </SelectContent>
                     </Select>
                 </div>
+                {selectedPartnerId && (() => {
+                    const partner = partners.find(p => p.id === selectedPartnerId);
+                    if (!partner) return null;
+                    return (
+                        <div className="mb-1">
+                            <Badge variant={partner.applications_open ? "default" : "secondary"} className="text-sm px-3 py-1 md:mt-6">
+                                {partner.applications_open ? "Inscrições Abertas" : "Inscrições Encerradas"}
+                            </Badge>
+                        </div>
+                    );
+                })()}
             </div>
 
             {selectedPartnerId && (
