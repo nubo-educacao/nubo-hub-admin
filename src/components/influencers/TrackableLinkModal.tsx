@@ -24,7 +24,7 @@ export default function TrackableLinkModal({
     influencerCode,
 }: TrackableLinkModalProps) {
     const [copied, setCopied] = useState(false);
-    const link = `http://cloudinha.nuboeducacao.org.br/?ref=${influencerCode || ""}`;
+    const link = `https://conecta.nuboeducacao.com.br/?ref=${influencerCode || ""}`;
 
     const handleCopy = () => {
         navigator.clipboard.writeText(link);
