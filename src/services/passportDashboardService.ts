@@ -57,6 +57,19 @@ export async function getAdminFurthestPassportPhases(): Promise<AdminFurthestPas
   return data as AdminFurthestPassportPhasesData[];
 }
 
+export interface FunnelUserData {
+  whatsapp: string;
+  full_name: string;
+  funnel_phase: string;
+  step_order: number;
+}
+
+export async function getAdminFunnelUsers(): Promise<FunnelUserData[]> {
+  const { data, error } = await supabase.rpc('get_admin_funnel_users' as any);
+  if (error) throw error;
+  return data as FunnelUserData[];
+}
+
 export async function getPartnerFunnel(): Promise<PartnerFunnelData[]> {
   const { data, error } = await (supabase as any)
     .from('vw_partner_funnel')
@@ -84,34 +97,39 @@ export async function getPartnerApplicationBuckets(partnerId?: string): Promise<
 export interface ApplicationsOverTimeData {
   date: string;
   label: string;
-  count: number;
+  Geral: number;
+  [partnerName: string]: string | number;
 }
 
-export async function getStudentApplicationsOverTime(): Promise<ApplicationsOverTimeData[]> {
-  const { data, error } = await supabase
-    .from('student_applications')
-    .select('created_at');
+export async function getStudentApplicationsOverTime(partnerId?: string, daysAgo?: number | null): Promise<ApplicationsOverTimeData[]> {
+  const { data, error } = await supabase.rpc('get_admin_applications_over_time' as any, {
+    p_partner_id: partnerId === 'all' ? null : partnerId,
+    p_days_ago: daysAgo
+  });
 
   if (error) throw error;
   
-  const grouped = (data || []).reduce((acc: Record<string, number>, curr: any) => {
-    if (!curr.created_at) return acc;
-    const d = new Date(curr.created_at);
-    // Use local timezone formatting (pt-BR) or ISO to avoid timezone shifts
-    // Using ISO to group safely by Day
-    const isoDate = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
-    acc[isoDate] = (acc[isoDate] || 0) + 1;
+  // The RPC returns { date: 'YYYY-MM-DD', partner_name, count: number }
+  const grouped = ((data as any[]) || []).reduce((acc: any, item: any) => {
+    if (!acc[item.date]) {
+      const [y, m, d] = item.date.split('-');
+      acc[item.date] = {
+        date: item.date,
+        label: `${d}/${m}`,
+        Geral: 0
+      };
+    }
+    
+    const count = Number(item.count);
+    acc[item.date].Geral += count;
+    
+    if (item.partner_name) {
+      acc[item.date][item.partner_name] = (acc[item.date][item.partner_name] || 0) + count;
+    }
+    
     return acc;
   }, {});
 
-  const sorted = Object.keys(grouped).sort().map(dateStr => {
-    const [y, m, d] = dateStr.split('-');
-    return {
-      date: dateStr,
-      label: `${d}/${m}`,
-      count: grouped[dateStr]
-    };
-  });
-
+  const sorted = Object.keys(grouped).sort().map(k => grouped[k]);
   return sorted;
 }

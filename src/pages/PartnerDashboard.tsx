@@ -95,12 +95,19 @@ function exportToExcel(
         return [...fixedCols, ...dynamicCols, ...extraCols];
     });
 
+    const formatCSVCell = (val: unknown) => {
+        const sanitized = sanitize(val);
+        // Replace inner quotes with double quotes and wrap the whole cell in quotes
+        return `"${sanitized.replace(/"/g, '""')}"`;
+    };
+
     const BOM = "\uFEFF";
     const csvContent =
         BOM +
-        [allHeaders.join(";"), ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";"))].join(
-            "\n"
-        );
+        [
+            allHeaders.map(formatCSVCell).join(";"), 
+            ...rows.map((r) => r.map(formatCSVCell).join(";"))
+        ].join("\n");
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
