@@ -24,19 +24,53 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getPartnersList } from "@/services/applicationsService";
 import {
   getAdminFunnelChart,
   getAdminPassportPhases,
   getAdminFurthestPassportPhases,
   getPartnerFunnel,
   getPartnerApplicationBuckets,
-  getStudentApplicationsOverTime
+  getStudentApplicationsOverTime,
+  getAdminFunnelUsers
 } from "@/services/passportDashboardService";
-import { Loader2 } from "lucide-react";
+import { Loader2, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-white p-3 border rounded-md shadow-sm text-sm">
+        <p className="font-bold text-gray-700 mb-2">{label}</p>
+        {payload.map((entry: any) => (
+          <p key={entry.name} style={{ color: entry.color }} className="font-medium">
+            {entry.name}: {entry.value}
+          </p>
+        ))}
+        <p className="font-bold text-gray-900 border-t mt-2 pt-2">
+          Total: {data.Geral || 0}
+        </p>
+      </div>
+    );
+  }
+  return null;
+};
+
 export default function PassportDashboard() {
+  const [partnerFilter, setPartnerFilter] = React.useState<string>("all");
+  const [daysFilter, setDaysFilter] = React.useState<number | null>(30);
+  const [isExporting, setIsExporting] = React.useState(false);
+
+  const { data: partnersData } = useQuery({
+    queryKey: ["partnersList"],
+    queryFn: getPartnersList,
+  });
+
   const { data: funnelData, isLoading: isLoadingFunnel } = useQuery({
     queryKey: ["adminFunnelChart"],
     queryFn: getAdminFunnelChart,
@@ -63,9 +97,24 @@ export default function PassportDashboard() {
   });
 
   const { data: overTimeData, isLoading: isLoadingOverTime } = useQuery({
-    queryKey: ["studentApplicationsOverTime"],
-    queryFn: getStudentApplicationsOverTime,
+    queryKey: ["studentApplicationsOverTime", partnerFilter, daysFilter],
+    queryFn: () => getStudentApplicationsOverTime(partnerFilter, daysFilter),
   });
+
+  const currentPartnersInChart = React.useMemo(() => {
+    if (!overTimeData || overTimeData.length === 0) return [];
+    if (partnerFilter !== "all" && partnersData) {
+      const p = partnersData.find(p => p.id === partnerFilter);
+      return p ? [p.name] : [];
+    }
+    const names = new Set<string>();
+    overTimeData.forEach(d => {
+      Object.keys(d).forEach(k => {
+        if (k !== 'date' && k !== 'label' && k !== 'Geral') names.add(k);
+      });
+    });
+    return Array.from(names);
+  }, [overTimeData, partnerFilter, partnersData]);
 
   // Process buckets data to group by completing bucket regardless of partner for a global view
   const globalBuckets = React.useMemo(() => {
@@ -80,6 +129,40 @@ export default function PassportDashboard() {
       count: grouped[bucket]
     }));
   }, [bucketsData]);
+
+  const exportFunnelUsers = async () => {
+    try {
+      setIsExporting(true);
+      const users = await getAdminFunnelUsers();
+      
+      const BOM = "\uFEFF";
+      const headers = ["Nome Completo", "WhatsApp", "Fase do Funil"];
+      const rows = users.map(u => [
+         u.full_name || "—",
+         u.whatsapp || "—",
+         u.funnel_phase || "—"
+      ]);
+      
+      const csvContent = BOM + [
+         headers.join(";"),
+         ...rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(";"))
+      ].join("\n");
+      
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `usuarios_funil_${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success("Usuários exportados com sucesso!");
+    } catch (e) {
+      console.error(e);
+      toast.error("Erro ao exportar usuários.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   if (isLoadingFunnel || isLoadingPhases || isLoadingFurthest || isLoadingPartnerFunnel || isLoadingBuckets || isLoadingOverTime) {
     return (
@@ -101,9 +184,14 @@ export default function PassportDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Funil Principal */}
         <Card className="col-span-1 lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Funil de Conversão (Global)</CardTitle>
-            <CardDescription>Usuários ativos e candidaturas desde o lançamento do Passaporte (09/03).</CardDescription>
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <CardTitle>Funil de Conversão (Global)</CardTitle>
+              <CardDescription>Usuários ativos e candidaturas desde o lançamento do Passaporte (09/03).</CardDescription>
+            </div>
+            <Button variant="outline" size="sm" onClick={exportFunnelUsers} disabled={isExporting}>
+              <Download className="mr-2 h-4 w-4" /> Exportar CSV
+            </Button>
           </CardHeader>
           <CardContent className="h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -124,30 +212,61 @@ export default function PassportDashboard() {
 
         {/* Candidaturas ao Longo do Tempo */}
         <Card className="col-span-1 lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Candidaturas ao Longo do Tempo</CardTitle>
-            <CardDescription>Volume de novas candidaturas criadas diariamente.</CardDescription>
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <CardTitle>Candidaturas ao Longo do Tempo</CardTitle>
+              <CardDescription>Volume de novas candidaturas criadas diariamente.</CardDescription>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Select value={partnerFilter} onValueChange={setPartnerFilter}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Parceiro" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Parceiros</SelectItem>
+                  {partnersData?.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select 
+                value={daysFilter === null ? "all" : daysFilter.toString()} 
+                onValueChange={(val) => setDaysFilter(val === "all" ? null : parseInt(val))}
+              >
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="Período" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7">Últimos 7 dias</SelectItem>
+                  <SelectItem value="15">Últimos 15 dias</SelectItem>
+                  <SelectItem value="30">Últimos 30 dias</SelectItem>
+                  <SelectItem value="60">Últimos 60 dias</SelectItem>
+                  <SelectItem value="all">Todo o período</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </CardHeader>
           <CardContent className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart
+              <BarChart
                 data={overTimeData}
                 margin={{ top: 20, right: 30, left: 10, bottom: 5 }}
               >
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="label" />
                 <YAxis />
-                <Tooltip />
-                <Line 
-                  type="monotone" 
-                  dataKey="count" 
-                  stroke="#8b5cf6" 
-                  strokeWidth={3} 
-                  dot={{ r: 4, fill: "#8b5cf6" }} 
-                  activeDot={{ r: 6 }} 
-                  name="Novas Candidaturas" 
-                />
-              </LineChart>
+                <Tooltip content={<CustomTooltip />} />
+                <Legend />
+                {currentPartnersInChart.map((name, i) => (
+                  <Bar 
+                    key={name}
+                    dataKey={name} 
+                    stackId="a"
+                    fill={COLORS[i % COLORS.length]} 
+                    name={name} 
+                  />
+                ))}
+              </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
