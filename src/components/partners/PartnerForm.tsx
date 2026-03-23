@@ -25,6 +25,7 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { Partner, uploadPartnerCover } from "@/services/partnersService";
 import { toast } from "sonner";
+import { Switch } from "@/components/ui/switch";
 
 const partnerSchema = z.object({
     name: z.string().min(1, "Nome é obrigatório"),
@@ -38,6 +39,7 @@ const partnerSchema = z.object({
     end_date: z.date().optional(),
     link: z.string().url("Link inválido").optional().or(z.literal("")),
     coverimage: z.string().optional(),
+    applications_open: z.boolean().default(true),
 });
 
 type PartnerFormValues = z.infer<typeof partnerSchema>;
@@ -69,6 +71,7 @@ export function PartnerForm({ initialData, onSubmit, onCancel, onDelete }: Partn
                 : (initialData?.dates as any)?.end_date ? new Date((initialData.dates as any).end_date) : undefined,
             link: initialData?.link || "",
             coverimage: initialData?.coverimage || "",
+            applications_open: initialData?.applications_open ?? true,
         },
     });
 
@@ -104,6 +107,7 @@ export function PartnerForm({ initialData, onSubmit, onCancel, onDelete }: Partn
             income: values.income,
             link: values.link,
             coverimage: values.coverimage,
+            applications_open: values.applications_open,
             dates: [{
                 start_date: values.start_date.toISOString().split("T")[0],
                 end_date: values.end_date?.toISOString().split("T")[0],
@@ -159,6 +163,26 @@ export function PartnerForm({ initialData, onSubmit, onCancel, onDelete }: Partn
                             )}
                         </div>
                     </div>
+
+                    {/* Applications Open Switch */}
+                    <FormField
+                        control={form.control}
+                        name="applications_open"
+                        render={({ field }) => (
+                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 bg-muted/20">
+                                <div className="space-y-0.5">
+                                    <FormLabel className="text-base text-primary">Inscrições Abertas?</FormLabel>
+                                    <p className="text-sm text-muted-foreground">Define se o botão de Inscrição estará visível aos candidatos na plataforma.</p>
+                                </div>
+                                <FormControl>
+                                    <Switch
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                    />
+                                </FormControl>
+                            </FormItem>
+                        )}
+                    />
 
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                         {/* Name */}
