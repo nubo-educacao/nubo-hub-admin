@@ -15,6 +15,7 @@ export interface StudentApplication {
 export interface PartnerFormField {
     id: string;
     partner_id: string;
+    step_id: string | null;
     field_name: string;
     question_text: string;
     data_type: string;
@@ -61,18 +62,40 @@ export async function getPartnerDetails(partnerId: string) {
  * Gets the form field definitions for a partner.
  */
 export async function getPartnerFormFields(partnerId: string): Promise<PartnerFormField[]> {
-    const { data, error } = await (supabase
+    // 1. Fetch steps for ordering
+    const { data: steps } = await supabase
+        .from("partner_steps" as any)
+        .select("id, sort_order")
+        .eq("partner_id", partnerId);
+
+    // 2. Fetch forms
+    const { data: forms, error } = await supabase
         .from("partner_forms" as any)
         .select("*")
-        .eq("partner_id", partnerId)
-        .order("sort_order", { ascending: true }) as any);
+        .eq("partner_id", partnerId);
 
     if (error) {
         console.error("Error fetching partner forms:", error);
         throw error;
     }
 
-    return (data ?? []) as PartnerFormField[];
+    const formsList = (forms ?? []) as unknown as PartnerFormField[];
+
+    // 3. Sort intelligently: step_order ASC, then form_order ASC
+    formsList.sort((a: any, b: any) => {
+        const stepA = steps?.find((s: any) => s.id === a.step_id);
+        const stepB = steps?.find((s: any) => s.id === b.step_id);
+        
+        const orderA = stepA?.sort_order ?? 9999;
+        const orderB = stepB?.sort_order ?? 9999;
+
+        if (orderA !== orderB) {
+            return orderA - orderB;
+        }
+        return a.sort_order - b.sort_order;
+    });
+
+    return formsList;
 }
 
 /**

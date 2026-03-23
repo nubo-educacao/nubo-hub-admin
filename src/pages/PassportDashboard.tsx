@@ -12,7 +12,9 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend
+  Legend,
+  LineChart,
+  Line
 } from "recharts";
 import {
   Table,
@@ -27,7 +29,8 @@ import {
   getAdminPassportPhases,
   getAdminFurthestPassportPhases,
   getPartnerFunnel,
-  getPartnerApplicationBuckets
+  getPartnerApplicationBuckets,
+  getStudentApplicationsOverTime
 } from "@/services/passportDashboardService";
 import { Loader2 } from "lucide-react";
 
@@ -59,6 +62,11 @@ export default function PassportDashboard() {
     queryFn: () => getPartnerApplicationBuckets(), // Fetching all for now
   });
 
+  const { data: overTimeData, isLoading: isLoadingOverTime } = useQuery({
+    queryKey: ["studentApplicationsOverTime"],
+    queryFn: getStudentApplicationsOverTime,
+  });
+
   // Process buckets data to group by completing bucket regardless of partner for a global view
   const globalBuckets = React.useMemo(() => {
     if (!bucketsData) return [];
@@ -73,7 +81,7 @@ export default function PassportDashboard() {
     }));
   }, [bucketsData]);
 
-  if (isLoadingFunnel || isLoadingPhases || isLoadingFurthest || isLoadingPartnerFunnel || isLoadingBuckets) {
+  if (isLoadingFunnel || isLoadingPhases || isLoadingFurthest || isLoadingPartnerFunnel || isLoadingBuckets || isLoadingOverTime) {
     return (
       <div className="flex justify-center items-center h-full min-h-[500px]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -110,6 +118,36 @@ export default function PassportDashboard() {
                 <Tooltip cursor={{ fill: 'transparent' }} />
                 <Bar dataKey="user_count" fill="#3b82f6" radius={[0, 4, 4, 0]} name="Usuários" />
               </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Candidaturas ao Longo do Tempo */}
+        <Card className="col-span-1 lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Candidaturas ao Longo do Tempo</CardTitle>
+            <CardDescription>Volume de novas candidaturas criadas diariamente.</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={overTimeData}
+                margin={{ top: 20, right: 30, left: 10, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="label" />
+                <YAxis />
+                <Tooltip />
+                <Line 
+                  type="monotone" 
+                  dataKey="count" 
+                  stroke="#8b5cf6" 
+                  strokeWidth={3} 
+                  dot={{ r: 4, fill: "#8b5cf6" }} 
+                  activeDot={{ r: 6 }} 
+                  name="Novas Candidaturas" 
+                />
+              </LineChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>

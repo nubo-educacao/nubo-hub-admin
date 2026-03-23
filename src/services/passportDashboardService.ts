@@ -80,3 +80,38 @@ export async function getPartnerApplicationBuckets(partnerId?: string): Promise<
   if (error) throw error;
   return data as PartnerApplicationBucketsData[];
 }
+
+export interface ApplicationsOverTimeData {
+  date: string;
+  label: string;
+  count: number;
+}
+
+export async function getStudentApplicationsOverTime(): Promise<ApplicationsOverTimeData[]> {
+  const { data, error } = await supabase
+    .from('student_applications')
+    .select('created_at');
+
+  if (error) throw error;
+  
+  const grouped = (data || []).reduce((acc: Record<string, number>, curr: any) => {
+    if (!curr.created_at) return acc;
+    const d = new Date(curr.created_at);
+    // Use local timezone formatting (pt-BR) or ISO to avoid timezone shifts
+    // Using ISO to group safely by Day
+    const isoDate = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+    acc[isoDate] = (acc[isoDate] || 0) + 1;
+    return acc;
+  }, {});
+
+  const sorted = Object.keys(grouped).sort().map(dateStr => {
+    const [y, m, d] = dateStr.split('-');
+    return {
+      date: dateStr,
+      label: `${d}/${m}`,
+      count: grouped[dateStr]
+    };
+  });
+
+  return sorted;
+}

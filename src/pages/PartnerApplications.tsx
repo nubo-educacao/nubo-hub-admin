@@ -26,9 +26,10 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
 function exportToExcel(
     applications: ApplicationWithDetails[],
     formFields: PartnerFormField[],
-    partnerName: string
+    partnerName: string,
+    formCounts?: Record<string, number>
 ) {
-    const fixedHeaders = ["Nome", "Whatsapp", "Parceiro", "Status", "Elegibilidade", "Data"];
+    const fixedHeaders = ["Nome", "Whatsapp", "Parceiro", "Status", "Elegibilidade", "Progresso", "Data"];
     
     // Identified fields from partner_forms
     const formFieldNames = new Set(formFields.map((f) => f.field_name));
@@ -57,6 +58,21 @@ function exportToExcel(
         return `${met}/${total}`;
     };
 
+    const getProgressStr = (app: ApplicationWithDetails): string => {
+        if (!formCounts) return "—";
+        const totalForms = formCounts[app.partner_id] || 0;
+        if (app.status === 'SUBMITTED') return "100%";
+        if (totalForms === 0) return "—";
+        const filled = Object.keys(app.answers || {}).length;
+        const percent = Math.min(100, Math.round((filled * 100) / totalForms));
+        return `${percent}% (${filled}/${totalForms})`;
+    };
+
+    const sanitize = (val: unknown) => {
+        if (val == null || val === "") return "—";
+        return String(val).replace(/\r?\n|\r/g, ' | ');
+    };
+
     const rows = applications.map((app) => {
         const fixedCols = [
             app.full_name || "—",
@@ -64,16 +80,12 @@ function exportToExcel(
             app.partner_name || "—",
             STATUS_CONFIG[app.status]?.label || app.status,
             getEligibilityStr(app),
+            getProgressStr(app),
             new Date(app.created_at).toLocaleDateString("pt-BR"),
         ];
-        const dynamicCols = formFields.map((f) => {
-            const val = (app.answers as Record<string, unknown>)?.[f.field_name];
-            return val != null ? String(val) : "—";
-        });
-        const extraCols = extraHeaders.map((k) => {
-            const val = (app.answers as Record<string, unknown>)?.[k];
-            return val != null ? String(val) : "—";
-        });
+        const dynamicCols = formFields.map((f) => sanitize((app.answers as Record<string, unknown>)?.[f.field_name]));
+        const extraCols = extraHeaders.map((k) => sanitize((app.answers as Record<string, unknown>)?.[k]));
+        
         return [...fixedCols, ...dynamicCols, ...extraCols];
     });
 
@@ -202,7 +214,7 @@ export default function PartnerApplications() {
                     </p>
                 </div>
                 <Button
-                    onClick={() => exportToExcel(filteredApps, formFields, partners.find(p => p.id === partnerFilter)?.name || "Geral")}
+                    onClick={() => exportToExcel(filteredApps, formFields, partners.find(p => p.id === partnerFilter)?.name || "Geral", formCounts)}
                     disabled={filteredApps.length === 0}
                     className="flex items-center gap-2"
                 >
