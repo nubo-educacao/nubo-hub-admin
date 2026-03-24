@@ -62,6 +62,13 @@ export interface FunnelUserData {
   full_name: string;
   funnel_phase: string;
   step_order: number;
+  furthest_passport_phase: string;
+  active_partner_name: string;
+  progress_percent: number;
+  progress_filled: number;
+  progress_total: number;
+  is_dependent: boolean;
+  parent_full_name: string;
 }
 
 export async function getAdminFunnelUsers(): Promise<FunnelUserData[]> {

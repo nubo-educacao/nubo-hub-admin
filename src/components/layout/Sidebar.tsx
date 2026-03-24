@@ -115,6 +115,12 @@ export default function Sidebar() {
                     permission: "Parceiros",
                 },
                 {
+                    to: "/funnel-users",
+                    icon: PieChart,
+                    label: "Funil de Conversão",
+                    permission: "Parceiros",
+                },
+                {
                     to: "/partners",
                     icon: Handshake,
                     label: "Parceiros",
