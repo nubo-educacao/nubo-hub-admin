@@ -24,6 +24,7 @@ import Calendar from "./pages/Calendar";
 import KnowledgeBase from "./pages/KnowledgeBase";
 import PartnerDashboard from "./pages/PartnerDashboard";
 import PassportDashboard from "./pages/PassportDashboard";
+import FunnelUsers from "./pages/FunnelUsers";
 import NotFound from "./pages/NotFound";
 import Institutions from "./pages/educational-data/Institutions";
 import Campus from "./pages/educational-data/Campus";
@@ -57,6 +58,7 @@ const App = () => (
               <Route path="/partners-users" element={<PartnerUsers />} />
               <Route path="/applications" element={<PartnerApplications />} />
               <Route path="/passport-dashboard" element={<PassportDashboard />} />
+              <Route path="/funnel-users" element={<FunnelUsers />} />
               <Route path="/students" element={<Students />} />
               <Route path="/sean-ellis" element={<SeanEllis />} />
               <Route path="/calendar" element={<Calendar />} />

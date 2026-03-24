@@ -14,7 +14,8 @@ import {
   Cell,
   Legend,
   LineChart,
-  Line
+  Line,
+  LabelList
 } from "recharts";
 import {
   Table,
@@ -59,6 +60,19 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     );
   }
   return null;
+};
+
+const CustomDropBadge = (props: any) => {
+  const { x, y, width, height, value } = props;
+  if (!value) return null;
+  return (
+    <g>
+      <rect x={x + width + 10} y={y + height / 2 - 12} width={42} height={24} fill="#f1f5f9" rx={6} />
+      <text x={x + width + 31} y={y + height / 2 + 4} fill="#64748b" fontSize={12} textAnchor="middle" fontWeight="bold">
+        {value}
+      </text>
+    </g>
+  );
 };
 
 export default function PassportDashboard() {
@@ -116,6 +130,25 @@ export default function PassportDashboard() {
     return Array.from(names);
   }, [overTimeData, partnerFilter, partnersData]);
 
+  const processedFunnelData = React.useMemo(() => {
+    if (!funnelData || funnelData.length === 0) return [];
+    
+    return funnelData.map((item, index) => {
+       let dropPct = null;
+       let prevCount = index > 0 ? funnelData[index - 1].user_count : null;
+       
+       if (prevCount !== null && prevCount > 0) {
+           const drop = prevCount - item.user_count;
+           dropPct = Math.round((drop / prevCount) * 100);
+       }
+       
+       return {
+          ...item,
+          dropStr: (dropPct !== null && dropPct > 0) ? `-${dropPct}%` : ''
+       };
+    });
+  }, [funnelData]);
+
   // Process buckets data to group by completing bucket regardless of partner for a global view
   const globalBuckets = React.useMemo(() => {
     if (!bucketsData) return [];
@@ -136,12 +169,23 @@ export default function PassportDashboard() {
       const users = await getAdminFunnelUsers();
       
       const BOM = "\uFEFF";
-      const headers = ["Nome Completo", "WhatsApp", "Fase do Funil"];
-      const rows = users.map(u => [
-         u.full_name || "—",
-         u.whatsapp || "—",
-         u.funnel_phase || "—"
-      ]);
+      const headers = ["Nome Completo", "WhatsApp", "Fase do Funil", "Fase da Candidatura", "Candidatura Ativa", "Progresso", "É Dependente?", "Nome do Responsável"];
+      const rows = users.map(u => {
+         let progressStr = "—";
+         if (u.progress_percent !== null && u.progress_percent !== undefined) {
+            progressStr = `${u.progress_percent}% (${u.progress_filled}/${u.progress_total} resps)`;
+         }
+         return [
+           u.full_name || "—",
+           u.whatsapp || "—",
+           u.funnel_phase || "—",
+           u.furthest_passport_phase || "—",
+           u.active_partner_name || "—",
+           progressStr,
+           u.is_dependent ? "Sim" : "Não",
+           u.parent_full_name || "—"
+         ];
+      });
       
       const csvContent = BOM + [
          headers.join(";"),
@@ -196,15 +240,17 @@ export default function PassportDashboard() {
           <CardContent className="h-[400px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={funnelData}
+                data={processedFunnelData}
                 layout="vertical"
-                margin={{ top: 20, right: 30, left: 100, bottom: 5 }}
+                margin={{ top: 20, right: 80, left: 100, bottom: 5 }}
               >
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                 <XAxis type="number" />
                 <YAxis dataKey="step_name" type="category" width={150} />
                 <Tooltip cursor={{ fill: 'transparent' }} />
-                <Bar dataKey="user_count" fill="#3b82f6" radius={[0, 4, 4, 0]} name="Usuários" />
+                <Bar dataKey="user_count" fill="#3b82f6" radius={[0, 4, 4, 0]} name="Usuários">
+                   <LabelList dataKey="dropStr" content={<CustomDropBadge />} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
