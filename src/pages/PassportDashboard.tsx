@@ -410,6 +410,7 @@ export default function PassportDashboard() {
                 <TableRow>
                   <TableHead>Parceiro</TableHead>
                   <TableHead className="text-right">Cliques</TableHead>
+                  <TableHead className="text-right">Cliques Externos</TableHead>
                   <TableHead className="text-right">Iniciadas</TableHead>
                   <TableHead className="text-right">Concluídas</TableHead>
                   <TableHead className="text-right">Tx Conversão (Iniciada ➔ Concluída)</TableHead>
@@ -420,6 +421,7 @@ export default function PassportDashboard() {
                   <TableRow key={row.partner_id}>
                     <TableCell className="font-medium">{row.partner_name || 'Desconhecido'}</TableCell>
                     <TableCell className="text-right">{row.total_unique_clicks}</TableCell>
+                    <TableCell className="text-right">{row.total_external_redirect_clicks}</TableCell>
                     <TableCell className="text-right">{row.total_applications_started}</TableCell>
                     <TableCell className="text-right">{row.total_applications_submitted}</TableCell>
                     <TableCell className="text-right">

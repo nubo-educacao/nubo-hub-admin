@@ -4,6 +4,7 @@ import {
     getMyPartnerId,
     getPartnerFormFields,
     getPartnerDetails,
+    getPartnerRedirectUsers,
     type PartnerFormField,
 } from "@/services/partnerPortalService";
 import {
@@ -25,6 +26,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import ApplicationsTable, { STATUS_CONFIG } from "@/components/applications/ApplicationsTable";
+import RedirectUsersTable from "@/components/applications/RedirectUsersTable";
 import ApplicationAnswersModal from "@/components/applications/ApplicationAnswersModal";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 
@@ -202,6 +204,13 @@ export default function PartnerDashboard() {
         queryFn: getPartnerFunnel,
     });
 
+    // 8. Fetch external redirect users
+    const { data: redirectUsers = [] } = useQuery({
+        queryKey: ["partnerRedirectUsers", partnerId],
+        queryFn: () => getPartnerRedirectUsers(partnerId!),
+        enabled: !!partnerId,
+    });
+
     // ─── Stats ───────────────────────────────────────────────────────────────
 
     const stats = useMemo(() => {
@@ -361,6 +370,11 @@ export default function PartnerDashboard() {
                     />
                 </CardContent>
             </Card>
+
+            {/* Redirect Users Table */}
+            {redirectUsers.length > 0 && (
+                <RedirectUsersTable redirectUsers={redirectUsers} />
+            )}
 
             {/* Answers Modal */}
             <ApplicationAnswersModal

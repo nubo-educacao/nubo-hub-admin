@@ -135,3 +135,26 @@ export async function getUserProfiles(userIds: string[]) {
 
     return data ?? [];
 }
+
+export interface PartnerRedirectUser {
+    full_name: string;
+    whatsapp: string;
+    redirect_url: string;
+    created_at: string;
+}
+
+/**
+ * Gets the users who clicked external redirects for a specific partner.
+ */
+export async function getPartnerRedirectUsers(partnerId: string): Promise<PartnerRedirectUser[]> {
+    const { data, error } = await supabase.rpc("get_partner_redirect_users" as any, {
+        p_partner_id: partnerId
+    });
+
+    if (error) {
+        console.error("Error fetching partner redirect users:", error);
+        return [];
+    }
+
+    return (data ?? []) as PartnerRedirectUser[];
+}
