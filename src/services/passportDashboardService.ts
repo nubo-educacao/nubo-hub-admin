@@ -22,6 +22,7 @@ export interface PartnerFunnelData {
   total_unique_clicks: number;
   total_applications_started: number;
   total_applications_submitted: number;
+  total_external_redirect_clicks: number;
 }
 
 export interface PartnerApplicationBucketsData {
@@ -69,6 +70,7 @@ export interface FunnelUserData {
   progress_total: number;
   is_dependent: boolean;
   parent_full_name: string;
+  external_redirect_clicks: number;
 }
 
 export async function getAdminFunnelUsers(): Promise<FunnelUserData[]> {

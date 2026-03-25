@@ -40,7 +40,7 @@ export default function FunnelUsers() {
         try {
             setIsExporting(true);
             const BOM = "\uFEFF";
-            const headers = ["Nome Completo", "WhatsApp", "Fase do Funil", "Fase da Candidatura", "Candidatura Ativa", "Progresso", "É Dependente?", "Nome do Responsável"];
+            const headers = ["Nome Completo", "WhatsApp", "Fase do Funil", "Fase da Candidatura", "Candidatura Ativa", "Progresso", "É Dependente?", "Nome do Responsável", "Cliques Externos"];
             const rows = users.map(u => {
                 let progressStr = "—";
                 if (u.progress_percent !== null && u.progress_percent !== undefined) {
@@ -54,7 +54,8 @@ export default function FunnelUsers() {
                     u.active_partner_name || "—",
                     progressStr,
                     u.is_dependent ? "Sim" : "Não",
-                    u.parent_full_name || "—"
+                    u.parent_full_name || "—",
+                    u.external_redirect_clicks?.toString() || "0"
                 ];
             });
 
@@ -133,12 +134,13 @@ export default function FunnelUsers() {
                                     <TableHead className="font-bold text-center"><div className="flex items-center justify-center gap-2"><CheckCircle2 className="h-4 w-4" /> Progresso</div></TableHead>
                                     <TableHead className="font-bold">Tipo</TableHead>
                                     <TableHead className="font-bold">Titular/Responsável</TableHead>
+                                    <TableHead className="font-bold text-center">Cliques Externos</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {filteredUsers.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                                        <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                                             Nenhum usuário encontrado.
                                         </TableCell>
                                     </TableRow>
@@ -183,6 +185,13 @@ export default function FunnelUsers() {
                                             </TableCell>
                                             <TableCell className="text-sm">
                                                 {user.is_dependent ? user.parent_full_name : "—"}
+                                            </TableCell>
+                                            <TableCell className="text-center font-medium">
+                                                {user.external_redirect_clicks > 0 ? (
+                                                    <Badge variant="outline" className="text-sky-600 border-sky-200 bg-sky-50">
+                                                        {user.external_redirect_clicks}
+                                                    </Badge>
+                                                ) : "—"}
                                             </TableCell>
                                         </TableRow>
                                     ))
