@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   Table,
   TableBody,
@@ -16,6 +17,28 @@ interface RedirectUsersTableProps {
 }
 
 export default function RedirectUsersTable({ redirectUsers }: RedirectUsersTableProps) {
+  const uniqueUsers = useMemo(() => {
+    if (!redirectUsers) return [];
+    
+    const userMap = new Map<string, PartnerRedirectUser>();
+    
+    // Group by WhatsApp if available, or full_name
+    redirectUsers.forEach((user) => {
+      const key = user.whatsapp || user.full_name;
+      const existing = userMap.get(key);
+      
+      // Keep only the most recent click for each user
+      if (!existing || new Date(user.created_at) > new Date(existing.created_at)) {
+        userMap.set(key, user);
+      }
+    });
+    
+    // Convert back to array and sort by most recent click
+    return Array.from(userMap.values()).sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [redirectUsers]);
+
   if (!redirectUsers || redirectUsers.length === 0) {
     return null;
   }
@@ -25,7 +48,7 @@ export default function RedirectUsersTable({ redirectUsers }: RedirectUsersTable
       <CardHeader>
         <CardTitle className="text-lg">Redirecionamentos Externos</CardTitle>
         <CardDescription>
-          {redirectUsers.length} contatos que clicaram para se candidatar externamente
+          {uniqueUsers.length} usuários únicos que clicaram para se candidatar externamente
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -36,11 +59,11 @@ export default function RedirectUsersTable({ redirectUsers }: RedirectUsersTable
                 <TableHead>Nome</TableHead>
                 <TableHead>WhatsApp</TableHead>
                 <TableHead>URL de Destino</TableHead>
-                <TableHead className="text-right">Data do Clique</TableHead>
+                <TableHead className="text-right">Data do Último Clique</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {redirectUsers.map((user, idx) => (
+              {uniqueUsers.map((user, idx) => (
                 <TableRow key={`${generateUserKey(user, idx)}`}>
                   <TableCell className="font-medium">{user.full_name || "—"}</TableCell>
                   <TableCell>{user.whatsapp || "—"}</TableCell>
@@ -63,3 +86,4 @@ export default function RedirectUsersTable({ redirectUsers }: RedirectUsersTable
 function generateUserKey(u: PartnerRedirectUser, idx: number) {
   return `${u.full_name}-${u.whatsapp}-${idx}`;
 }
+
