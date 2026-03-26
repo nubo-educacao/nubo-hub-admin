@@ -153,37 +153,66 @@ const DATA_TYPES = [
     { value: "grid_multiselect", label: "Grade de Múltipla Escolha" },
 ];
 
-const MAPPING_SOURCES = [
-    { value: "", label: "Nenhum (perguntar sempre)" },
-    // user_profiles
-    { value: "user_profiles.full_name", label: "Perfil: Nome Completo" },
-    { value: "user_profiles.age", label: "Perfil: Idade" },
-    { value: "user_profiles.city", label: "Perfil: Cidade" },
-    { value: "user_profiles.state", label: "Perfil: Estado" },
-    { value: "user_profiles.education", label: "Perfil: Escolaridade" },
-    { value: "user_profiles.education_year", label: "Perfil: Ano Escolar" },
-    { value: "user_profiles.zip_code", label: "Perfil: CEP" },
-    { value: "user_profiles.street", label: "Perfil: Rua" },
-    { value: "user_profiles.street_number", label: "Perfil: Número" },
-    { value: "user_profiles.complement", label: "Perfil: Complemento" },
-    { value: "user_profiles.phone", label: "Perfil: Telefone" },
-    { value: "user_profiles.relationship", label: "Perfil: Parentesco" },
-    { value: "user_profiles.is_nubo_student", label: "Perfil: É Aluno Nubo" },
-    { value: "user_profiles.referral_source", label: "Perfil: Como conheceu" },
-    // user_preferences
-    { value: "user_preferences.enem_score", label: "Prefs: Nota ENEM" },
-    { value: "user_preferences.family_income_per_capita", label: "Prefs: Renda Per Capita" },
-    { value: "user_preferences.course_interest", label: "Prefs: Interesse em Cursos" },
-    { value: "user_preferences.location_preference", label: "Prefs: Preferência de Local" },
-    { value: "user_preferences.preferred_shifts", label: "Prefs: Turnos Preferidos" },
-    { value: "user_preferences.program_preference", label: "Prefs: Preferência de Programa (Prouni/Sisu)" },
-    { value: "user_preferences.quota_types", label: "Prefs: Tipos de Cota" },
-    { value: "user_preferences.state_preference", label: "Prefs: Estado de Preferência" },
-    { value: "user_preferences.university_preference", label: "Prefs: Universidade de Preferência" },
-    // auth.users
-    { value: "auth.users.phone", label: "Usuário: Telefone" },
-    { value: "auth.users.email", label: "Usuário: E-mail" },
-];
+const MAPPING_LABELS: Record<string, string> = {
+    "user_profiles.full_name": "Perfil: Nome Completo",
+    "user_profiles.age": "Perfil: Idade",
+    "user_profiles.city": "Perfil: Cidade",
+    "user_profiles.state": "Perfil: Estado",
+    "user_profiles.education": "Perfil: Escolaridade",
+    "user_profiles.education_year": "Perfil: Ano Escolar",
+    "user_profiles.zip_code": "Perfil: CEP",
+    "user_profiles.street": "Perfil: Rua",
+    "user_profiles.street_number": "Perfil: Número",
+    "user_profiles.complement": "Perfil: Complemento",
+    "user_profiles.phone": "Perfil: Telefone",
+    "user_profiles.relationship": "Perfil: Parentesco",
+    "user_profiles.is_nubo_student": "Perfil: É Aluno Nubo",
+    "user_profiles.referral_source": "Perfil: Como conheceu",
+    "user_profiles.neighborhood": "Perfil: Bairro",
+    "user_profiles.country": "Perfil: País",
+    "user_profiles.birth_date": "Perfil: Data de Nascimento",
+    "user_preferences.enem_score": "Prefs: Nota ENEM",
+    "user_preferences.family_income_per_capita": "Prefs: Renda Per Capita",
+    "user_preferences.course_interest": "Prefs: Interesse em Cursos",
+    "user_preferences.location_preference": "Prefs: Preferência de Local",
+    "user_preferences.preferred_shifts": "Prefs: Turnos Preferidos",
+    "user_preferences.program_preference": "Prefs: Preferência de Programa",
+    "user_preferences.quota_types": "Prefs: Tipos de Cota",
+    "user_preferences.state_preference": "Prefs: Estado de Preferência",
+    "user_preferences.university_preference": "Prefs: Universidade de Preferência",
+    "user_income.per_capita_income": "Renda: Per Capita",
+    "user_income.family_count": "Renda: Qtd Familiares",
+    "user_enem_scores.average_score": "ENEM: Média Geral",
+    "auth.users.phone": "Usuário: Telefone",
+    "auth.users.email": "Usuário: E-mail",
+};
+
+const getMappingLabel = (value: string) => {
+    if (MAPPING_LABELS[value]) return MAPPING_LABELS[value];
+    
+    // Split: auth.users.email => ['auth', 'users', 'email'] or user_profiles.full_name => ['user_profiles', 'full_name']
+    const parts = value.split(".");
+    if (parts.length < 2) return value;
+    
+    const table = parts.length === 3 ? parts[1] : parts[0];
+    const column = parts.length === 3 ? parts[2] : parts[1];
+    
+    const prefixMap: Record<string, string> = {
+        'user_profiles': 'Perfil',
+        'user_preferences': 'Prefs',
+        'user_income': 'Renda',
+        'user_enem_scores': 'ENEM',
+        'users': 'Usuário'
+    };
+    
+    const prefix = prefixMap[table] || table;
+    const name = column.replace(/_/g, ' ')
+                      .split(' ')
+                      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+                      .join(' ');
+                      
+    return `${prefix}: ${name}`;
+};
 
 const MASK_TYPES_TEXT = [
     { value: "none", label: "Nenhuma" },
@@ -422,6 +451,27 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
     const queryClient = useQueryClient();
     const [searchParams, setSearchParams] = useSearchParams();
     const selectedPartnerId = searchParams.get("partnerId") || "";
+
+    // Dynamic Column Mappings
+    const { data: dbColumns = [] } = useQuery({
+        queryKey: ["mapping-columns"],
+        queryFn: async () => {
+            const { data, error } = await supabase.rpc("get_table_columns_for_mapping", {
+                table_names: ['user_profiles', 'user_preferences', 'user_income', 'user_enem_scores']
+            });
+            if (error) throw error;
+            return data.map((c: any) => ({
+                value: c.t_schema === 'auth' ? `auth.${c.t_name}.${c.c_name}` : `${c.t_name}.${c.c_name}`,
+                label: getMappingLabel(c.t_schema === 'auth' ? `auth.${c.t_name}.${c.c_name}` : `${c.t_name}.${c.c_name}`)
+            }));
+        },
+        staleTime: 1000 * 60 * 5, // 5 minutes cache
+    });
+
+    const mappingSources = [
+        { value: "", label: "Nenhum (perguntar sempre)" },
+        ...dbColumns
+    ];
 
     const setSelectedPartnerId = (id: string) => {
         const newParams = new URLSearchParams(searchParams);
@@ -1934,7 +1984,7 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                             className="w-full justify-between font-normal"
                                         >
                                             {formValues.mapping_source
-                                                ? MAPPING_SOURCES.find((ms) => ms.value === formValues.mapping_source)?.label
+                                                ? getMappingLabel(formValues.mapping_source)
                                                 : "Nenhum (perguntar sempre)"}
                                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                         </Button>
@@ -1942,10 +1992,16 @@ export function PartnerFormsManager({ partners }: PartnerFormsManagerProps) {
                                     <PopoverContent className="w-full p-0" align="start">
                                         <Command>
                                             <CommandInput placeholder="Buscar mapeamento..." />
-                                            <CommandList>
+                                            <CommandList 
+                                                className="max-h-[300px] overflow-y-auto"
+                                                onWheel={(e) => {
+                                                    // Ensure mouse wheel scroll works inside the popover
+                                                    e.currentTarget.scrollTop += e.deltaY;
+                                                }}
+                                            >
                                                 <CommandEmpty>Nenhum mapeamento encontrado.</CommandEmpty>
                                                 <CommandGroup>
-                                                    {MAPPING_SOURCES.map((ms) => (
+                                                    {mappingSources.map((ms) => (
                                                         <CommandItem
                                                             key={ms.value || "_none"}
                                                             value={ms.label}
