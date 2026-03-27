@@ -158,3 +158,74 @@ export async function getPartnerRedirectUsers(partnerId: string): Promise<Partne
 
     return (data ?? []) as PartnerRedirectUser[];
 }
+
+// ─── Partner Steps & Full Form Fields (for Partner Portal Forms page) ────
+
+export interface PartnerStep {
+    id: string;
+    partner_id: string;
+    step_name: string;
+    sort_order: number;
+    introduction: string | null;
+    secret_step: boolean;
+    is_iterable: boolean | null;
+    repeat_limit: number | null;
+    conditional_rule: Record<string, unknown> | null;
+}
+
+export interface PartnerFormFieldFull extends PartnerFormField {
+    optional: boolean;
+    conditional_rule: Record<string, unknown> | null;
+    maskking: string | null;
+}
+
+/**
+ * Gets the steps for a partner, ordered by sort_order.
+ */
+export async function getPartnerSteps(partnerId: string): Promise<PartnerStep[]> {
+    const { data, error } = await supabase
+        .from("partner_steps" as any)
+        .select("*")
+        .eq("partner_id", partnerId)
+        .order("sort_order", { ascending: true });
+
+    if (error) {
+        console.error("Error fetching partner steps:", error);
+        throw error;
+    }
+
+    return (data ?? []) as unknown as PartnerStep[];
+}
+
+/**
+ * Gets all form fields for a partner with full details, sorted by step then field order.
+ */
+export async function getPartnerFormFieldsFull(partnerId: string): Promise<PartnerFormFieldFull[]> {
+    const { data: steps } = await supabase
+        .from("partner_steps" as any)
+        .select("id, sort_order")
+        .eq("partner_id", partnerId);
+
+    const { data: forms, error } = await supabase
+        .from("partner_forms" as any)
+        .select("*")
+        .eq("partner_id", partnerId);
+
+    if (error) {
+        console.error("Error fetching partner forms:", error);
+        throw error;
+    }
+
+    const formsList = (forms ?? []) as unknown as PartnerFormFieldFull[];
+
+    formsList.sort((a: any, b: any) => {
+        const stepA = steps?.find((s: any) => s.id === a.step_id);
+        const stepB = steps?.find((s: any) => s.id === b.step_id);
+        const orderA = stepA?.sort_order ?? 9999;
+        const orderB = stepB?.sort_order ?? 9999;
+        if (orderA !== orderB) return orderA - orderB;
+        return a.sort_order - b.sort_order;
+    });
+
+    return formsList;
+}

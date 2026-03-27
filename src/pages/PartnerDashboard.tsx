@@ -40,23 +40,78 @@ function exportToExcel(
 ) {
     const fixedHeaders = ["Nome", "Whatsapp", "Status", "Elegibilidade", "Progresso", "Data"];
     
+    // Filter out orphaned fields that are not linked to any step
+    const activeFormFields = formFields.filter(f => f.step_id != null);
+
     // Identified fields from partner_forms
-    const formFieldNames = new Set(formFields.map((f) => f.field_name));
-    const dynamicHeaders = formFields.map((f) => f.question_text || f.field_name);
+    const knownKeys = new Set<string>();
+    const stepIds = new Set<string>();
+    activeFormFields.forEach(f => {
+        knownKeys.add(f.field_name);
+        if (f.question_text) knownKeys.add(f.question_text);
+        if (f.step_id) stepIds.add(f.step_id);
+    });
     
-    // Collect all other keys present in any application's answers
+    // Find the maximum iterations for each step among all applications
+    const stepMaxIterations: Record<string, number> = {};
+    applications.forEach(app => {
+        const ans = (app.answers as Record<string, unknown>) || {};
+        stepIds.forEach(stepId => {
+            const val = ans[stepId];
+            if (Array.isArray(val)) {
+                const len = val.length;
+                if (!stepMaxIterations[stepId] || len > stepMaxIterations[stepId]) {
+                    stepMaxIterations[stepId] = len;
+                }
+            }
+        });
+    });
+
+    // Group fields by step (preserving original encounter order)
+    const fieldsByStep: { step_id: string | null; fields: PartnerFormField[] }[] = [];
+    const stepToIndex: Record<string, number> = {};
+    
+    activeFormFields.forEach(f => {
+        const sId = f.step_id || "no_step";
+        if (stepToIndex[sId] === undefined) {
+            stepToIndex[sId] = fieldsByStep.length;
+            fieldsByStep.push({ step_id: f.step_id, fields: [f] });
+        } else {
+            fieldsByStep[stepToIndex[sId]].fields.push(f);
+        }
+    });
+
+    const dynamicHeaders: string[] = [];
+    
+    // Generate headers for form fields (handling multiple iterations)
+    fieldsByStep.forEach(group => {
+        if (group.step_id && stepMaxIterations[group.step_id]) {
+            const maxIters = stepMaxIterations[group.step_id];
+            for (let i = 0; i < maxIters; i++) {
+                group.fields.forEach(f => {
+                    dynamicHeaders.push(`${f.question_text || f.field_name} (${i + 1})`);
+                });
+            }
+        } else {
+            group.fields.forEach(f => {
+                dynamicHeaders.push(f.question_text || f.field_name);
+            });
+        }
+    });
+    
+    // Collect all other keys present in any application's answers (ignoring form definitions)
     const otherKeys = new Set<string>();
     applications.forEach((app) => {
         const ans = (app.answers as Record<string, unknown>) || {};
         Object.keys(ans).forEach((key) => {
-            if (!formFieldNames.has(key)) {
+            if (!knownKeys.has(key) && !stepIds.has(key)) {
                 otherKeys.add(key);
             }
         });
     });
     const extraHeaders = Array.from(otherKeys);
     
-    const allHeaders = [...fixedHeaders, ...dynamicHeaders, ...extraHeaders];
+    const allHeaders = Array.from(new Set([...fixedHeaders, ...dynamicHeaders, ...extraHeaders]));
 
     const getEligibilityStr = (app: ApplicationWithDetails): string => {
         if (!app.eligibility_results || !Array.isArray(app.eligibility_results)) return "—";
@@ -79,7 +134,15 @@ function exportToExcel(
 
     const sanitize = (val: unknown) => {
         if (val == null || val === "") return "—";
+        if (typeof val === "object") {
+             return JSON.stringify(val).replace(/\r?\n|\r/g, ' | ');
+        }
         return String(val).replace(/\r?\n|\r/g, ' | ');
+    };
+
+    const getValue = (ans: Record<string, any>, f: PartnerFormField) => {
+        // Try tech key first, then question text
+        return ans[f.field_name] ?? (f.question_text ? ans[f.question_text] : undefined);
     };
 
     const rows = applications.map((app) => {
@@ -91,11 +154,32 @@ function exportToExcel(
             getProgressStr(app),
             new Date(app.created_at).toLocaleDateString("pt-BR"),
         ];
-        const dynamicCols = formFields.map((f) => sanitize((app.answers as Record<string, unknown>)?.[f.field_name]));
-        const extraCols = extraHeaders.map((k) => sanitize((app.answers as Record<string, unknown>)?.[k]));
+        
+        const ans = (app.answers as Record<string, unknown>) || {};
+        
+        const dynamicCols: string[] = [];
+        fieldsByStep.forEach(group => {
+            if (group.step_id && stepMaxIterations[group.step_id]) {
+                const maxIters = stepMaxIterations[group.step_id];
+                const stepArr = (ans[group.step_id] as any[]) || [];
+                for (let i = 0; i < maxIters; i++) {
+                    const iterData = stepArr[i] || {};
+                    group.fields.forEach(f => {
+                        dynamicCols.push(sanitize(getValue(iterData, f)));
+                    });
+                }
+            } else {
+                group.fields.forEach(f => {
+                    dynamicCols.push(sanitize(getValue(ans, f)));
+                });
+            }
+        });
+        
+        const extraCols = extraHeaders.map((k) => sanitize(ans[k]));
         
         return [...fixedCols, ...dynamicCols, ...extraCols];
     });
+
 
     const formatCSVCell = (val: unknown) => {
         const sanitized = sanitize(val);

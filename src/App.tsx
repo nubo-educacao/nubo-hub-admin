@@ -23,6 +23,7 @@ import SeanEllis from "./pages/SeanEllis";
 import Calendar from "./pages/Calendar";
 import KnowledgeBase from "./pages/KnowledgeBase";
 import PartnerDashboard from "./pages/PartnerDashboard";
+import PartnerPortalForms from "./pages/PartnerPortalForms";
 import PassportDashboard from "./pages/PassportDashboard";
 import FunnelUsers from "./pages/FunnelUsers";
 import NotFound from "./pages/NotFound";
@@ -72,6 +73,7 @@ const App = () => (
             {/* Partner Portal Routes */}
             <Route element={<PartnerLayout />}>
               <Route path="/partner" element={<PartnerDashboard />} />
+              <Route path="/partner/forms" element={<PartnerPortalForms />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />

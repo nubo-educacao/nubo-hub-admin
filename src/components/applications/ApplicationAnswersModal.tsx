@@ -108,6 +108,7 @@ export default function ApplicationAnswersModal({
 }: ApplicationAnswersModalProps) {
     const [localAnswers, setLocalAnswers] = useState<Record<string, unknown>>({});
     const [editingKey, setEditingKey] = useState<string | null>(null);
+    const [editingStepInfo, setEditingStepInfo] = useState<{ stepId: string, iterationIndex: number } | null>(null);
     const [editValue, setEditValue] = useState<string>("");
     const [isSaving, setIsSaving] = useState(false);
 
@@ -115,14 +116,21 @@ export default function ApplicationAnswersModal({
         if (open && application) {
             setLocalAnswers((application.answers as Record<string, unknown>) || {});
             setEditingKey(null);
+            setEditingStepInfo(null);
             setEditValue("");
         }
     }, [open, application]);
 
     if (!application) return null;
 
-    const handleEditStart = (key: string, currentValue: unknown) => {
+    const handleEditStart = (key: string, currentValue: unknown, stepId?: string, iterationIndex?: number) => {
         setEditingKey(key);
+        if (stepId !== undefined && iterationIndex !== undefined) {
+            setEditingStepInfo({ stepId, iterationIndex });
+        } else {
+            setEditingStepInfo(null);
+        }
+        
         // Convert object/array to JSON string if needed, otherwise just stringify
         const valStr = typeof currentValue === "object" && currentValue !== null
             ? JSON.stringify(currentValue, null, 2)
@@ -132,10 +140,11 @@ export default function ApplicationAnswersModal({
 
     const handleEditCancel = () => {
         setEditingKey(null);
+        setEditingStepInfo(null);
         setEditValue("");
     };
 
-    const handleSave = async (key: string) => {
+    const handleSave = async (key: string, stepId?: string, iterationIndex?: number) => {
         if (!application) return;
         setIsSaving(true);
         try {
@@ -146,18 +155,35 @@ export default function ApplicationAnswersModal({
                 }
             } catch { /* if parse fails, store as string */ }
 
-            const newAnswers = { [key]: parsedValue };
-            
+            let newAnswersForDb: Record<string, any>;
+            let newAnswersForLocal: Record<string, any>;
+
+            if (stepId !== undefined && iterationIndex !== undefined) {
+                // We are editing a field inside an iterable step's specific iteration
+                const currentStepData = Array.isArray(localAnswers[stepId]) ? [...(localAnswers[stepId] as any[])] : [];
+                if (!currentStepData[iterationIndex]) {
+                    currentStepData[iterationIndex] = {};
+                }
+                currentStepData[iterationIndex] = { ...currentStepData[iterationIndex], [key]: parsedValue };
+                
+                newAnswersForDb = { [stepId]: currentStepData };
+                newAnswersForLocal = { [stepId]: currentStepData };
+            } else {
+                newAnswersForDb = { [key]: parsedValue };
+                newAnswersForLocal = { [key]: parsedValue };
+            }
+
             const { error } = await supabase.rpc("update_student_application_answers", {
                 p_application_id: application.id,
-                p_answers: newAnswers as any
+                p_answers: newAnswersForDb as any
             });
 
             if (error) throw error;
 
             toast.success("Resposta atualizada com sucesso!");
-            setLocalAnswers(prev => ({ ...prev, [key]: parsedValue }));
+            setLocalAnswers(prev => ({ ...prev, ...newAnswersForLocal }));
             setEditingKey(null);
+            setEditingStepInfo(null);
         } catch (error: any) {
             console.error("Error saving answer:", error);
             toast.error(error.message || "Erro ao salvar a resposta");
@@ -165,18 +191,85 @@ export default function ApplicationAnswersModal({
             setIsSaving(false);
         }
     };
-    
-    // Identified fields from partner_forms
-    const structuredAnswers = formFields.map(field => ({
-        label: field.question_text || field.field_name,
-        value: localAnswers[field.field_name],
-        fieldName: field.field_name,
-        field: field
-    }));
 
-    // Fields in answers that are NOT in partner_forms
+    type DisplayItem = {
+        uniqueKey: string;
+        label: string;
+        value: unknown;
+        fieldName: string;
+        field: PartnerFormField;
+        stepId?: string;
+        iterationIndex?: number;
+    };
+
+    // Identified fields from partner_forms grouped by step
+    const structuredAnswers: DisplayItem[] = [];
+    
+    // Filter out orphaned fields that are not linked to any step
+    const activeFormFields = formFields.filter(f => f.step_id != null);
+
+    // Improved grouping by step_id (handling non-consecutive fields)
+    const fieldsByStep: { step_id: string | null; fields: PartnerFormField[] }[] = [];
+    const stepToIndex: Record<string, number> = {};
+    
+    activeFormFields.forEach(f => {
+        const sId = f.step_id || "no_step";
+        if (stepToIndex[sId] === undefined) {
+            stepToIndex[sId] = fieldsByStep.length;
+            fieldsByStep.push({ step_id: f.step_id, fields: [f] });
+        } else {
+            fieldsByStep[stepToIndex[sId]].fields.push(f);
+        }
+    });
+
+    const getVal = (ans: Record<string, any>, f: PartnerFormField) => {
+        return ans[f.field_name] ?? (f.question_text ? ans[f.question_text] : undefined);
+    };
+
+    fieldsByStep.forEach(group => {
+        const stepId = group.step_id;
+        
+        // If it's a step with a valid UUID and iterable in answers
+        if (stepId && Array.isArray(localAnswers[stepId])) {
+            const iterations = localAnswers[stepId] as any[];
+            iterations.forEach((iterationData, iterIdx) => {
+                group.fields.forEach(f => {
+                    structuredAnswers.push({
+                        uniqueKey: `${f.field_name}_${iterIdx}`,
+                        label: `${f.question_text || f.field_name} (${iterIdx + 1})`,
+                        value: getVal(iterationData, f),
+                        fieldName: f.field_name,
+                        field: f,
+                        stepId: stepId,
+                        iterationIndex: iterIdx
+                    });
+                });
+            });
+        } else {
+            // Standard flat field mapping
+            group.fields.forEach(f => {
+                structuredAnswers.push({
+                    uniqueKey: f.field_name,
+                    label: f.question_text || f.field_name,
+                    value: getVal(localAnswers, f),
+                    fieldName: f.field_name,
+                    field: f
+                });
+            });
+        }
+    });
+
+    // Fields in answers that are NOT in active partner_forms AND NOT a step UUID
+    const knownKeys = new Set<string>();
+    activeFormFields.forEach(f => {
+        knownKeys.add(f.field_name);
+        if (f.question_text) knownKeys.add(f.question_text);
+    });
+    
+    const stepIds = new Set(activeFormFields.map(f => f.step_id).filter(Boolean));
+    
     const otherAnswers = Object.entries(localAnswers).filter(
-        ([key]) => !formFields.some(f => f.field_name === key)
+        ([key]) => !knownKeys.has(key) && !stepIds.has(key)
     );
 
     return (
@@ -195,13 +288,17 @@ export default function ApplicationAnswersModal({
                     <div className="space-y-6 pb-6">
                         {/* Structured Fields */}
                         <div className="grid grid-cols-1 gap-4">
-                            {structuredAnswers.map((item, idx) => {
-                                const isEditing = editingKey === item.fieldName;
+                            {structuredAnswers.map((item) => {
+                                const isEditing = editingKey === item.fieldName && 
+                                                  (!editingStepInfo || 
+                                                  (editingStepInfo.stepId === item.stepId && editingStepInfo.iterationIndex === item.iterationIndex)) &&
+                                                  (item.stepId === undefined || editingStepInfo?.stepId === item.stepId);
+                                                  
                                 const isComplex = typeof item.value === "object" && item.value !== null;
                                 const displayValue = isComplex ? JSON.stringify(item.value) : String(item.value ?? "");
 
                                 return (
-                                    <div key={idx} className="border-b pb-2 last:border-0 group relative pr-12">
+                                    <div key={item.uniqueKey} className="border-b pb-2 last:border-0 group relative pr-12">
                                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
                                             {item.label}
                                         </p>
@@ -222,7 +319,7 @@ export default function ApplicationAnswersModal({
                                                     />
                                                 )}
                                                 <div className="flex flex-col gap-1 shrink-0">
-                                                    <Button size="icon" variant="default" className="h-8 w-8" onClick={() => handleSave(item.fieldName)} disabled={isSaving}>
+                                                    <Button size="icon" variant="default" className="h-8 w-8" onClick={() => handleSave(item.fieldName, item.stepId, item.iterationIndex)} disabled={isSaving}>
                                                         {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                                                     </Button>
                                                     <Button size="icon" variant="outline" className="h-8 w-8" onClick={handleEditCancel} disabled={isSaving}>
@@ -240,7 +337,7 @@ export default function ApplicationAnswersModal({
                                                     variant="ghost"
                                                     size="icon"
                                                     className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity absolute right-0 top-1/2 -translate-y-1/2"
-                                                    onClick={() => handleEditStart(item.fieldName, item.value)}
+                                                    onClick={() => handleEditStart(item.fieldName, item.value, item.stepId, item.iterationIndex)}
                                                     title="Editar resposta"
                                                 >
                                                     <Pencil className="h-4 w-4 text-muted-foreground hover:text-foreground" />
@@ -248,6 +345,7 @@ export default function ApplicationAnswersModal({
                                             </div>
                                         )}
                                     </div>
+
                                 );
                             })}
                         </div>
