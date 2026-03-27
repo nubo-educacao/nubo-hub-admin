@@ -14,6 +14,7 @@ import {
     FormItem,
     FormLabel,
     FormMessage,
+    FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,6 +41,12 @@ const partnerSchema = z.object({
     link: z.string().url("Link inválido").optional().or(z.literal("")),
     coverimage: z.string().optional(),
     applications_open: z.boolean().default(true),
+    external_redirect_url: z.string().url("URL de redirecionamento inválida").optional().or(z.literal("")),
+    external_redirect_title: z.string().optional(),
+    external_redirect_message: z.string().optional(),
+    external_redirect_button_text: z.string().optional(),
+    external_redirect_type: z.enum(["whatsapp", "external"]).default("external"),
+    has_external_redirect: z.boolean().default(false),
 });
 
 type PartnerFormValues = z.infer<typeof partnerSchema>;
@@ -72,6 +79,12 @@ export function PartnerForm({ initialData, onSubmit, onCancel, onDelete }: Partn
             link: initialData?.link || "",
             coverimage: initialData?.coverimage || "",
             applications_open: initialData?.applications_open ?? true,
+            external_redirect_url: initialData?.external_redirect_config?.url || "",
+            external_redirect_title: initialData?.external_redirect_config?.title || "",
+            external_redirect_message: initialData?.external_redirect_config?.message || "",
+            external_redirect_button_text: initialData?.external_redirect_config?.buttonText || "",
+            external_redirect_type: initialData?.external_redirect_config?.type || "external",
+            has_external_redirect: !!initialData?.external_redirect_config,
         },
     });
 
@@ -112,6 +125,13 @@ export function PartnerForm({ initialData, onSubmit, onCancel, onDelete }: Partn
                 start_date: values.start_date.toISOString().split("T")[0],
                 end_date: values.end_date?.toISOString().split("T")[0],
             }],
+            external_redirect_config: values.has_external_redirect && values.external_redirect_url ? {
+                url: values.external_redirect_url,
+                title: values.external_redirect_title,
+                message: values.external_redirect_message,
+                buttonText: values.external_redirect_button_text,
+                type: values.external_redirect_type,
+            } : null,
         };
         await onSubmit(formattedValues);
     };
@@ -365,6 +385,116 @@ export function PartnerForm({ initialData, onSubmit, onCancel, onDelete }: Partn
                             </FormItem>
                         )}
                     />
+
+                    <div className="pt-4 border-t space-y-4">
+                        <div className="flex flex-row items-center justify-between rounded-lg border p-4 bg-blue-50/30">
+                            <div className="space-y-0.5">
+                                <FormLabel className="text-base text-blue-600 font-semibold">Redirecionamento Externo (Modal)</FormLabel>
+                                <FormDescription className="text-xs">
+                                    Ative se a inscrição ocorrer fora da Cloudinha (Ex: WhatsApp ou Site do Parceiro).
+                                </FormDescription>
+                            </div>
+                            <FormField
+                                control={form.control}
+                                name="has_external_redirect"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormControl>
+                                            <Switch
+                                                checked={field.value}
+                                                onCheckedChange={field.onChange}
+                                            />
+                                        </FormControl>
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
+
+                        {form.watch("has_external_redirect") && (
+                            <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                    <FormField
+                                        control={form.control}
+                                        name="external_redirect_url"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>URL de Redirecionamento</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="https://..." {...field} />
+                                                </FormControl>
+                                                <FormDescription className="text-xs">Ex: Link do WhatsApp ou Site Externo</FormDescription>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <FormField
+                                        control={form.control}
+                                        name="external_redirect_type"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Tipo de Redirecionamento</FormLabel>
+                                                <FormControl>
+                                                    <select 
+                                                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                                        {...field}
+                                                    >
+                                                        <option value="external">Link Externo (Padrão)</option>
+                                                        <option value="whatsapp">WhatsApp (Verde)</option>
+                                                    </select>
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                    <FormField
+                                        control={form.control}
+                                        name="external_redirect_title"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Título da Modal</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="Ex: Processo Seletivo" {...field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+
+                                    <FormField
+                                        control={form.control}
+                                        name="external_redirect_button_text"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Texto do Botão</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="Ex: Ir para o WhatsApp" {...field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
+
+                                <FormField
+                                    control={form.control}
+                                    name="external_redirect_message"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Mensagem da Modal</FormLabel>
+                                            <FormControl>
+                                                <Textarea placeholder="A inscrição não é realizada diretamente pela Cloudinha..." {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 <div className="flex justify-between items-center border-t pt-6">

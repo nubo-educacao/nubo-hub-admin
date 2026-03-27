@@ -1,9 +1,18 @@
 import { supabase } from "@/integrations/supabase/client";
 import { Database } from "@/integrations/supabase/types";
 
-export type Partner = Database["public"]["Tables"]["partners"]["Row"] & { applications_open?: boolean };
-export type PartnerInsert = Database["public"]["Tables"]["partners"]["Insert"] & { applications_open?: boolean };
-export type PartnerUpdate = Database["public"]["Tables"]["partners"]["Update"] & { applications_open?: boolean };
+export type Partner = Database["public"]["Tables"]["partners"]["Row"] & { 
+    applications_open?: boolean;
+    external_redirect_config?: any;
+};
+export type PartnerInsert = Database["public"]["Tables"]["partners"]["Insert"] & { 
+    applications_open?: boolean;
+    external_redirect_config?: any;
+};
+export type PartnerUpdate = Database["public"]["Tables"]["partners"]["Update"] & { 
+    applications_open?: boolean;
+    external_redirect_config?: any;
+};
 
 export interface PartnerStats {
     totalPartners: number;
@@ -56,7 +65,8 @@ export async function createPartner(partner: PartnerInsert): Promise<Partner> {
         p_dates: partner.dates,
         p_link: partner.link,
         p_coverimage: partner.coverimage,
-        p_applications_open: partner.applications_open
+        p_applications_open: partner.applications_open,
+        p_external_redirect_config: partner.external_redirect_config
     });
 
     if (error) {
@@ -78,7 +88,8 @@ export async function updatePartner(id: string, partner: PartnerUpdate): Promise
         p_dates: partner.dates,
         p_link: partner.link,
         p_coverimage: partner.coverimage,
-        p_applications_open: partner.applications_open
+        p_applications_open: partner.applications_open,
+        p_external_redirect_config: partner.external_redirect_config
     });
 
     if (error) {
