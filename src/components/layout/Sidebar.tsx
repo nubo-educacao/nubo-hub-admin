@@ -11,6 +11,7 @@ import {
     AlertCircle,
     UsersRound,
     UserCog,
+    Bug,
     Handshake,
     GraduationCap,
     PieChart,
@@ -213,6 +214,12 @@ export default function Sidebar() {
             icon: UserCog,
             label: "Controle de Usuários",
             permission: "Controle de usuários",
+        },
+        {
+            to: "/support",
+            icon: Bug,
+            label: "Suporte e Bugs",
+            permission: "Dashboard",
         },
     ];
 
