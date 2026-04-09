@@ -304,14 +304,6 @@ export default function PartnerApplications() {
                         Visualize todas as candidaturas dos estudantes
                     </p>
                 </div>
-                <Button
-                    onClick={() => exportToExcel(filteredApps, formFields, partners.find(p => p.id === partnerFilter)?.name || "Geral", formCounts)}
-                    disabled={filteredApps.length === 0}
-                    className="flex items-center gap-2"
-                >
-                    <Download className="h-4 w-4" />
-                    Exportar Excel
-                </Button>
             </div>
 
             {/* Stats Cards */}
@@ -374,11 +366,23 @@ export default function PartnerApplications() {
 
             {/* Applications Table */}
             <Card>
-                <CardHeader>
-                    <CardTitle className="text-lg">Candidaturas</CardTitle>
-                    <CardDescription>
-                        {applications.length} registros
-                    </CardDescription>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <div>
+                        <CardTitle className="text-lg">Candidaturas</CardTitle>
+                        <CardDescription>
+                            {applications.length} registros
+                        </CardDescription>
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => exportToExcel(filteredApps, formFields, partners.find(p => p.id === partnerFilter)?.name || "Geral", formCounts)}
+                        disabled={filteredApps.length === 0}
+                        className="flex items-center gap-2"
+                    >
+                        <Download className="h-4 w-4" />
+                        Exportar Excel
+                    </Button>
                 </CardHeader>
                 <CardContent>
                     <ApplicationsTable

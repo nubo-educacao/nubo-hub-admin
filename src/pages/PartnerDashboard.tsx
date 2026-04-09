@@ -358,14 +358,6 @@ export default function PartnerDashboard() {
                         Gerencie as candidaturas dos estudantes
                     </p>
                 </div>
-                <Button
-                    onClick={() => exportToExcel(filteredApps, formFields, partner?.name || "parceiro", formCounts)}
-                    disabled={filteredApps.length === 0}
-                    className="flex items-center gap-2"
-                >
-                    <Download className="h-4 w-4" />
-                    Exportar Excel
-                </Button>
             </div>
 
             {/* Stats Cards */}
@@ -439,11 +431,23 @@ export default function PartnerDashboard() {
 
             {/* Applications Table */}
             <Card>
-                <CardHeader>
-                    <CardTitle className="text-lg">Candidaturas</CardTitle>
-                    <CardDescription>
-                        {applications.length} registros
-                    </CardDescription>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <div>
+                        <CardTitle className="text-lg">Candidaturas</CardTitle>
+                        <CardDescription>
+                            {applications.length} registros
+                        </CardDescription>
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => exportToExcel(filteredApps, formFields, partner?.name || "parceiro", formCounts)}
+                        disabled={filteredApps.length === 0}
+                        className="flex items-center gap-2"
+                    >
+                        <Download className="h-4 w-4" />
+                        Exportar Excel
+                    </Button>
                 </CardHeader>
                 <CardContent>
                     <ApplicationsTable
@@ -457,7 +461,10 @@ export default function PartnerDashboard() {
 
             {/* Redirect Users Table */}
             {redirectUsers.length > 0 && (
-                <RedirectUsersTable redirectUsers={redirectUsers} />
+                <RedirectUsersTable 
+                    redirectUsers={redirectUsers} 
+                    partnerName={partner?.name}
+                />
             )}
 
             {/* Answers Modal */}

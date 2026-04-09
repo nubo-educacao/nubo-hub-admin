@@ -137,10 +137,20 @@ export async function getUserProfiles(userIds: string[]) {
 }
 
 export interface PartnerRedirectUser {
+    user_id: string;
     full_name: string;
     whatsapp: string;
     redirect_url: string;
     created_at: string;
+    city?: string;
+    state?: string;
+    education?: string;
+    age?: number;
+    neighborhood?: string;
+    street?: string;
+    street_number?: string;
+    complement?: string;
+    education_year?: string;
 }
 
 /**

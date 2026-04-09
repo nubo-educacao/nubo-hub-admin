@@ -64,3 +64,9 @@ verify_jwt = false
 
 [functions.test-knowledge]
 verify_jwt = false
+
+[functions.github-proxy]
+verify_jwt = false
+
+[functions.github-auto-closer]
+verify_jwt = false

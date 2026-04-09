@@ -110,56 +110,14 @@ export const getStudents = async (
 };
 
 export const getStudentDetails = async (userId: string): Promise<StudentDetails> => {
-    // 1. Get Profile
-    const { data: profile, error: profileError } = await supabase
-        .from("user_profiles")
-        .select("*")
-        .eq("id", userId)
-        .single();
+    const { data, error } = await supabase.rpc('get_student_details_v2', { p_student_id: userId });
 
-    if (profileError) throw profileError;
+    if (error) {
+        console.error("Error fetching student details via RPC:", error);
+        throw error;
+    }
 
-    // 2. Get Preferences
-    const { data: preferences, error: prefError } = await supabase
-        .from("user_preferences")
-        .select("*")
-        .eq("user_id", userId)
-        .maybeSingle(); // Use maybeSingle as it might not exist yet
-
-    if (prefError) throw prefError;
-
-    // 3. Get ENEM Scores
-    const { data: enem_scores, error: enemError } = await supabase
-        .from("user_enem_scores")
-        .select("*")
-        .eq("user_id", userId)
-        .order("year", { ascending: false });
-
-    if (enemError) throw enemError;
-
-    // 4. Get Favorites
-    // We try to fetch related names if possible, assuming relations are set up or we just show IDs
-    const { data: favorites, error: favError } = await supabase
-        .from("user_favorites")
-        .select(`
-            *,
-            courses ( course_name ),
-            partners ( name )
-        `)
-        .eq("user_id", userId);
-
-    if (favError) throw favError;
-
-    return {
-        profile: profile as any as StudentProfile,
-        preferences,
-        enem_scores: enem_scores || [],
-        favorites: favorites?.map((f: any) => ({
-            ...f,
-            courses: f.courses ? { name: f.courses.course_name } : null,
-            partners: f.partners ? { name: f.partners.name } : null
-        })) || []
-    };
+    return data as StudentDetails;
 };
 
 export interface StudentStats {
