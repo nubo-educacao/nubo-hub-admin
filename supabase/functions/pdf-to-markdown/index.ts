@@ -28,7 +28,7 @@ serve(async (req) => {
     // Para evitar TLS Handshake EOF em Edge Functions com corpos gigantes, 
     // garantimos que o prompt seja enxuto e usamos Gemini 2.0 Flash.
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
     
     const prompt = `Analise o PDF e extraia estes campos em formato JSON ESTRITO (apenas o objeto JSON, sem blocos de código):
 {
@@ -54,8 +54,7 @@ serve(async (req) => {
       }],
       generationConfig: {
         temperature: 0,
-        maxOutputTokens: 8192,
-        responseMimeType: "application/json"
+        maxOutputTokens: 8192
       },
       safetySettings: [
         { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
@@ -97,14 +96,19 @@ serve(async (req) => {
       throw new Error(`Resposta do Gemini veio vazia. Payload completo: ${JSON.stringify(data)}`);
     }
 
+    let parsedText = text;
+    if (parsedText.startsWith("\`\`\`json")) {
+      parsedText = parsedText.replace(/^\`\`\`json\n/, "").replace(/\n\`\`\`$/, "");
+    }
+
     try {
-      JSON.parse(text); // Valida se o JSON está íntegro
+      JSON.parse(parsedText); // Valida se o JSON está íntegro
     } catch (parseError) {
-      console.error("JSON truncado recebido do Gemini:", text.substring(text.length - 100));
+      console.error("JSON truncado recebido do Gemini:", parsedText.substring(parsedText.length - 100));
       throw new Error(`O modelo interrompeu a geração do texto (finishReason: ${candidate?.finishReason}). O arquivo pode ser muito longo ou o modelo falhou.`);
     }
 
-    return new Response(text, { // Já é um JSON vindo do Gemini
+    return new Response(parsedText, { // Retorna o JSON limpo
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 

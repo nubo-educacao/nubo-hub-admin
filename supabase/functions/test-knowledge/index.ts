@@ -22,7 +22,7 @@ serve(async (req) => {
       throw new Error("GEMINI_API_KEY não configurada.");
     }
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
 
     const systemPrompt = `Você é a Cloudinha, assistente educacional da plataforma Nubo Hub.
 Você DEVE responder a pergunta do estudante usando EXCLUSIVAMENTE o conteúdo do documento abaixo como base de conhecimento.
