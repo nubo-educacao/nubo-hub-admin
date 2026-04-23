@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { pdfBase64 } = await req.json();
+    const { pdfBase64, chunkIndex = 0, totalChunks = 1 } = await req.json();
 
     if (!pdfBase64) {
       throw new Error("O campo 'pdfBase64' é obrigatório.");
@@ -30,7 +30,9 @@ serve(async (req) => {
 
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
     
-    const prompt = `Analise o PDF e extraia estes campos em formato JSON ESTRITO (apenas o objeto JSON, sem blocos de código):
+    let prompt = "";
+    if (chunkIndex === 0) {
+        prompt = `Analise o PDF e extraia estes campos em formato JSON ESTRITO (apenas o objeto JSON, sem blocos de código):
 {
   "title": "Título curto",
   "description": "Resumo (1-2 frases)",
@@ -39,6 +41,12 @@ serve(async (req) => {
   "keywords": ["tag1", "tag2", "tag3"],
   "markdown": "Conteúdo MD completo e detalhado (tabelas e listas inclusas, não resuma o texto)"
 }`;
+    } else {
+        prompt = `Você está recebendo a PARTE ${chunkIndex + 1} de ${totalChunks} de um documento longo. Transcreva esta parte para Markdown. Retorne APENAS o JSON ESTRITO abaixo (sem blocos de código e mantendo exatamente a chave markdown):
+{
+  "markdown": "Conteúdo MD completo e detalhado desta parte (tabelas e listas inclusas, não resuma o texto)"
+}`;
+    }
 
     const body = {
       contents: [{
