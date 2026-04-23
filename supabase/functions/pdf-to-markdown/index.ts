@@ -28,7 +28,7 @@ serve(async (req) => {
     // Para evitar TLS Handshake EOF em Edge Functions com corpos gigantes, 
     // garantimos que o prompt seja enxuto e usamos Gemini 2.0 Flash.
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
     
     const prompt = `Analise o PDF e extraia estes campos em JSON:
 1. title: Título curto.

@@ -1,0 +1,6 @@
+30d9b8f30cebbac442609be7fd22fca0250967e2:.env:jwt:2
+1ae0557941cd8bf1e29a3068b9c300a5562e5302:.env:jwt:2
+1ae0557941cd8bf1e29a3068b9c300a5562e5302:.env:jwt:7
+30d9b8f30cebbac442609be7fd22fca0250967e2:.env:jwt:7
+8c764f0eb129f716dc8cd61e8525ff5cfc3103b8:.env:jwt:2
+174f6d4877e2d284a20880653f31aa8a9531cfab:src/integrations/supabase/client.ts:jwt:6
