@@ -32,7 +32,7 @@ serve(async (req) => {
     
     let prompt = "";
     if (chunkIndex === 0) {
-        prompt = `Analise o PDF e extraia os metadados. Retorne a resposta EXATAMENTE neste formato (Frontmatter + Markdown bruto), sem blocos de código em volta:
+        prompt = `Analise o PDF e extraia os metadados. Você DEVE sempre retornar a resposta neste exato formato (Frontmatter + Markdown bruto), sem blocos de código em volta:
 
 ---
 title: Título curto
@@ -98,12 +98,12 @@ Conteúdo MD completo e detalhado desta parte (tabelas e listas inclusas, não r
 
     const data = await response.json();
     const candidate = data.candidates?.[0];
-    const text = candidate?.content?.parts?.[0]?.text;
+    const text = candidate?.content?.parts?.[0]?.text || "";
 
     console.log("Finish Reason:", candidate?.finishReason);
     console.log("Token Count Usage:", JSON.stringify(data.usageMetadata));
 
-    if (!text) {
+    if (!text && candidate?.finishReason !== "STOP" && candidate?.finishReason !== "MAX_TOKENS") {
       throw new Error(`Resposta do Gemini veio vazia. Payload completo: ${JSON.stringify(data)}`);
     }
 
