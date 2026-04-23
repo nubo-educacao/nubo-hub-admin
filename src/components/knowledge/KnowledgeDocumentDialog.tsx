@@ -27,27 +27,7 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { PDFDocument } from "pdf-lib";
 
-function FastTextarea({ value, onChange, disabled, placeholder, className }: any) {
-    const textRef = useRef<HTMLTextAreaElement>(null);
 
-    // Only update the DOM if the external value changes and is different from the current text
-    useEffect(() => {
-        if (textRef.current && textRef.current.value !== value) {
-            textRef.current.value = value;
-        }
-    }, [value]);
-
-    return (
-        <textarea
-            ref={textRef}
-            defaultValue={value}
-            onBlur={(e) => onChange(e.target.value)}
-            disabled={disabled}
-            placeholder={placeholder}
-            className={`flex w-full rounded-md border border-input bg-background px-3 py-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
-        />
-    );
-}
 
 interface Partner {
     id: string;
@@ -89,7 +69,8 @@ export default function KnowledgeDocumentDialog({
     const [partnerId, setPartnerId] = useState<string | null>(null);
     const [keywords, setKeywords] = useState<string[]>([]);
     const [keywordInput, setKeywordInput] = useState("");
-    const [content, setContent] = useState("");
+    const contentRef = useRef<HTMLTextAreaElement>(null);
+    const [previewContent, setPreviewContent] = useState("");
     const [changeSummary, setChangeSummary] = useState("");
     const [showPreview, setShowPreview] = useState(false);
     const [isRenderingPreview, setIsRenderingPreview] = useState(false);
@@ -100,6 +81,8 @@ export default function KnowledgeDocumentDialog({
     const handleTogglePreview = () => {
         if (!showPreview) {
             setIsRenderingPreview(true);
+            const currentContent = contentRef.current?.value || "";
+            setPreviewContent(currentContent);
             setTimeout(() => {
                 setShowPreview(true);
                 setIsRenderingPreview(false);
@@ -206,7 +189,9 @@ export default function KnowledgeDocumentDialog({
                     finalMarkdown += data.markdown;
                 }
 
-                setContent(finalMarkdown);
+                if (contentRef.current) {
+                    contentRef.current.value = finalMarkdown;
+                }
                 
                 if (finalTitle && !title.trim()) {
                     setTitle(finalTitle.substring(0, 150));
@@ -244,7 +229,9 @@ export default function KnowledgeDocumentDialog({
         const reader = new FileReader();
         reader.onload = (ev) => {
             const text = ev.target?.result as string;
-            setContent(text || "");
+            if (contentRef.current) {
+                contentRef.current.value = text || "";
+            }
             // Pre-fill title from filename if empty
             if (!title.trim()) {
                 const baseName = file.name.replace(/\.[^.]+$/, "").replace(/[_-]/g, " ");
@@ -264,7 +251,7 @@ export default function KnowledgeDocumentDialog({
             setCategoryId(document.category_id || "");
             setPartnerId(document.partner_id);
             setKeywords(document.keywords || []);
-            setContent(markdownContent);
+            if (contentRef.current) contentRef.current.value = markdownContent;
             setChangeSummary("");
         } else {
             setTitle("");
@@ -272,7 +259,7 @@ export default function KnowledgeDocumentDialog({
             setCategoryId("");
             setPartnerId(null);
             setKeywords([]);
-            setContent("");
+            if (contentRef.current) contentRef.current.value = "";
             setChangeSummary("");
         }
     }, [document, markdownContent, open]);
@@ -297,14 +284,15 @@ export default function KnowledgeDocumentDialog({
     };
 
     const handleSubmit = () => {
-        if (!title.trim() || !content.trim()) return;
+        const currentContent = contentRef.current?.value || "";
+        if (!title.trim() || !currentContent.trim()) return;
         onSave({
             title: title.trim(),
             description: description.trim(),
             category_id: categoryId,
             partner_id: partnerId,
             keywords,
-            content,
+            content: currentContent,
             change_summary: changeSummary.trim(),
         });
     };
@@ -459,12 +447,11 @@ export default function KnowledgeDocumentDialog({
                             </div>
                         ) : showPreview ? (
                             <div className="border rounded-md p-4 min-h-[300px] max-h-[400px] overflow-y-auto prose prose-sm dark:prose-invert max-w-none">
-                                <pre className="whitespace-pre-wrap text-sm font-mono">{content}</pre>
+                                <pre className="whitespace-pre-wrap text-sm font-mono">{previewContent}</pre>
                             </div>
                         ) : (
-                            <FastTextarea
-                                value={content}
-                                onChange={(val: string) => setContent(val)}
+                            <Textarea
+                                ref={contentRef}
                                 placeholder="Cole ou escreva o conteúdo em Markdown aqui..."
                                 className="min-h-[300px] font-mono text-sm"
                                 disabled={isConverting}
@@ -474,7 +461,7 @@ export default function KnowledgeDocumentDialog({
 
                     {/* Row 6: Test Knowledge Chat */}
                     <KnowledgeTestChat
-                        markdownContent={content}
+                        getMarkdownContent={() => contentRef.current?.value || ""}
                         documentTitle={title || "Documento"}
                     />
 
@@ -498,7 +485,7 @@ export default function KnowledgeDocumentDialog({
                     </Button>
                     <Button
                         onClick={handleSubmit}
-                        disabled={!title.trim() || !content.trim() || isSaving || isConverting}
+                        disabled={!title.trim() || isSaving || isConverting}
                     >
                         {isSaving ? "Salvando..." : isEditing ? "Salvar Alterações" : "Criar Documento"}
                     </Button>
