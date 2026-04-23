@@ -88,7 +88,7 @@ export default function KnowledgeDocumentDialog({
                 const pdfDoc = await PDFDocument.load(arrayBuffer);
                 const pageCount = pdfDoc.getPageCount();
                 
-                const CHUNK_SIZE = 15;
+                const CHUNK_SIZE = 6; // Reduzido de 15 para 6 pois editais são extremamente densos e ainda batiam em MAX_TOKENS
                 const chunks: string[] = [];
 
                 if (pageCount <= CHUNK_SIZE) {
