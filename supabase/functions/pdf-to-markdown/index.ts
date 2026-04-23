@@ -56,7 +56,13 @@ serve(async (req) => {
         temperature: 0,
         maxOutputTokens: 8192,
         responseMimeType: "application/json"
-      }
+      },
+      safetySettings: [
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+      ]
     };
 
     console.log("Chamando Gemini 2.0 Flash...");
@@ -88,7 +94,7 @@ serve(async (req) => {
     console.log("Token Count Usage:", JSON.stringify(data.usageMetadata));
 
     if (!text) {
-      throw new Error("Resposta do Gemini veio vazia.");
+      throw new Error(`Resposta do Gemini veio vazia. Payload completo: ${JSON.stringify(data)}`);
     }
 
     try {
