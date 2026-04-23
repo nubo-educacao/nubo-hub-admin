@@ -30,13 +30,15 @@ serve(async (req) => {
 
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
     
-    const prompt = `Analise o PDF e extraia estes campos em JSON:
-1. title: Título curto.
-2. description: Resumo (1-2 frases).
-3. category_name: uma destas: "partner", "prouni", "sisu", "cloudinha", "passport", "general".
-4. partner_name: Nome do parceiro ou "".
-5. keywords: 3-5 tags.
-6. markdown: Conteúdo MD completo (tabelas e listas inclusas).`;
+    const prompt = `Analise o PDF e extraia estes campos em formato JSON ESTRITO (apenas o objeto JSON, sem blocos de código):
+{
+  "title": "Título curto",
+  "description": "Resumo (1-2 frases)",
+  "category_name": "uma destas: partner, prouni, sisu, cloudinha, passport, general",
+  "partner_name": "Nome do parceiro ou vazio",
+  "keywords": ["tag1", "tag2", "tag3"],
+  "markdown": "Conteúdo MD completo e detalhado (tabelas e listas inclusas, não resuma o texto)"
+}`;
 
     const body = {
       contents: [{
@@ -53,19 +55,7 @@ serve(async (req) => {
       generationConfig: {
         temperature: 0,
         maxOutputTokens: 8192,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: "OBJECT",
-          properties: {
-            title: { type: "STRING" },
-            description: { type: "STRING" },
-            category_name: { type: "STRING" },
-            partner_name: { type: "STRING" },
-            keywords: { type: "ARRAY", items: { type: "STRING" } },
-            markdown: { type: "STRING" }
-          },
-          required: ["title", "description", "category_name", "partner_name", "keywords", "markdown"]
-        }
+        responseMimeType: "application/json"
       }
     };
 
@@ -91,10 +81,21 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const candidate = data.candidates?.[0];
+    const text = candidate?.content?.parts?.[0]?.text;
+
+    console.log("Finish Reason:", candidate?.finishReason);
+    console.log("Token Count Usage:", JSON.stringify(data.usageMetadata));
 
     if (!text) {
       throw new Error("Resposta do Gemini veio vazia.");
+    }
+
+    try {
+      JSON.parse(text); // Valida se o JSON está íntegro
+    } catch (parseError) {
+      console.error("JSON truncado recebido do Gemini:", text.substring(text.length - 100));
+      throw new Error(`O modelo interrompeu a geração do texto (finishReason: ${candidate?.finishReason}). O arquivo pode ser muito longo ou o modelo falhou.`);
     }
 
     return new Response(text, { // Já é um JSON vindo do Gemini
