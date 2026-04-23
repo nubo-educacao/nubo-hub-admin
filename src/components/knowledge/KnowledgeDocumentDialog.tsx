@@ -88,7 +88,7 @@ export default function KnowledgeDocumentDialog({
                 const pdfDoc = await PDFDocument.load(arrayBuffer);
                 const pageCount = pdfDoc.getPageCount();
                 
-                const CHUNK_SIZE = 6; // Reduzido de 15 para 6 pois editais são extremamente densos e ainda batiam em MAX_TOKENS
+                const CHUNK_SIZE = 3; // Reduzido drasticamente para 3 páginas. Editais com 38 páginas de texto puro estouram tokens muito rápido.
                 const chunks: string[] = [];
 
                 if (pageCount <= CHUNK_SIZE) {

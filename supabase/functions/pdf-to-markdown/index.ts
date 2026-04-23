@@ -32,20 +32,23 @@ serve(async (req) => {
     
     let prompt = "";
     if (chunkIndex === 0) {
-        prompt = `Analise o PDF e extraia estes campos em formato JSON ESTRITO (apenas o objeto JSON, sem blocos de código):
-{
-  "title": "Título curto",
-  "description": "Resumo (1-2 frases)",
-  "category_name": "uma destas: partner, prouni, sisu, cloudinha, passport, general",
-  "partner_name": "Nome do parceiro ou vazio",
-  "keywords": ["tag1", "tag2", "tag3"],
-  "markdown": "Conteúdo MD completo e detalhado (tabelas e listas inclusas, não resuma o texto)"
-}`;
+        prompt = `Analise o PDF e extraia os metadados. Retorne a resposta EXATAMENTE neste formato (Frontmatter + Markdown bruto), sem blocos de código em volta:
+
+---
+title: Título curto
+description: Resumo (1-2 frases)
+category_name: uma destas: partner, prouni, sisu, cloudinha, passport, general
+partner_name: Nome do parceiro ou vazio
+keywords: tag1, tag2, tag3
+---
+[INICIO DO MARKDOWN]
+Conteúdo MD completo e detalhado (tabelas e listas inclusas, não resuma o texto)
+[FIM DO MARKDOWN]`;
     } else {
-        prompt = `Você está recebendo a PARTE ${chunkIndex + 1} de ${totalChunks} de um documento longo. Transcreva esta parte para Markdown. Retorne APENAS o JSON ESTRITO abaixo (sem blocos de código e mantendo exatamente a chave markdown):
-{
-  "markdown": "Conteúdo MD completo e detalhado desta parte (tabelas e listas inclusas, não resuma o texto)"
-}`;
+        prompt = `Você está recebendo a PARTE ${chunkIndex + 1} de ${totalChunks} de um documento longo. Transcreva esta parte para Markdown. Retorne APENAS o texto Markdown bruto, sem formatação JSON, sem blocos de código em volta:
+[INICIO DO MARKDOWN]
+Conteúdo MD completo e detalhado desta parte (tabelas e listas inclusas, não resuma o texto)
+[FIM DO MARKDOWN]`;
     }
 
     const body = {
@@ -105,18 +108,47 @@ serve(async (req) => {
     }
 
     let parsedText = text;
-    if (parsedText.startsWith("\`\`\`json")) {
-      parsedText = parsedText.replace(/^\`\`\`json\n/, "").replace(/\n\`\`\`$/, "");
+    // Limpeza genérica de blocos de código se houver
+    if (parsedText.startsWith("\`\`\`markdown")) {
+      parsedText = parsedText.replace(/^\`\`\`markdown\n/, "").replace(/\n\`\`\`$/, "");
+    } else if (parsedText.startsWith("\`\`\`")) {
+      parsedText = parsedText.replace(/^\`\`\`\n?/, "").replace(/\n?\`\`\`$/, "");
     }
 
-    try {
-      JSON.parse(parsedText); // Valida se o JSON está íntegro
-    } catch (parseError) {
-      console.error("JSON truncado recebido do Gemini:", parsedText.substring(parsedText.length - 100));
-      throw new Error(`O modelo interrompeu a geração do texto (finishReason: ${candidate?.finishReason}). O arquivo pode ser muito longo ou o modelo falhou.`);
+    const result: any = { markdown: "" };
+
+    if (chunkIndex === 0) {
+        // Extrair frontmatter
+        const frontmatterMatch = parsedText.match(/^---\n([\s\S]*?)\n---/);
+        if (frontmatterMatch) {
+            const lines = frontmatterMatch[1].split("\n");
+            lines.forEach(line => {
+                const colonIndex = line.indexOf(":");
+                if (colonIndex > -1) {
+                    const key = line.substring(0, colonIndex).trim();
+                    const val = line.substring(colonIndex + 1).trim();
+                    if (key === "keywords") {
+                        result[key] = val.split(",").map(k => k.trim()).filter(k => k);
+                    } else {
+                        result[key] = val;
+                    }
+                }
+            });
+            parsedText = parsedText.replace(/^---\n[\s\S]*?\n---\n*/, "");
+        }
     }
 
-    return new Response(parsedText, { // Retorna o JSON limpo
+    // Limpar marcadores de inicio/fim
+    parsedText = parsedText.replace(/\[INICIO DO MARKDOWN\]\n?/gi, "");
+    parsedText = parsedText.replace(/\n?\[FIM DO MARKDOWN\]/gi, "");
+
+    result.markdown = parsedText.trim();
+
+    if (candidate?.finishReason === "MAX_TOKENS") {
+      console.warn("Aviso: Trecho truncado por MAX_TOKENS mesmo após divisão. Markdown foi recuperado até onde deu.");
+    }
+    
+    return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
