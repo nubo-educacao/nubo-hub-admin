@@ -360,104 +360,110 @@ export default function PartnerDashboard() {
                 </div>
             </div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                <Card>
-                    <CardContent className="pt-6 flex items-center gap-4">
-                        <div className="p-3 rounded-full bg-orange-500/10">
-                            <MousePointerClick className="h-5 w-5 text-orange-500" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold">{stats.clicks}</p>
-                            <p className="text-xs text-muted-foreground">Cliques no Perfil</p>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="pt-6 flex items-center gap-4">
-                        <div className="p-3 rounded-full bg-primary/10">
-                            <Users className="h-5 w-5 text-primary" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold">{stats.total}</p>
-                            <p className="text-xs text-muted-foreground">Total de Inscrições</p>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="pt-6 flex items-center gap-4">
-                        <div className="p-3 rounded-full bg-green-500/10">
-                            <CheckCircle2 className="h-5 w-5 text-green-500" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold">{stats.eligible}</p>
-                            <p className="text-xs text-muted-foreground">Elegíveis</p>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="pt-6 flex items-center gap-4">
-                        <div className="p-3 rounded-full bg-blue-500/10">
-                            <FileSpreadsheet className="h-5 w-5 text-blue-500" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold">{stats.submitted}</p>
-                            <p className="text-xs text-muted-foreground">Enviados</p>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
+            {/* Stats Cards - Only if there are applications */}
+            {applications.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                    <Card>
+                        <CardContent className="pt-6 flex items-center gap-4">
+                            <div className="p-3 rounded-full bg-orange-500/10">
+                                <MousePointerClick className="h-5 w-5 text-orange-500" />
+                            </div>
+                            <div>
+                                <p className="text-2xl font-bold">{stats.clicks}</p>
+                                <p className="text-xs text-muted-foreground">Cliques no Perfil</p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardContent className="pt-6 flex items-center gap-4">
+                            <div className="p-3 rounded-full bg-primary/10">
+                                <Users className="h-5 w-5 text-primary" />
+                            </div>
+                            <div>
+                                <p className="text-2xl font-bold">{stats.total}</p>
+                                <p className="text-xs text-muted-foreground">Total de Inscrições</p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardContent className="pt-6 flex items-center gap-4">
+                            <div className="p-3 rounded-full bg-green-500/10">
+                                <CheckCircle2 className="h-5 w-5 text-green-500" />
+                            </div>
+                            <div>
+                                <p className="text-2xl font-bold">{stats.eligible}</p>
+                                <p className="text-xs text-muted-foreground">Elegíveis</p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardContent className="pt-6 flex items-center gap-4">
+                            <div className="p-3 rounded-full bg-blue-500/10">
+                                <FileSpreadsheet className="h-5 w-5 text-blue-500" />
+                            </div>
+                            <div>
+                                <p className="text-2xl font-bold">{stats.submitted}</p>
+                                <p className="text-xs text-muted-foreground">Enviados</p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
 
-            {/* Progression Chart */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-lg">Progresso das Candidaturas</CardTitle>
-                    <CardDescription>
-                        Distribuição do percentual de preenchimento do seu formulário.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="h-[250px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={completionChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                            <XAxis dataKey="name" fontSize={12} />
-                            <YAxis fontSize={12} allowDecimals={false} />
-                            <RechartsTooltip cursor={{ fill: 'transparent' }} />
-                            <Bar dataKey="count" fill="#10b981" radius={[4, 4, 0, 0]} name="Candidaturas" />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </CardContent>
-            </Card>
-
-            {/* Applications Table */}
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <div>
-                        <CardTitle className="text-lg">Candidaturas</CardTitle>
+            {/* Progression Chart - Only if there are applications */}
+            {applications.length > 0 && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="text-lg">Progresso das Candidaturas</CardTitle>
                         <CardDescription>
-                            {applications.length} registros
+                            Distribuição do percentual de preenchimento do seu formulário.
                         </CardDescription>
-                    </div>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => exportToExcel(filteredApps, formFields, partner?.name || "parceiro", formCounts)}
-                        disabled={filteredApps.length === 0}
-                        className="flex items-center gap-2"
-                    >
-                        <Download className="h-4 w-4" />
-                        Exportar Excel
-                    </Button>
-                </CardHeader>
-                <CardContent>
-                    <ApplicationsTable
-                        applications={applications}
-                        isLoading={loadingApps}
-                        onViewAnswers={handleViewAnswers}
-                        onFilteredDataChange={setFilteredApps}
-                    />
-                </CardContent>
-            </Card>
+                    </CardHeader>
+                    <CardContent className="h-[250px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={completionChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                <XAxis dataKey="name" fontSize={12} />
+                                <YAxis fontSize={12} allowDecimals={false} />
+                                <RechartsTooltip cursor={{ fill: 'transparent' }} />
+                                <Bar dataKey="count" fill="#10b981" radius={[4, 4, 0, 0]} name="Candidaturas" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Applications Table - Only if there are applications */}
+            {applications.length > 0 && (
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <div>
+                            <CardTitle className="text-lg">Candidaturas</CardTitle>
+                            <CardDescription>
+                                {applications.length} registros
+                            </CardDescription>
+                        </div>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => exportToExcel(filteredApps, formFields, partner?.name || "parceiro", formCounts)}
+                            disabled={filteredApps.length === 0}
+                            className="flex items-center gap-2"
+                        >
+                            <Download className="h-4 w-4" />
+                            Exportar Excel
+                        </Button>
+                    </CardHeader>
+                    <CardContent>
+                        <ApplicationsTable
+                            applications={applications}
+                            isLoading={loadingApps}
+                            onViewAnswers={handleViewAnswers}
+                            onFilteredDataChange={setFilteredApps}
+                        />
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Redirect Users Table */}
             {redirectUsers.length > 0 && (

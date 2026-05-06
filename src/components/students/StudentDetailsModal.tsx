@@ -63,6 +63,28 @@ export function StudentDetailsModal({ isOpen, onOpenChange, studentId }: Student
                                         <span className="font-medium">{details.profile?.education || "-"}</span>
                                     </div>
                                 </div>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 border border-t-0 rounded-b-lg bg-slate-50/50 dark:bg-slate-900/50">
+                                    <div className="col-span-2">
+                                        <span className="text-xs text-muted-foreground block">Rua</span>
+                                        <span className="font-medium">{details.profile?.street || "-"}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-xs text-muted-foreground block">Número</span>
+                                        <span className="font-medium">{details.profile?.street_number || "-"}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-xs text-muted-foreground block">CEP</span>
+                                        <span className="font-medium">{details.profile?.zip_code || "-"}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-xs text-muted-foreground block">Bairro</span>
+                                        <span className="font-medium">{details.profile?.neighborhood || "-"}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-xs text-muted-foreground block">País</span>
+                                        <span className="font-medium">{details.profile?.country || "-"}</span>
+                                    </div>
+                                </div>
                             </section>
 
                             {/* Preferences */}
@@ -96,8 +118,8 @@ export function StudentDetailsModal({ isOpen, onOpenChange, studentId }: Student
                                     <div>
                                         <span className="text-xs text-muted-foreground block">Renda Familiar Per Capita</span>
                                         <span className="font-medium">
-                                            {details.preferences?.family_income_per_capita
-                                                ? `R$ ${details.preferences.family_income_per_capita.toFixed(2)}`
+                                            {details.income?.per_capita_income
+                                                ? `R$ ${details.income.per_capita_income.toFixed(2)}`
                                                 : "-"}
                                         </span>
                                     </div>

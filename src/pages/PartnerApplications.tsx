@@ -7,7 +7,7 @@ import {
     getPartnerFormCounts,
     type ApplicationWithDetails,
 } from "@/services/applicationsService";
-import { getPartnerFormFields, type PartnerFormField } from "@/services/partnerPortalService";
+import { getPartnerFormFields, getPartnerRedirectUsers, type PartnerFormField } from "@/services/partnerPortalService";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 import ApplicationsTable, { STATUS_CONFIG } from "@/components/applications/ApplicationsTable";
 import ApplicationAnswersModal from "@/components/applications/ApplicationAnswersModal";
+import RedirectUsersTable from "@/components/applications/RedirectUsersTable";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 
 // ─── Excel Export ────────────────────────────────────────────────────────────
@@ -239,6 +240,11 @@ export default function PartnerApplications() {
         queryFn: getPartnerFormCounts,
     });
 
+    const { data: redirectUsers = [] } = useQuery({
+        queryKey: ["allPartnerRedirectUsers"],
+        queryFn: () => getPartnerRedirectUsers(),
+    });
+
     const completionChartData = useMemo(() => {
         const buckets = {
             "1. Até 25%": 0,
@@ -396,6 +402,13 @@ export default function PartnerApplications() {
                     />
                 </CardContent>
             </Card>
+
+            {/* Redirect Users Table */}
+            <RedirectUsersTable 
+                redirectUsers={redirectUsers} 
+                partnerName="Geral"
+                partners={partners}
+            />
 
             {/* Answers Modal */}
             <ApplicationAnswersModal

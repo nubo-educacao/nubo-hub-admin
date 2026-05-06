@@ -8,6 +8,10 @@ export interface StudentProfile {
     city: string | null;
     education: string | null;
     state: string | null;
+    street: string | null;
+    street_number: string | null;
+    country: string | null;
+    zip_code: string | null;
     is_nubo_student: boolean;
     created_at: string;
     whatsapp?: string | null;
@@ -52,6 +56,7 @@ export interface UserFavorite {
 export interface StudentDetails {
     profile: StudentProfile | null;
     preferences: UserPreference | null;
+    income: { per_capita_income: number | null } | null;
     enem_scores: UserEnemScore[];
     favorites: UserFavorite[];
 }

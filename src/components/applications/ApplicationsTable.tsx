@@ -117,6 +117,8 @@ export default function ApplicationsTable({
     const showPartnerColumn = !!partners;
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState<string>("all");
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
 
     const { data: formCounts = {} } = useQuery({
         queryKey: ["partnerFormCountsTable"],
@@ -134,6 +136,17 @@ export default function ApplicationsTable({
             return true;
         });
     }, [applications, statusFilter, search]);
+
+    const totalPages = Math.ceil(filteredApplications.length / itemsPerPage);
+    const paginatedApplications = useMemo(() => {
+        const start = (currentPage - 1) * itemsPerPage;
+        return filteredApplications.slice(start, start + itemsPerPage);
+    }, [filteredApplications, currentPage]);
+
+    // Reset to first page when filters change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [search, statusFilter, partnerFilter]);
 
     // Report filtered applications to parent
     useEffect(() => {
@@ -213,7 +226,7 @@ export default function ApplicationsTable({
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            filteredApplications.map((app) => (
+                            paginatedApplications.map((app) => (
                                 <TableRow key={app.id}>
                                     <TableCell className="font-medium whitespace-nowrap">
                                         {app.full_name || "—"}
@@ -269,6 +282,32 @@ export default function ApplicationsTable({
                     </TableBody>
                 </Table>
             </div>
+
+            {totalPages > 1 && (
+                <div className="flex items-center justify-between space-x-2 py-4">
+                    <div className="text-sm text-muted-foreground">
+                        Página {currentPage} de {totalPages} ({filteredApplications.length} registros)
+                    </div>
+                    <div className="flex space-x-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                            disabled={currentPage === 1}
+                        >
+                            Anterior
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                            disabled={currentPage === totalPages}
+                        >
+                            Próximo
+                        </Button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

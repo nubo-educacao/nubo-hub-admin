@@ -151,14 +151,24 @@ export interface PartnerRedirectUser {
     street_number?: string;
     complement?: string;
     education_year?: string;
+    zip_code?: string;
+    country?: string;
+    course_interest?: string[];
+    preferred_shifts?: string[];
+    university_preference?: string;
+    program_preference?: string;
+    per_capita_income?: number;
+    quota_types?: string[];
+    partner_id?: string;
+    partner_name?: string;
 }
 
 /**
  * Gets the users who clicked external redirects for a specific partner.
  */
-export async function getPartnerRedirectUsers(partnerId: string): Promise<PartnerRedirectUser[]> {
+export async function getPartnerRedirectUsers(partnerId?: string): Promise<PartnerRedirectUser[]> {
     const { data, error } = await supabase.rpc("get_partner_redirect_users" as any, {
-        p_partner_id: partnerId
+        p_partner_id: partnerId || null
     });
 
     if (error) {

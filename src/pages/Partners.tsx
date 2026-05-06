@@ -15,6 +15,8 @@ import {
 } from "@/services/partnersService";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { getPartnerRedirectUsers } from "@/services/partnerPortalService";
+import RedirectUsersTable from "@/components/applications/RedirectUsersTable";
 
 export default function Partners() {
     const queryClient = useQueryClient();
@@ -60,6 +62,11 @@ export default function Partners() {
             });
             return map;
         }
+    });
+
+    const { data: redirectUsers = [] } = useQuery({
+        queryKey: ["allPartnerRedirectUsers"],
+        queryFn: () => getPartnerRedirectUsers(),
     });
 
     // Mutations
@@ -146,6 +153,14 @@ export default function Partners() {
                         sortBy={sortBy}
                         sortOrder={sortOrder}
                         onSort={handleSort}
+                    />
+                </div>
+
+                <div className="pt-8">
+                    <RedirectUsersTable 
+                        redirectUsers={redirectUsers} 
+                        partnerName="Geral"
+                        partners={partners}
                     />
                 </div>
             </div>
